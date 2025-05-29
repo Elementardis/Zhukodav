@@ -3,7 +3,7 @@ import levels from './levels.js';
 // ==== Global Constants ====
 const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 const MIN_BAR_H = 110;    // px
-const BAR_H_PRC = 0.14;   // 14 % экрана
+const BAR_H_PRC = 0.14;   // 14 % экрана тест
 const GAP_HORZ = 12;      // промежутки
 const BORDER_RADIUS = 40;
 const FRAME_BORDER = 12;
