@@ -1,31 +1,26 @@
 const levels = [
   {
     "id": 1,
-    "goalBugCount": 20,
+    "goalBugCount": 10,
     "lifeCount": 10,
     "params": {
       "maxObjects": 3,
       "spawnInterval": 1000,
-      "objectLifetime": 2300
+      "objectLifetime": 2100
     },
 
     "spawnWeights": {
       "bug": 0.4,
-      "bomb": 0.4,
-      "fat": 0.3,
-      "coloredBug_red": 0.3,
-      "coloredBug_blue": 0.3,
-      "fatColoredBug_red": 0.3
     }
   },
   {
     "id": 2,
-    "goalBugCount": 10,
+    "goalBugCount": 20,
     "lifeCount": 10,
     "params": {
-      "maxObjects": 2,
-      "spawnInterval": 900,
-      "objectLifetime": 2600
+      "maxObjects": 4,
+      "spawnInterval": 800,
+      "objectLifetime": 1900
     },
     "spawnWeights": {
       "bug": 1.0
@@ -36,9 +31,9 @@ const levels = [
     "goalBugCount": 10,
     "lifeCount": 10,
     "params": {
-      "maxObjects": 3,
-      "spawnInterval": 850,
-      "objectLifetime": 2400
+      "maxObjects": 5,
+      "spawnInterval": 1000,
+      "objectLifetime": 1800
     },
     "spawnWeights": {
       "bug": 1.0,
@@ -47,16 +42,16 @@ const levels = [
   },
   {
     "id": 4,
-    "goalBugCount": 9,
+    "goalBugCount": 10,
     "lifeCount": 10,
     "params": {
-      "maxObjects": 3,
+      "maxObjects": 4,
       "spawnInterval": 800,
-      "objectLifetime": 2200
+      "objectLifetime": 1500
     },
     "spawnWeights": {
       "bug": 1.0,
-      "bomb": 0.4
+      "bomb": 0.5
     }
   },
   {
