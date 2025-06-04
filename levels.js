@@ -68,6 +68,9 @@ const levels = [
       "fat": 0.3
     }
   },
+
+
+  
   {
     "id": 6,
     "goalBugCount": 12,
