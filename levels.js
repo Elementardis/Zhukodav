@@ -6,7 +6,7 @@ const levels = [
   "params": {
     "maxObjects": 4,
     "spawnInterval": 300,
-    "objectLifetime": 1900
+    "objectLifetime": 2100
   },
   "spawnWeights": {
     "bug": 0.4,
@@ -134,7 +134,7 @@ const levels = [
   "params": {
     "maxObjects": 5,
     "spawnInterval": 400,
-    "objectLifetime": 1900
+    "objectLifetime": 2200
   },
   "spawnWeights": {
     "bug": 0.6,

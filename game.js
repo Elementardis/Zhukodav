@@ -10,6 +10,9 @@ const FRAME_BORDER = 12;
 const HEADER_H_PRC = 0.10;   // 10 % высоты квадратного поля
 const HEART_SIZE_PRC = 0.50;   // 50 % высоты шапки
 const HEART_GAP = 6;      // px между сердцами
+const BUG_SIZE_PRC = 0.15;    // 15% от размера игрового поля
+const MIN_BUG_SIZE = 60;      // минимальный размер жука
+const MAX_BUG_SIZE = 120;     // максимальный размер жука
 
 // ==== Global Variables ====
 let activeObjects = [];
@@ -30,12 +33,83 @@ let activeColor = null;
 let colorPressStart = 0;
 let colorButtonsContainer = null;
 
+
+
 // ==== UI Containers ====
 const startContainer = new PIXI.Container();
 const levelSelectContainer = new PIXI.Container();
 
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
 
+// ==== SPRITE PRELOADER (PIXI.Loader) ====
+const SPRITE_PATHS = [
+    { name: 'bug', path: 'images/bug.png' },
+    { name: 'bomb', path: 'images/bomb.png' },
+    { name: 'coloredBug_red', path: 'images/coloredBug_red.png' },
+    { name: 'coloredBug_blue', path: 'images/coloredBug_blue.png' },
+    { name: 'coloredBug_green', path: 'images/coloredBug_green.png' },
+    { name: 'coloredBug_yellow', path: 'images/coloredBug_yellow.png' },
+    { name: 'bomb_explosion', path: 'images/bomb.gif' }
+];
+
+// Store loaded textures
+const TEXTURES = {};
+
+function showPreloader() {
+    const preloader = document.createElement('div');
+    preloader.id = 'preloader';
+    preloader.style.position = 'fixed';
+    preloader.style.left = '0';
+    preloader.style.top = '0';
+    preloader.style.width = '100vw';
+    preloader.style.height = '100vh';
+    preloader.style.background = '#FFF0C2';
+    preloader.style.display = 'flex';
+    preloader.style.flexDirection = 'column';
+    preloader.style.alignItems = 'center';
+    preloader.style.justifyContent = 'center';
+    preloader.style.fontSize = '2em';
+    preloader.style.zIndex = '9999';
+    preloader.style.fontFamily = 'Arial';
+    
+    const loadingText = document.createElement('div');
+    loadingText.innerText = 'Загрузка...';
+    loadingText.style.marginBottom = '20px';
+    
+    const progressBar = document.createElement('div');
+    progressBar.style.width = '300px';
+    progressBar.style.height = '20px';
+    progressBar.style.background = '#FFE089';
+    progressBar.style.borderRadius = '10px';
+    progressBar.style.overflow = 'hidden';
+    
+    const progressFill = document.createElement('div');
+    progressFill.style.width = '0%';
+    progressFill.style.height = '100%';
+    progressFill.style.background = '#FFB300';
+    progressFill.style.transition = 'width 0.3s';
+    
+    progressBar.appendChild(progressFill);
+    preloader.appendChild(loadingText);
+    preloader.appendChild(progressBar);
+    document.body.appendChild(preloader);
+    
+    return { preloader, progressFill };
+}
+
+function hidePreloader() {
+    const preloader = document.getElementById('preloader');
+    if (preloader) {
+        preloader.style.opacity = '0';
+        preloader.style.transition = 'opacity 0.5s';
+        setTimeout(() => preloader.remove(), 500);
+    }
+}
+
+// ==== START GAME ONLY AFTER SPRITES LOADED ====
+const { preloader, progressFill } = showPreloader();
+
+// Create PIXI Application
 const app = new PIXI.Application({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -46,9 +120,48 @@ const app = new PIXI.Application({
     roundPixels: true
 });
 
+// Add app view to DOM
 document.body.appendChild(app.view);
 
-app.stage.addChild(startContainer);
+// Load sprites
+const loader = PIXI.Loader.shared;
+SPRITE_PATHS.forEach(({ name, path }) => {
+    loader.add(name, path);
+});
+
+// Add loading progress handler
+loader.onProgress.add((loader) => {
+    const progress = Math.round(loader.progress);
+    progressFill.style.width = `${progress}%`;
+});
+
+// Add error handler
+loader.onError.add((error, loader, resource) => {
+    console.error('Error loading sprite:', {
+        error: error,
+        resource: resource ? {
+            name: resource.name,
+            url: resource.url,
+            type: resource.type
+        } : 'unknown',
+        loader: loader
+    });
+    alert('Ошибка загрузки ресурсов. Пожалуйста, обновите страницу.');
+});
+
+// Start loading
+loader.load(() => {
+    console.log('All resources loaded successfully');
+    // Store all loaded textures
+    SPRITE_PATHS.forEach(({ name }) => {
+        TEXTURES[name] = loader.resources[name].texture;
+    });
+    hidePreloader();
+    resizeGame();
+    app.stage.addChild(startContainer);
+});
+
+// ...весь остальной код...
 
 // Color definitions and key mappings
 const COLORS = {
@@ -387,6 +500,8 @@ function startLevel(index) {
     }
 }
 
+
+
 // игровое поле
 function setupPlayArea() {
     const barH = Math.max(window.innerHeight * BAR_H_PRC, MIN_BAR_H);
@@ -680,7 +795,16 @@ function spawnObject() {
 
     const data = objectQueue.shift();
     const type = data.type;
-    const size = 60;
+    
+    // Calculate bug size based on play area size
+    const playAreaSize = playArea.width;
+    const size = Math.min(
+        Math.max(
+            Math.floor(playAreaSize * BUG_SIZE_PRC),
+            MIN_BUG_SIZE
+        ),
+        MAX_BUG_SIZE
+    );
 
     const container = new PIXI.Container();
     container.width = size;
@@ -688,7 +812,7 @@ function spawnObject() {
     container.pivot.set(size / 2);
     container.interactive = true;
     container.buttonMode = true;
-    container.animations = []; // Store animations for pause/resume
+    container.animations = [];
 
     const minX = size / 2;
     const maxX = playArea.width - size / 2;
@@ -731,10 +855,9 @@ function spawnObject() {
     let visual;
     if (type.startsWith('fatColoredBug_')) {
         const color = type.split('_')[1];
-        const texture = PIXI.Texture.from(`images/coloredBug_${color}.png?v=${Date.now()}`);
-        visual = new PIXI.Sprite(texture);
+        visual = new PIXI.Sprite(TEXTURES[`coloredBug_${color}`]);
         visual.anchor.set(0.5);
-        visual.width = size * 2; // Double size like fat bugs
+        visual.width = size * 2;
         visual.height = size * 2;
         container.addChild(visual);
 
@@ -769,8 +892,7 @@ function spawnObject() {
         container.addChild(countText);
     } else if (type.startsWith('coloredBug_')) {
         const color = type.split('_')[1];
-        const texture = PIXI.Texture.from(`images/coloredBug_${color}.png?v=${Date.now()}`);
-        visual = new PIXI.Sprite(texture);
+        visual = new PIXI.Sprite(TEXTURES[`coloredBug_${color}`]);
         visual.anchor.set(0.5);
         visual.width = size;
         visual.height = size;
@@ -793,8 +915,7 @@ function spawnObject() {
         });
         container.animations.push(pulseAnim);
     } else if (type === 'fat') {
-        const texture = PIXI.Texture.from(`images/bug.png?v=${Date.now()}`);
-        visual = new PIXI.Sprite(texture);
+        visual = new PIXI.Sprite(TEXTURES['bug']);
         visual.anchor.set(0.5);
         visual.width = size * 2;
         visual.height = size * 2;
@@ -813,8 +934,7 @@ function spawnObject() {
         countText.name = 'clickText';
         container.addChild(countText);
     } else {
-        const texture = PIXI.Texture.from(`images/${type}.png?v=${Date.now()}`);
-        visual = new PIXI.Sprite(texture);
+        visual = new PIXI.Sprite(TEXTURES[type]);
         visual.anchor.set(0.5);
         visual.width = size;
         visual.height = size;
@@ -913,26 +1033,6 @@ function spawnObject() {
                 updateUI();
                 if (life <= 0) endGame(false);
             });
-        } else if (type === 'fat') {
-            data.clicks--;
-            const text = container.getChildByName('clickText');
-            if (text) text.text = data.clicks;
-
-            if (data.clicks <= 0) {
-                // Correct final click - remove without squish
-                score++;
-                animateRemoveObject(container, () => {
-                    updateUI();
-                    if (score >= levelData.goalBugCount) {
-                        endGame(true);
-                    } else if (life <= 0) {
-                        endGame(false);
-                    }
-                });
-            } else {
-                // Not enough clicks yet - show squish animation
-                animateFatBugSquish(container);
-            }
         } else {
             // Regular bug
             score++;
@@ -1012,7 +1112,7 @@ function showExplosion(x, y) {
     explosionContainer.y = y;
     
     // Создаем спрайт взрыва
-    const boom = PIXI.Sprite.from('images/bomb.gif');
+    const boom = new PIXI.Sprite(TEXTURES['bomb_explosion']);
     boom.anchor.set(0.5);
     boom.width = 100;
     boom.height = 100;
