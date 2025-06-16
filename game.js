@@ -797,15 +797,16 @@ function spawnObject() {
     const data = objectQueue.shift();
     const type = data.type;
     
-    // Calculate bug size based on play area size
-    const playAreaSize = playArea.width;
-    const size = Math.min(
+    // Calculate actual size based on bug type
+    const isFat = type === 'fat' || type.startsWith('fatColoredBug_');
+    const baseSize = Math.min(
         Math.max(
-            Math.floor(playAreaSize * BUG_SIZE_PRC),
+            Math.floor(playArea.width * BUG_SIZE_PRC),
             MIN_BUG_SIZE
         ),
         MAX_BUG_SIZE
     );
+    const size = isFat ? baseSize * 2 : baseSize;
 
     const container = new PIXI.Container();
     container.width = size;
@@ -815,6 +816,7 @@ function spawnObject() {
     container.buttonMode = true;
     container.animations = [];
 
+    // Calculate safe spawn boundaries
     const minX = size / 2;
     const maxX = playArea.width - size / 2;
     const minY = size / 2;
@@ -846,10 +848,10 @@ function spawnObject() {
         }
     }
 
-    // Если не удалось найти место, размещаем в допустимой случайной позиции
+    // Если не найдена позиция, возвращаем объект в очередь
     if (!positionFound) {
-        container.x = Math.random() * (maxX - minX) + minX;
-        container.y = Math.random() * (maxY - minY) + minY;
+        objectQueue.unshift(data);
+        return;
     }
 
     // Визуальный элемент
@@ -1068,8 +1070,11 @@ function spawnObject() {
         }
     });
 
+    // Spawn animation with safe boundaries
+    const spawnY = Math.min(container.y + 80, playArea.height - size / 2);
+    container.y = spawnY - 80;
+
     // Update spawn animation
-    container.y -= 80;
     container.alpha = 0.4;
     container.scale.set(1);
     const spawnAnim = gsap.to(container, {
@@ -1701,6 +1706,9 @@ function updateSoundIcons(soundIcon, musicIcon, isSoundEnabled, isMusicEnabled) 
 
 // Вынести удаление объекта с анимацией
 function animateRemoveObject(container, onAfterRemove) {
+    const size = container.width;
+    const maxY = playArea.height + size;
+    
     gsap.to(container.scale, {
         x: 0.95,
         y: 0.65,
