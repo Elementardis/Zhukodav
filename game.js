@@ -1260,11 +1260,20 @@ function resizeGame() {
 // Вызвать resizeGame при загрузке, чтобы всё было адаптивно с самого начала
 resizeGame();
 
+// Функция для очистки всех попапов
+function clearAllPopups() {
+    const popups = ['winPopup', 'losePopup', 'pausePopup', 'pauseOverlay'];
+    popups.forEach(popupName => {
+        const popup = gameContainer.getChildByName(popupName);
+        if (popup) {
+            gameContainer.removeChild(popup);
+        }
+    });
+}
+
 function showWinPopup(currentLevelIndex) {
-    // Удаляем старый попап, если есть
-    if (gameContainer.getChildByName('winPopup')) {
-        gameContainer.removeChild(gameContainer.getChildByName('winPopup'));
-    }
+    // Очищаем все существующие попапы
+    clearAllPopups();
 
     const popupWidth = Math.min(app.screen.width * 0.8, 480);
     const popupHeight = Math.min(app.screen.height * 0.7, 420);
@@ -1314,7 +1323,7 @@ function showWinPopup(currentLevelIndex) {
     nextBtn.interactive = true;
     nextBtn.buttonMode = true;
     nextBtn.on('pointerdown', () => {
-        gameContainer.removeChild(popup);
+        clearAllPopups();
         if (levels[currentLevelIndex + 1]) {
             startLevel(currentLevelIndex + 1);
         } else {
@@ -1346,7 +1355,7 @@ function showWinPopup(currentLevelIndex) {
     menuBtn.interactive = true;
     menuBtn.buttonMode = true;
     menuBtn.on('pointerdown', () => {
-        gameContainer.removeChild(popup);
+        clearAllPopups();
         if (app.stage.children.includes(gameContainer)) {
             app.stage.removeChild(gameContainer);
         }
@@ -1371,10 +1380,8 @@ function showWinPopup(currentLevelIndex) {
 }
 
 function showLosePopup(currentLevelIndex) {
-    // Удаляем старый попап, если есть
-    if (gameContainer.getChildByName('losePopup')) {
-        gameContainer.removeChild(gameContainer.getChildByName('losePopup'));
-    }
+    // Очищаем все существующие попапы
+    clearAllPopups();
 
     const popupWidth = Math.min(app.screen.width * 0.8, 480);
     const popupHeight = Math.min(app.screen.height * 0.7, 420);
@@ -1424,7 +1431,7 @@ function showLosePopup(currentLevelIndex) {
     retryBtn.interactive = true;
     retryBtn.buttonMode = true;
     retryBtn.on('pointerdown', () => {
-        gameContainer.removeChild(popup);
+        clearAllPopups();
         startLevel(currentLevelIndex);
     });
     popup.addChild(retryBtn);
@@ -1452,7 +1459,7 @@ function showLosePopup(currentLevelIndex) {
     menuBtn.interactive = true;
     menuBtn.buttonMode = true;
     menuBtn.on('pointerdown', () => {
-        gameContainer.removeChild(popup);
+        clearAllPopups();
         if (app.stage.children.includes(gameContainer)) {
             app.stage.removeChild(gameContainer);
         }
