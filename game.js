@@ -608,7 +608,8 @@ function buildLevelHeader(wrapper, level) {
         fontFamily: 'Arial',
     };
 
-    for (let i = 0; i < level.goalBugCount; i++) {
+    // Рисуем сердечки по количеству жизней
+    for (let i = 0; i < level.lifeCount; i++) {
         const h = new PIXI.Text('❤', heartStyle);
         h.x = i * (heartSz + HEART_GAP);
         hearts.addChild(h);
@@ -633,7 +634,7 @@ function updateLevelHeader(score, life) {
     const hearts = header.getChildByName('heartsRow');
     for (let i = 0; i < hearts.children.length; i++) {
         hearts.children[i].style.fill =
-            i < score ? 0xFF4B30 : 0xFFDB8F;   // заполненные / пустые
+            i < life ? 0xFF4B30 : 0xFFDB8F;   // заполненные / пустые
     }
 }
 
@@ -700,7 +701,7 @@ function prepareObjectQueue() {
         
         // Добавляем специфичные параметры для разных типов
         if (type === 'fat' || type.startsWith('fatColoredBug_')) {
-            objectData.clicks = 3;
+            objectData.clicks = 3; // Требуется 3 клика для уничтожения толстого жука
         }
         if (type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_')) {
             objectData.color = type.split('_')[1];
@@ -1033,6 +1034,26 @@ function spawnObject() {
                 updateUI();
                 if (life <= 0) endGame(false);
             });
+        } else if (type === 'fat') {
+            data.clicks--;
+            const text = container.getChildByName('clickText');
+            if (text) text.text = data.clicks;
+
+            if (data.clicks <= 0) {
+                // Correct final click - remove
+                score++;
+                animateRemoveObject(container, () => {
+                    updateUI();
+                    if (score >= levelData.goalBugCount) {
+                        endGame(true);
+                    } else if (life <= 0) {
+                        endGame(false);
+                    }
+                });
+            } else {
+                // Not enough clicks yet - show squish animation
+                animateFatBugSquish(container);
+            }
         } else {
             // Regular bug
             score++;

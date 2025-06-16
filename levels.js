@@ -76,10 +76,9 @@ const levels = [
   "params": {
     "maxObjects": 4,
     "spawnInterval": 400,
-    "objectLifetime": 1900
+    "objectLifetime": 2500
   },
   "spawnWeights": {
-    "bug": 0.8,
     "bomb": 0.5,
     "fat": 0.2
   }
