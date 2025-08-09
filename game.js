@@ -13,18 +13,6 @@ const HEART_GAP = 6;      // px между сердцами
 const BUG_SIZE_PRC = 0.15;    // 15% от размера игрового поля
 const MIN_BUG_SIZE = 60;      // минимальный размер жука
 const MAX_BUG_SIZE = 120;     // максимальный размер жука
-// ...existing code...
-const coloredTypes = [
-    'coloredBug_red',
-    'coloredBug_blue',
-    'coloredBug_green',
-    'coloredBug_yellow',
-    'fatColoredBug_red',
-    'fatColoredBug_blue',
-    'fatColoredBug_green',
-    'fatColoredBug_yellow'
-];
-// ...existing code...
 
 // ==== Global Variables ====
 let activeObjects = [];
@@ -61,16 +49,7 @@ const SPRITE_PATHS = [
     { name: 'coloredBug_blue', path: 'images/coloredBug_blue.png' },
     { name: 'coloredBug_green', path: 'images/coloredBug_green.png' },
     { name: 'coloredBug_yellow', path: 'images/coloredBug_yellow.png' },
-    { name: 'bomb_explosion', path: 'images/bomb.gif' },
-    { name: 'ui_level', path: 'images/ui/level_label.png' },
-    { name: 'ui_gear', path: 'images/ui/gear.png' },
-    { name: 'ui_goals', path: 'images/ui/goals_label.png' },
-    { name: 'ui_heart', path: 'images/ui/heart.png' },
-    { name: 'ui_ball_yellow', path: 'images/ui/ball_yellow.png' },
-    { name: 'ui_ball_red', path: 'images/ui/ball_red.png' },
-    { name: 'ui_ball_blue', path: 'images/ui/ball_blue.png' },
-    { name: 'ui_ball_purple', path: 'images/ui/ball_purple.png' },
-    { name: 'ui_ball_green', path: 'images/ui/ball_green.png' },
+    { name: 'bomb_explosion', path: 'images/bomb.gif' }
 ];
 
 // Store loaded textures
@@ -519,90 +498,6 @@ function startLevel(index) {
     if (typeof levelData.onEnterLevel === 'function') {
         levelData.onEnterLevel();
     }
-
-    if (!bottomBar) {
-        bottomBar = new PIXI.Container();
-        rootUI.addChild(bottomBar);
-    }
-    bottomBar.removeChildren();
-    colorButtonsContainer = null;
-
-    const barH = Math.max(window.innerHeight * BAR_H_PRC, MIN_BAR_H);
-    
-    // Рассчитываем оптимальный размер кнопок
-    const maxButtonWidth = Math.floor(window.innerWidth / (coloredTypes.length + 2));
-    const maxButtonHeight = Math.floor(barH * 0.8);
-    const btnSz = Math.min(maxButtonWidth, maxButtonHeight);
-    
-    const pauseW = btnSz;
-    const n = coloredTypes.length;
-    const gap = Math.min(GAP_HORZ, Math.floor(btnSz * 0.2)); // Ограничиваем отступ между кнопками
-
-    const totalW = (btnSz * n) + pauseW + gap * (n + 2);
-    let x = (window.innerWidth - totalW) / 2 + gap;
-
-    // Reset dynamic key mapping
-    dynamicColorKeyMap = {};
-
-    // Get button order from level data or use default
-    const defaultOrder = ['red', 'blue', 'green', 'yellow'];
-    const buttonOrder = levelData.colorButtonOrder || defaultOrder;
-
-    // Color buttons
-    const keys = ['q', 'w', 'e', 'r'];
-    buttonOrder.forEach((color, i) => {
-        const isUsed = Object.entries(levelData.spawnWeights).some(([type, weight]) =>
-        (type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_')) &&
-         type.endsWith(`_${color}`) &&
-         weight > 0
-         );
-
-        if (isUsed) {
-            dynamicColorKeyMap[keys[i]] = color;
-            
-            const btn = createColorButton(color, btnSz, keys[i], !IS_TOUCH);
-            btn.x = x;
-            btn.y = window.innerHeight - barH + (barH - btnSz) / 2;
-            bottomBar.addChild(btn);
-            x += btnSz + gap;
-        }
-    });
-
-    // Create pause button if it doesn't exist
-    if (!bottomBar.getChildByName('pauseButton')) {
-        const pauseButton = new PIXI.Container();
-        pauseButton.name = 'pauseButton';
-
-        const bg = new PIXI.Graphics();
-        bg.beginFill(0xFFB74D);
-        bg.drawRoundedRect(0, 0, btnSz, btnSz, Math.floor(btnSz * 0.2));
-        bg.endFill();
-
-        const icon = new PIXI.Text('⏸', {
-            fontSize: Math.floor(btnSz * 0.5),
-            fill: 0x6A1B0A,
-            fontWeight: 'bold',
-        });
-        icon.anchor.set(0.5);
-        icon.x = btnSz / 2;
-        icon.y = btnSz / 2;
-
-        pauseButton.addChild(bg);
-        pauseButton.addChild(icon);
-        pauseButton.interactive = true;
-        pauseButton.buttonMode = true;
-        pauseButton.on('pointerdown', () => {
-            showPausePopup();
-        });
-
-        bottomBar.addChild(pauseButton);
-    }
-
-    // Position pause button
-    const pauseButton = bottomBar.getChildByName('pauseButton');
-    pauseButton.width = pauseButton.height = btnSz;
-    pauseButton.x = window.innerWidth - gap - btnSz;
-    pauseButton.y = window.innerHeight - barH + (barH - btnSz) / 2;
 }
 
 
@@ -611,15 +506,12 @@ function startLevel(index) {
 function setupPlayArea() {
     const barH = Math.max(window.innerHeight * BAR_H_PRC, MIN_BAR_H);
     const topMargin = 20;
-    const sideMargin = Math.max(20, window.innerWidth * 0.05); // 5% от ширины экрана, минимум 20px
 
-    // Calculate play area size with aspect ratio preservation
-    const maxWidth = window.innerWidth - sideMargin * 2;
-    const maxHeight = window.innerHeight - barH - topMargin - GAP_HORZ;
-    
-    // Для широких экранов ограничиваем максимальную ширину
-    const maxAllowedWidth = Math.min(maxWidth, window.innerHeight * 1.2); // 1.2 - максимальное соотношение сторон
-    const size = Math.min(maxAllowedWidth, maxHeight);
+    // Calculate play area size
+    const size = Math.min(
+        window.innerWidth - 40,
+        window.innerHeight - barH - topMargin - GAP_HORZ
+    );
 
     // Create field wrapper container
     const fieldWrapper = new PIXI.Container();
@@ -633,26 +525,29 @@ function setupPlayArea() {
     const headerH = Math.floor(size * HEADER_H_PRC);
     playField.width = size;
     playField.height = size - headerH;
-    playField.y = headerH;
+    playField.y = headerH;  // Shift play field down by header height
 
     // Background and border
     const background = new PIXI.Graphics();
-    background.beginFill(0xFFF0C2);
+    background.beginFill(0xFFF0C2); // внутренний цвет
     background.drawRoundedRect(0, 0, size, size, BORDER_RADIUS);
     background.endFill();
 
     const border = new PIXI.Graphics();
-    border.lineStyle(FRAME_BORDER, 0xF68722);
+    border.lineStyle(FRAME_BORDER, 0xF68722); // внешняя рамка
     border.drawRoundedRect(0, 0, size, size, BORDER_RADIUS);
 
     playField.addChild(background);
     playField.addChild(border);
     fieldWrapper.addChild(playField);
 
+    // Add field wrapper to rootUI
     rootUI.addChild(fieldWrapper);
 
+    // Build level header
     const header = buildLevelHeader(fieldWrapper, levelData);
 
+    // Setup bottom bar with colored types
     const coloredTypes = Object.keys(levelData.spawnWeights).filter(type => 
         type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_')
     );
@@ -662,110 +557,67 @@ function setupPlayArea() {
 }
 
 function buildLevelHeader(wrapper, level) {
-    // --- Удаляем предыдущий header, если есть ---
-    const oldHeader = wrapper.getChildByName('levelHeader');
-    if (oldHeader) {
-        wrapper.removeChild(oldHeader);
-    }
     // --- контейнер шапки ---
     const headerH = Math.floor(wrapper.height * HEADER_H_PRC);
     const header = new PIXI.Container();
     header.name = 'levelHeader';
     wrapper.addChild(header);
 
-    // --- Плашка целей (слева) ---
-    const goalsSprite = new PIXI.Sprite(TEXTURES['ui_goals']);
-    goalsSprite.anchor.set(0, 0);
-    goalsSprite.x = 0;
-    goalsSprite.y = 0;
-    goalsSprite.height = headerH;
-    goalsSprite.scale.x = goalsSprite.scale.y; // Сохраняем пропорции
-    header.addChild(goalsSprite);
+    // --- фон полосы ---
+    const bar = new PIXI.Graphics();
+    bar.beginFill(0xFFE3A3)
+       .drawRoundedRect(0, 0, wrapper.width, headerH, 14)
+       .endFill();
+    header.addChild(bar);
 
-    // Текст GOALS
-    const goalsText = new PIXI.Text('GOALS', {
-        fontSize: Math.floor(headerH * 0.28),
-        fill: 0xFFFFFF,
+    // --- текст "Уровень N" (слева) ---
+    const lvlText = new PIXI.Text(`Уровень ${level.id}`, {
+        fontSize: headerH * 0.35,
+        fill: 0x5B250D,
         fontWeight: 'bold',
         fontFamily: 'Arial',
-        stroke: 0xA05A1C,
-        strokeThickness: 5,
-        align: 'center',
     });
-    goalsText.anchor.set(0.5, 0);
-    goalsText.x = goalsSprite.x + goalsSprite.width / 2;
-    goalsText.y = goalsSprite.y + headerH * 0.10;
-    header.addChild(goalsText);
-
-    // Число целей
-    const goalsCount = new PIXI.Text(`${level.goalBugCount}`, {
-        fontSize: Math.floor(headerH * 0.38),
-        fill: 0xFFFFFF,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
-        stroke: 0xA05A1C,
-        strokeThickness: 6,
-        align: 'center',
-    });
-    goalsCount.anchor.set(0.5, 0);
-    goalsCount.x = goalsSprite.x + goalsSprite.width / 2;
-    goalsCount.y = goalsSprite.y + headerH * 0.48;
-    goalsCount.name = 'progText';
-    header.addChild(goalsCount);
-
-    // --- Плашка уровня (по центру) ---
-    const levelSprite = new PIXI.Sprite(TEXTURES['ui_level']);
-    levelSprite.anchor.set(0.5, 0);
-    levelSprite.height = headerH * 1.05;
-    levelSprite.scale.x = levelSprite.scale.y;
-    levelSprite.x = wrapper.width / 2;
-    levelSprite.y = 0;
-    header.addChild(levelSprite);
-
-    // Текст LEVEL N
-    const lvlText = new PIXI.Text(`LEVEL ${level.id}`, {
-        fontSize: Math.floor(headerH * 0.32),
-        fill: 0xFFFFFF,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
-        stroke: 0xA05A1C,
-        strokeThickness: 6,
-        align: 'center',
-    });
-    lvlText.anchor.set(0.5, 0);
-    lvlText.x = levelSprite.x;
-    lvlText.y = levelSprite.y + headerH * 0.13;
+    lvlText.y = headerH * 0.15;
+    lvlText.x = 18;
     header.addChild(lvlText);
 
-    // --- Сердца (рядом с LEVEL) ---
-    const heartSz = Math.floor(headerH * 0.55);
+    // --- текст прогресса (справа) ---
+    const progText = new PIXI.Text(`0/${level.goalBugCount}`, {
+        fontSize: headerH * 0.35,
+        fill: 0x5B250D,
+        fontWeight: 'bold',
+        fontFamily: 'Arial',
+        align: 'right',
+    });
+    progText.anchor.set(1, 0);
+    progText.x = wrapper.width - 18;
+    progText.y = headerH * 0.15;
+    progText.name = 'progText';
+    header.addChild(progText);
+
+    // --- строка сердечек ---
+    const heartSz = Math.floor(headerH * HEART_SIZE_PRC);
     const hearts = new PIXI.Container();
     hearts.name = 'heartsRow';
     header.addChild(hearts);
+
+    // иконка-текстура (можно заменить на спрайт из атласа)
+    const heartStyle = {
+        fontSize: heartSz,
+        fill: 0xFF4B30,
+        fontFamily: 'Arial',
+    };
+
+    // Рисуем сердечки по количеству жизней
     for (let i = 0; i < level.lifeCount; i++) {
-        const h = new PIXI.Sprite(TEXTURES['ui_heart']);
-        h.width = h.height = heartSz;
-        h.x = i * (heartSz + 6);
-        h.y = 0;
+        const h = new PIXI.Text('❤', heartStyle);
+        h.x = i * (heartSz + HEART_GAP);
         hearts.addChild(h);
     }
-    // Центрируем сердца под текстом LEVEL
-    hearts.x = levelSprite.x - (hearts.width / 2);
-    hearts.y = levelSprite.y + headerH * 0.55;
 
-    // --- Шестерёнка (справа) ---
-    const gearSprite = new PIXI.Sprite(TEXTURES['ui_gear']);
-    gearSprite.anchor.set(1, 0);
-    gearSprite.height = headerH * 0.85;
-    gearSprite.scale.x = gearSprite.scale.y;
-    gearSprite.x = wrapper.width - 8;
-    gearSprite.y = headerH * 0.08;
-    gearSprite.interactive = true;
-    gearSprite.buttonMode = true;
-    gearSprite.on('pointerdown', () => {
-        showPausePopup();
-    });
-    header.addChild(gearSprite);
+    // центрируем строку по ширине полосы
+    hearts.x = (wrapper.width - hearts.width) / 2;
+    hearts.y = headerH - heartSz - HEART_GAP;
 
     return header;
 }
@@ -774,19 +626,15 @@ function updateLevelHeader(score, life) {
     const header = playArea.parent.getChildByName('levelHeader');
     if (!header) return;
 
-    // Обновляем число целей (score)
+    // счётчик X/Y
     const progText = header.getChildByName('progText');
-    if (progText) {
-        progText.text = `${score}`;
-    }
+    progText.text = `${score}/${levelData.goalBugCount}`;
 
-    // Обновляем сердца
+    // перекраска сердечек
     const hearts = header.getChildByName('heartsRow');
-    if (hearts) {
-        for (let i = 0; i < hearts.children.length; i++) {
-            // Сердце активно, если i < life
-            hearts.children[i].alpha = i < life ? 1 : 0.3;
-        }
+    for (let i = 0; i < hearts.children.length; i++) {
+        hearts.children[i].style.fill =
+            i < life ? 0xFF4B30 : 0xFFDB8F;   // заполненные / пустые
     }
 }
 
@@ -958,7 +806,7 @@ function spawnObject() {
         ),
         MAX_BUG_SIZE
     );
-    const size = isFat ? baseSize * 1.2 : baseSize;
+    const size = isFat ? baseSize * 2 : baseSize;
 
     const container = new PIXI.Container();
     container.width = size;
@@ -1420,15 +1268,13 @@ resizeGame();
 // Функция для очистки всех попапов
 function clearAllPopups() {
     const popups = ['winPopup', 'losePopup', 'pausePopup', 'pauseOverlay'];
-    const containers = [gameContainer, rootUI, app.stage];
-    containers.forEach(container => {
-        popups.forEach(name => {
-            const popup = container.getChildByName(name);
-            if (popup) container.removeChild(popup);
-        });
+    popups.forEach(popupName => {
+        const popup = gameContainer.getChildByName(popupName);
+        if (popup) {
+            gameContainer.removeChild(popup);
+        }
     });
 }
-
 
 function showWinPopup(currentLevelIndex) {
     // Очищаем все существующие попапы
@@ -1943,25 +1789,18 @@ function resumeGame() {
 }
 
 function buildBottomBar(coloredTypes) {
+    // единый контейнер панели
     if (!bottomBar) {
         bottomBar = new PIXI.Container();
         rootUI.addChild(bottomBar);
     }
     bottomBar.removeChildren();
-    colorButtonsContainer = new PIXI.Container();
-    colorButtonsContainer.name = 'colorButtonsContainer';
-    bottomBar.addChild(colorButtonsContainer);
 
     const barH = Math.max(window.innerHeight * BAR_H_PRC, MIN_BAR_H);
-    
-    // Рассчитываем оптимальный размер кнопок
-    const maxButtonWidth = Math.floor(window.innerWidth / (coloredTypes.length + 2));
-    const maxButtonHeight = Math.floor(barH * 0.8);
-    const btnSz = Math.min(maxButtonWidth, maxButtonHeight);
-    
+    const btnSz = Math.floor(barH * 0.8);          // 80 % высоты панели
     const pauseW = btnSz;
-    const n = coloredTypes.length;
-    const gap = Math.min(GAP_HORZ, Math.floor(btnSz * 0.2)); // Ограничиваем отступ между кнопками
+    const n = coloredTypes.length;                 // 0–4
+    const gap = GAP_HORZ;
 
     const totalW = (btnSz * n) + pauseW + gap * (n + 2);
     let x = (window.innerWidth - totalW) / 2 + gap;
@@ -1973,11 +1812,13 @@ function buildBottomBar(coloredTypes) {
     const defaultOrder = ['red', 'blue', 'green', 'yellow'];
     const buttonOrder = levelData.colorButtonOrder || defaultOrder;
 
-    // Color buttons
+    // Цветные кнопки
     const keys = ['q', 'w', 'e', 'r'];
     buttonOrder.forEach((color, i) => {
+        // Check if this color is used in the level
         const isUsed = coloredTypes.some(type => type.endsWith(`_${color}`));
         if (isUsed) {
+            // Map key to color based on button position
             dynamicColorKeyMap[keys[i]] = color;
             
             const btn = createColorButton(color, btnSz, keys[i], !IS_TOUCH);
@@ -1995,7 +1836,7 @@ function buildBottomBar(coloredTypes) {
 
         const bg = new PIXI.Graphics();
         bg.beginFill(0xFFB74D);
-        bg.drawRoundedRect(0, 0, btnSz, btnSz, Math.floor(btnSz * 0.2));
+        bg.drawRoundedRect(0, 0, btnSz, btnSz, 10);
         bg.endFill();
 
         const icon = new PIXI.Text('⏸', {
@@ -2048,7 +1889,7 @@ function createColorButton(color, size, key, showKey = true) {
     border.lineStyle(3, 0x000000, 0.3);
     border.drawCircle(size/2, size/2, size/2);
 
-    // Active state indicator
+    // Active state indicator (initially invisible)
     const activeIndicator = new PIXI.Graphics();
     activeIndicator.beginFill(0xFFFFFF, 0.5);
     activeIndicator.drawCircle(size/2, size/2, size/2);
@@ -2065,7 +1906,7 @@ function createColorButton(color, size, key, showKey = true) {
         const label = new PIXI.Text(
             key.toUpperCase(),
             { 
-                fontSize: Math.floor(size * 0.35), 
+                fontSize: size * 0.35, 
                 fill: 0xffffff, 
                 fontWeight: '700',
                 fontFamily: 'Arial',
