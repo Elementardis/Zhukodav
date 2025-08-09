@@ -7,6 +7,7 @@ const BAR_H_PRC = 0.14;   // 14 % экрана тест
 const GAP_HORZ = 12;      // промежутки
 const BORDER_RADIUS = 40;
 const FRAME_BORDER = 12;
+const SAFE_PADDING_EXTRA = 6; // внутренний зазор от рамки, чтобы объекты не заходили на неё
 const HEADER_H_PRC = 0.10;   // 10 % высоты квадратного поля
 const HEART_SIZE_PRC = 0.50;   // 50 % высоты шапки
 const HEART_GAP = 6;      // px между сердцами
@@ -811,6 +812,26 @@ function animateFatBugSquish(container) {
         });
 }
 
+// --- Safe bounds helpers ---
+// Возвращает безопасные границы спавна с учётом рамки и небольшого запаса под анимации
+function getSafeSpawnBounds(objSize) {
+  // рамка + небольшой запас + 10% от размера под пульсации/сквиш
+  const pad = FRAME_BORDER + SAFE_PADDING_EXTRA + Math.ceil(objSize * 0.1);
+  const minX = pad + objSize / 2;
+  const maxX = playArea.width  - pad - objSize / 2;
+  const minY = pad + objSize / 2;
+  const maxY = playArea.height - pad - objSize / 2;
+  return { minX, maxX, minY, maxY };
+}
+
+// Подтягивает объект внутрь безопасной зоны (при ресайзе/перестроении UI)
+function clampToSafeArea(obj) {
+  const size = Math.max(obj.width, obj.height);
+  const { minX, maxX, minY, maxY } = getSafeSpawnBounds(size);
+  if (minX <= maxX) obj.x = Math.min(Math.max(obj.x, minX), maxX);
+  if (minY <= maxY) obj.y = Math.min(Math.max(obj.y, minY), maxY);
+}
+
 // генерация объекта
 function spawnObject() {
     if (activeObjects.length >= levelData.params.maxObjects) return;
@@ -839,11 +860,14 @@ function spawnObject() {
     container.animations = [];
     container.type = type; // ✅ важно для корректной логики в resumeGame()
 
-    // Calculate safe spawn boundaries
-    const minX = size / 2;
-    const maxX = playArea.width - size / 2;
-    const minY = size / 2;
-    const maxY = playArea.height - size / 2;
+    // Calculate safe spawn boundaries (accounting for border and animations)
+    const { minX, maxX, minY, maxY } = getSafeSpawnBounds(size);
+
+    // Если безопасная область не вмещает объект — отложим спавн
+    if (minX > maxX || minY > maxY) {
+        objectQueue.unshift(data);
+        return;
+    }
 
     let attempts = 0;
     const maxAttempts = 50;
@@ -1252,8 +1276,10 @@ function rebuildUI() {
 
     // Redraw all active objects
     prevActiveObjects.forEach(obj => {
+        clampToSafeArea(obj);
         playField.addChild(obj);
     });
+
     objectQueue = prevObjectQueue;
     activeObjects = prevActiveObjects;
 }
