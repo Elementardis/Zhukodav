@@ -27,6 +27,9 @@ let isPaused = false;
 let spawnInterval;
 let score = 0;
 let life = 0;
+// состояние уровня
+let levelEnded = false; // true — как только показан попап победы
+
 
 // Color button state
 let activeColor = null;
@@ -200,6 +203,23 @@ function updateButtonState(color, isActive) {
             duration: 0.1
         });
     }
+}
+
+function freezeActiveObjects() {
+  activeObjects.forEach(obj => {
+    // останавливаем проверки жизни
+    if (obj.lifetimeCheckTimeout) {
+      clearTimeout(obj.lifetimeCheckTimeout);
+      obj.lifetimeCheckTimeout = null;
+    }
+    // ставим на паузу анимации
+    if (obj.animations) {
+      obj.animations.forEach(anim => anim.pause && anim.pause());
+    }
+    // режем интеракцию
+    obj.interactive = false;
+    obj.buttonMode = false;
+  });
 }
 
 // Update keyboard handlers to support both layouts
@@ -481,6 +501,8 @@ function startLevel(index) {
     app.stage.addChild(gameContainer);
     gameContainer.addChild(rootUI);
     levelData = levels[index];
+    levelEnded = false;
+
 
     activeObjects = [];
     maxSimultaneousObjects = levelData.params.maxObjects;
@@ -815,6 +837,7 @@ function spawnObject() {
     container.interactive = true;
     container.buttonMode = true;
     container.animations = [];
+    container.type = type; // ✅ важно для корректной логики в resumeGame()
 
     // Calculate safe spawn boundaries
     const minX = size / 2;
@@ -973,7 +996,7 @@ function spawnObject() {
 
     // Click handling
     container.on('pointerdown', () => {
-        if (isPaused) return; // Don't handle clicks while paused
+        if (isPaused || levelEnded) return; // Don't handle clicks while paused
 
         // If any color is active, only colored bugs and bombs can be clicked
         if (activeColor !== null && !type.startsWith('coloredBug_') && !type.startsWith('fatColoredBug_') && type !== 'bomb') {
@@ -1028,6 +1051,14 @@ function spawnObject() {
                 animateBugShake(container);
             }
         } else if (type === 'bomb') {
+                if (levelEnded) {
+                    console.log('Bomb clicked after win — no life loss');
+                    showExplosion(container.x, container.y); // можно убрать, если не хочешь эффект
+                    animateRemoveObject(container, () => {
+                        updateUI();
+                    });
+                    return;
+                }
             console.log('Bomb clicked at:', container.x, container.y);
             showExplosion(container.x, container.y);
             life--;
@@ -1036,6 +1067,7 @@ function spawnObject() {
                 updateUI();
                 if (life <= 0) endGame(false);
             });
+            
         } else if (type === 'fat') {
             data.clicks--;
             const text = container.getChildByName('clickText');
@@ -1166,13 +1198,17 @@ function updateUI() {
 // конец игры
 function endGame(won) {
     clearInterval(spawnInterval);
+    levelEnded = true;      // ✅ включаем иммунитет
+    freezeActiveObjects();  // ✅ замораживаем таймеры и клики
+
     if (won) {
         markLevelCompleted(levelData.id - 1);
         showWinPopup(levelData.id - 1);
-        return;
+    } else {
+        showLosePopup(levelData.id - 1);
     }
-    showLosePopup(levelData.id - 1);
 }
+
 
 // Для хранения прогресса
 function getCompletedLevels() {
@@ -1267,7 +1303,7 @@ resizeGame();
 
 // Функция для очистки всех попапов
 function clearAllPopups() {
-    const popups = ['winPopup', 'losePopup', 'pausePopup', 'pauseOverlay'];
+    const popups = ['winPopup', 'losePopup', 'pausePopup', 'pauseOverlay', 'winOverlay', 'loseOverlay'];
     popups.forEach(popupName => {
         const popup = gameContainer.getChildByName(popupName);
         if (popup) {
@@ -1279,6 +1315,15 @@ function clearAllPopups() {
 function showWinPopup(currentLevelIndex) {
     // Очищаем все существующие попапы
     clearAllPopups();
+
+    const winOverlay = new PIXI.Graphics();
+            winOverlay.beginFill(0x000000, 0.35); // приятное затемнение и блок кликов
+            winOverlay.drawRect(0, 0, app.screen.width, app.screen.height);
+            winOverlay.endFill();
+            winOverlay.name = 'winOverlay';
+            winOverlay.interactive = true;
+    gameContainer.addChild(winOverlay);
+
 
     const popupWidth = Math.min(app.screen.width * 0.8, 480);
     const popupHeight = Math.min(app.screen.height * 0.7, 420);
@@ -1387,6 +1432,15 @@ function showWinPopup(currentLevelIndex) {
 function showLosePopup(currentLevelIndex) {
     // Очищаем все существующие попапы
     clearAllPopups();
+
+    const loseOverlay = new PIXI.Graphics();
+        loseOverlay.beginFill(0x000000, 0.35);
+        loseOverlay.drawRect(0, 0, app.screen.width, app.screen.height);
+        loseOverlay.endFill();
+        loseOverlay.name = 'loseOverlay';
+        loseOverlay.interactive = true;
+    gameContainer.addChild(loseOverlay);
+
 
     const popupWidth = Math.min(app.screen.width * 0.8, 480);
     const popupHeight = Math.min(app.screen.height * 0.7, 420);
@@ -1760,7 +1814,7 @@ function resumeGame() {
                                 activeObjects = activeObjects.filter(o => o !== obj);
                                 
                                 const type = obj.type;
-                                if (type !== 'bomb') {
+                                if (!levelEnded && type !== 'bomb') { // ⛔ после победы не штрафуем
                                     life--;
                                     updateUI();
                                     if (life <= 0) endGame(false);
