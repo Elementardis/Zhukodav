@@ -1222,14 +1222,15 @@ function updateUI() {
 // конец игры
 function endGame(won) {
     clearInterval(spawnInterval);
-    levelEnded = true;      // ✅ включаем иммунитет
-    freezeActiveObjects();  // ✅ замораживаем таймеры и клики
+    levelEnded = true;
+    freezeActiveObjects();
 
+    const idx = levelData.id - 1;
     if (won) {
-        markLevelCompleted(levelData.id - 1);
-        showWinPopup(levelData.id - 1);
+        markLevelCompleted(idx);
+        showWinOverlayThenPopup(idx);  // ⬅ сначала оверлей с надписью, попап через 1s
     } else {
-        showLosePopup(levelData.id - 1);
+        showLoseOverlayThenPopup(idx); // ⬅ сначала оверлей с надписью, попап через 1s
     }
 }
 
@@ -1329,26 +1330,107 @@ resizeGame();
 
 // Функция для очистки всех попапов
 function clearAllPopups() {
-    const popups = ['winPopup', 'losePopup', 'pausePopup', 'pauseOverlay', 'winOverlay', 'loseOverlay'];
-    popups.forEach(popupName => {
-        const popup = gameContainer.getChildByName(popupName);
-        if (popup) {
-            gameContainer.removeChild(popup);
-        }
-    });
+  const popups = ['winPopup', 'losePopup', 'pausePopup', 'pauseOverlay', 'winOverlay', 'loseOverlay'];
+  popups.forEach(name => {
+    const node = gameContainer.getChildByName(name);
+    if (node) gameContainer.removeChild(node);
+  });
 }
+
+
+// Плавная анимация появления: масштаб 0.6 → 1.0, альфа 0 → 1
+function animateAppear(obj, duration = 500) {
+  const startScale = 0.6, endScale = 1.0;
+  const t0 = performance.now();
+  const easeOutBack = t => {
+    const c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  };
+  obj.scale.set(startScale);
+  obj.alpha = 0;
+  function step(now) {
+    const p = Math.min((now - t0) / duration, 1);
+    const s = startScale + (endScale - startScale) * easeOutBack(p);
+    obj.scale.set(s);
+    obj.alpha = p;
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// Победа: затемняем фон, показываем «Победа!», через 1s — попап победы
+function showWinOverlayThenPopup(currentLevelIndex) {
+  clearAllPopups();
+
+  const overlay = new PIXI.Graphics();
+  overlay.beginFill(0x000000, 0.35);
+  overlay.drawRect(0, 0, app.screen.width, app.screen.height);
+  overlay.endFill();
+  overlay.name = 'winOverlay';
+  overlay.interactive = true; // блокируем клики в поле
+  gameContainer.addChild(overlay);
+
+  const txt = new PIXI.Text('Победа!', new PIXI.TextStyle({
+    fill: 0xFFD54F, // «золото»
+    fontSize: Math.round(app.screen.width * 0.08),
+    fontWeight: '900',
+    dropShadow: true,
+    dropShadowDistance: 4,
+    dropShadowBlur: 2,
+    dropShadowColor: 0x000000
+  }));
+  txt.anchor?.set ? txt.anchor.set(0.5) : null; // если anchor доступен
+  // fallback, если anchor нет:
+  if (!txt.anchor?.set) { txt.pivot.set(txt.width/2, txt.height/2); }
+  txt.x = app.screen.width / 2;
+  txt.y = app.screen.height / 2;
+
+  overlay.addChild(txt);
+  animateAppear(txt, 500);
+
+  setTimeout(() => {
+    showWinPopup(currentLevelIndex); // попап поверх overlay
+  }, 1000);
+}
+
+// Поражение: затемняем фон, показываем «Поражение», через 1s — попап проигрыша
+function showLoseOverlayThenPopup(currentLevelIndex) {
+  clearAllPopups();
+
+  const overlay = new PIXI.Graphics();
+  overlay.beginFill(0x000000, 0.35);
+  overlay.drawRect(0, 0, app.screen.width, app.screen.height);
+  overlay.endFill();
+  overlay.name = 'loseOverlay';
+  overlay.interactive = true;
+  gameContainer.addChild(overlay);
+
+  const txt = new PIXI.Text('Поражение', new PIXI.TextStyle({
+    fill: 0xFF6B6B, // приятный красный
+    fontSize: Math.round(app.screen.width * 0.07),
+    fontWeight: '900',
+    dropShadow: true,
+    dropShadowDistance: 4,
+    dropShadowBlur: 2,
+    dropShadowColor: 0x000000
+  }));
+  txt.anchor?.set ? txt.anchor.set(0.5) : null;
+  if (!txt.anchor?.set) { txt.pivot.set(txt.width/2, txt.height/2); }
+  txt.x = app.screen.width / 2;
+  txt.y = app.screen.height / 2;
+
+  overlay.addChild(txt);
+  animateAppear(txt, 500);
+
+  setTimeout(() => {
+    showLosePopup(currentLevelIndex);
+  }, 1000);
+}
+
 
 function showWinPopup(currentLevelIndex) {
     // Очищаем все существующие попапы
     clearAllPopups();
-
-    const winOverlay = new PIXI.Graphics();
-            winOverlay.beginFill(0x000000, 0.35); // приятное затемнение и блок кликов
-            winOverlay.drawRect(0, 0, app.screen.width, app.screen.height);
-            winOverlay.endFill();
-            winOverlay.name = 'winOverlay';
-            winOverlay.interactive = true;
-    gameContainer.addChild(winOverlay);
 
 
     const popupWidth = Math.min(app.screen.width * 0.8, 480);
@@ -1458,14 +1540,6 @@ function showWinPopup(currentLevelIndex) {
 function showLosePopup(currentLevelIndex) {
     // Очищаем все существующие попапы
     clearAllPopups();
-
-    const loseOverlay = new PIXI.Graphics();
-        loseOverlay.beginFill(0x000000, 0.35);
-        loseOverlay.drawRect(0, 0, app.screen.width, app.screen.height);
-        loseOverlay.endFill();
-        loseOverlay.name = 'loseOverlay';
-        loseOverlay.interactive = true;
-    gameContainer.addChild(loseOverlay);
 
 
     const popupWidth = Math.min(app.screen.width * 0.8, 480);
