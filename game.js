@@ -222,6 +222,40 @@ function freezeActiveObjects() {
     obj.buttonMode = false;
   });
 }
+        
+        // Remove all active objects silently (no life penalties, no score changes)
+        function removeAllActiveObjectsSilent() {
+          // Work on a copy because we'll mutate activeObjects during removal
+          const toRemove = [...activeObjects];
+          toRemove.forEach(obj => {
+            // stop lifetime checks
+            if (obj.lifetimeCheckTimeout) {
+              clearTimeout(obj.lifetimeCheckTimeout);
+              obj.lifetimeCheckTimeout = null;
+            }
+            // stop/kill animations
+            if (obj.animations) {
+              obj.animations.forEach(anim => {
+                if (typeof anim.pause === 'function') anim.pause();
+                if (typeof anim.kill === 'function') anim.kill();
+              });
+            }
+            // disable interactions
+            obj.interactive = false;
+            obj.buttonMode = false;
+            // quick fade/slide out
+            gsap.to(obj, {
+              y: obj.y + 80,
+              alpha: 0,
+              duration: 0.25,
+              ease: "power1.in",
+              onComplete: () => {
+                if (obj.parent) obj.parent.removeChild(obj);
+                activeObjects = activeObjects.filter(o => o !== obj);
+              }
+            });
+          });
+        }
 
 // Update keyboard handlers to support both layouts
 window.addEventListener('keydown', (e) => {
@@ -849,7 +883,7 @@ function spawnObject() {
         ),
         MAX_BUG_SIZE
     );
-    const size = isFat ? baseSize * 2 : baseSize;
+    const size = isFat ? baseSize * 2/1.5 : baseSize;
 
     const container = new PIXI.Container();
     container.width = size;
@@ -1164,7 +1198,7 @@ function spawnObject() {
                         playArea.removeChild(container);
                         activeObjects = activeObjects.filter(o => o !== container);
 
-                        if (type !== 'bomb') {
+                        if (!levelEnded && type !== 'bomb') {
                             life--;
                             updateUI();
                             if (life <= 0) endGame(false);
@@ -1225,7 +1259,11 @@ function endGame(won) {
     levelEnded = true;
     freezeActiveObjects();
 
-    const idx = levelData.id - 1;
+    
+    // Remove remaining objects without penalties
+    removeAllActiveObjectsSilent();
+
+const idx = levelData.id - 1;
     if (won) {
         markLevelCompleted(idx);
         showWinOverlayThenPopup(idx);  // ⬅ сначала оверлей с надписью, попап через 1s
