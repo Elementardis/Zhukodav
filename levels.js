@@ -39,6 +39,10 @@ const levels = [
     "spawnWeights": {
       "bug": 0.8,
       "coloredBug_red": 0.2
+    },
+    "introPopup": {
+      "type": "coloredBug_red",
+      "descryption": "Жми на красную кнопку, чтобы убить"
     }
   },
   {

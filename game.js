@@ -532,30 +532,36 @@ function showLevelSelect() {
 
 // запускаем уровень
 function startLevel(index) {
-    app.stage.removeChild(levelSelectContainer);
-    app.stage.addChild(gameContainer);
-    gameContainer.addChild(rootUI);
-    levelData = levels[index];
-    levelEnded = false;
+  app.stage.removeChild(levelSelectContainer);
+  app.stage.addChild(gameContainer);
+  gameContainer.addChild(rootUI);
+  levelData = levels[index];
+  levelEnded = false;
 
+  activeObjects = [];
+  maxSimultaneousObjects = levelData.params.maxObjects;
 
-    activeObjects = [];
-    maxSimultaneousObjects = levelData.params.maxObjects;
+  score = 0;
+  life = levelData.lifeCount;
 
-    score = 0;
-    life = levelData.lifeCount;
+  const { fieldWrapper, playField } = setupPlayArea();
+  playArea = playField;
 
-    const { fieldWrapper, playField } = setupPlayArea();
-    playArea = playField; // Keep playArea reference for backward compatibility
-
+  // реальный старт спавна
+  const startSpawning = () => {
     prepareObjectQueue();
     spawnInterval = setInterval(spawnObject, levelData.params.spawnInterval);
+    if (typeof levelData.onEnterLevel === 'function') levelData.onEnterLevel();
+  };
 
-    // Call onEnterLevel if defined
-    if (typeof levelData.onEnterLevel === 'function') {
-        levelData.onEnterLevel();
-    }
+  // если в конфиге уровня есть интро-попап — показываем, затем стартуем
+  if (levelData.introPopup) {
+    showIntroPopup(levelData.introPopup, startSpawning);
+  } else {
+    startSpawning();
+  }
 }
+
 
 
 
@@ -1376,6 +1382,14 @@ function resizeGame() {
         pausePopup.x = (app.screen.width - popupWidth) / 2;
         pausePopup.y = (app.screen.height - popupHeight) / 2;
     }
+    // Handle intro popup if it exists
+    const introPopup = gameContainer.getChildByName('introPopup');
+    if (introPopup) {
+        const popupWidth = Math.min(app.screen.width * 0.8, 480);
+        const popupHeight = Math.min(app.screen.height * 0.7, 420);
+        introPopup.x = (app.screen.width - popupWidth) / 2;
+        introPopup.y = (app.screen.height - popupHeight) / 2;
+    }
 
     // Handle pause overlay if it exists
     const overlay = gameContainer.getChildByName('pauseOverlay');
@@ -1383,6 +1397,12 @@ function resizeGame() {
         overlay.width = app.screen.width;
         overlay.height = app.screen.height;
     }
+    // Доп. подстройка оверлеев/попапов, если открыты
+    ['pauseOverlay','winOverlay','loseOverlay','introOverlay'].forEach(n => {
+    const o = gameContainer.getChildByName(n);
+    if (o) { o.width = app.screen.width; o.height = app.screen.height; }
+    });
+
 }
 
 // Вызвать resizeGame при загрузке, чтобы всё было адаптивно с самого начала
@@ -1390,7 +1410,7 @@ resizeGame();
 
 // Функция для очистки всех попапов
 function clearAllPopups() {
-  const popups = ['winPopup', 'losePopup', 'pausePopup', 'pauseOverlay', 'winOverlay', 'loseOverlay'];
+  const popups = ['winPopup','losePopup','pausePopup','pauseOverlay','winOverlay','loseOverlay','introPopup','introOverlay'];
   popups.forEach(name => {
     const node = gameContainer.getChildByName(name);
     if (node) gameContainer.removeChild(node);
@@ -1417,6 +1437,135 @@ function animateAppear(obj, duration = 500) {
   }
   requestAnimationFrame(step);
 }
+
+// Универсальная выдача текстуры по типу
+function getTextureForType(t) {
+  if (!t) return TEXTURES['bug'];
+  if (t.startsWith('fatColoredBug_')) {
+    const color = t.split('_')[1];
+    return TEXTURES[`coloredBug_${color}`] || TEXTURES['bug'];
+  }
+  return TEXTURES[t] || TEXTURES['bug'];
+}
+
+// Попап "Новый жук!"
+function showIntroPopup(cfg, onClose) {
+  // overlay
+  const overlay = new PIXI.Graphics();
+  overlay.beginFill(0x000000, 0.55);
+  overlay.drawRect(0, 0, app.screen.width, app.screen.height);
+  overlay.endFill();
+  overlay.name = 'introOverlay';
+  overlay.interactive = true; // блок кликов по полю
+  gameContainer.addChild(overlay);
+
+  // контейнер элементов (без карточки, только оверлей + элементы)
+  const c = new PIXI.Container();
+  c.name = 'introPopup';
+  gameContainer.addChild(c);
+
+  // Заголовок
+  const title = new PIXI.Text('Новый жук!', new PIXI.TextStyle({
+    fontSize: Math.round(app.screen.width * 0.10),
+    fill: 0xFFD54F,
+    fontWeight: '900',
+    stroke: 0x6A1B0A,
+    strokeThickness: 6,
+    align: 'center'
+  }));
+  title.anchor.set(0.5);
+  title.x = app.screen.width / 2;
+  title.y = Math.max(32, app.screen.height * 0.12);
+  c.addChild(title);
+
+  // Иконка из типа
+  const iconTex = getTextureForType(cfg?.type);
+  const icon = new PIXI.Sprite(iconTex);
+  icon.anchor.set(0.5);
+  const iconSize = Math.min(app.screen.width, app.screen.height) * 0.22;
+  icon.width = icon.height = iconSize;
+  icon.x = app.screen.width / 2;
+  icon.y = title.y + title.height + iconSize * 0.75;
+  c.addChild(icon);
+
+  // Текст-описание (берём из cfg.descryption)
+  const desc = new PIXI.Text(String(cfg?.descryption ?? ''), new PIXI.TextStyle({
+    fontSize: Math.round(app.screen.width * 0.05),
+    fill: 0xFFE066,
+    fontWeight: '700',
+    align: 'center',
+    wordWrap: true,
+    wordWrapWidth: Math.min(app.screen.width * 0.85, 560)
+  }));
+  desc.anchor.set(0.5, 0);
+  desc.x = app.screen.width / 2;
+  desc.y = icon.y + icon.height * 0.65;
+  c.addChild(desc);
+
+  // Кнопка "ОК"
+  const btnW = Math.min(app.screen.width * 0.6, 360);
+  const btnH = 64;
+  const ok = new PIXI.Graphics();
+  ok.lineStyle(6, 0xFFB300);
+  ok.beginFill(0xFF8E00);
+  ok.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
+  ok.endFill();
+  ok.x = app.screen.width / 2;
+  ok.y = Math.min(app.screen.height - btnH - 24, desc.y + desc.height + 36);
+  ok.interactive = true;
+  ok.buttonMode = true;
+
+  const okLabel = new PIXI.Text('ОК', {
+    fontSize: 32, fill: 0xFFFFFF, fontWeight: '900', stroke: 0x6A1B0A, strokeThickness: 4
+  });
+  okLabel.anchor.set(0.5);
+  ok.addChild(okLabel);
+  c.addChild(ok);
+
+  // анимация появления
+  animateAppear(c, 400);
+
+  const close = () => {
+    if (gameContainer.getChildByName('introOverlay')) gameContainer.removeChild(overlay);
+    if (gameContainer.getChildByName('introPopup')) gameContainer.removeChild(c);
+    if (typeof onClose === 'function') onClose();
+  };
+  ok.on('pointerdown', close);
+
+ // адаптация при ресайзе (чтобы на десктопе всё было аккуратно)
+  c._resizeHandler = () => {
+    overlay.width = app.screen.width;
+    overlay.height = app.screen.height;
+
+    title.x = app.screen.width / 2;
+    title.y = Math.max(32, app.screen.height * 0.12);
+
+    const newIconSize = Math.min(app.screen.width, app.screen.height) * 0.22;
+    icon.width = icon.height = newIconSize;
+    icon.x = app.screen.width / 2;
+    icon.y = title.y + title.height + newIconSize * 0.75;
+
+    desc.style.wordWrapWidth = Math.min(app.screen.width * 0.85, 560);
+    desc.x = app.screen.width / 2;
+    desc.y = icon.y + icon.height * 0.65;
+
+    const newBtnW = Math.min(app.screen.width * 0.6, 360);
+    ok.clear();
+    ok.lineStyle(6, 0xFFB300).beginFill(0xFF8E00)
+      .drawRoundedRect(-newBtnW/2, -btnH/2, newBtnW, btnH, 18).endFill();
+    ok.x = app.screen.width / 2;
+    ok.y = Math.min(app.screen.height - btnH - 24, desc.y + desc.height + 36);
+  };
+  window.addEventListener('resize', c._resizeHandler);
+
+  // навешиваем окончательный обработчик клика
+  ok.on('pointerdown', () => {
+    window.removeEventListener('resize', c._resizeHandler);
+    close();
+  });
+}
+
+
 
 // Победа: затемняем фон, показываем «Победа!», через 1s — попап победы
 function showWinOverlayThenPopup(currentLevelIndex) {
