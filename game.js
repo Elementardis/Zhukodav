@@ -687,12 +687,19 @@ function updateLevelHeader(score, life) {
     const progText = header.getChildByName('progText');
     progText.text = `${score}/${levelData.goalBugCount}`;
 
-    // перекраска сердечек
+    // явная смена символа (надёжно видна)
     const hearts = header.getChildByName('heartsRow');
     for (let i = 0; i < hearts.children.length; i++) {
-        hearts.children[i].style.fill =
-            i < life ? 0xFF4B30 : 0xFFDB8F;   // заполненные / пустые
-    }
+        const h = hearts.children[i];
+        if (i < life) {
+            h.text = '❤';        // осталось
+            h.style.fill = 0xFF4B30;
+        } else {
+            h.text = '♡';        // потрачено
+            h.style.fill = 0xFFDB8F;
+        }
+    }       
+
 }
 
 // Функция для взвешенного случайного выбора
@@ -787,8 +794,11 @@ function prepareObjectQueue() {
 // Проверка пересечения двух объектов
 function checkCollision(obj1, obj2) {
     const padding = 4;
-    return Math.abs(obj1.x - obj2.x) < (obj1.width + obj2.width) / 2 + padding &&
-           Math.abs(obj1.y - obj2.y) < (obj1.height + obj2.height) / 2 + padding;
+    const r1 = (obj1 && obj1._footprint) ? obj1._footprint / 2 : Math.max(obj1.width, obj1.height) / 2;
+    const r2 = (obj2 && obj2._footprint) ? obj2._footprint / 2 : Math.max(obj2.width, obj2.height) / 2;
+    const dx = (obj1.x) - (obj2.x);
+    const dy = (obj1.y) - (obj2.y);
+    return Math.abs(dx) < (r1 + r2 + padding) && Math.abs(dy) < (r1 + r2 + padding);
 }
 
 // Проверка, что объект полностью в пределах поля
@@ -848,6 +858,15 @@ function animateFatBugSquish(container) {
 
 // --- Safe bounds helpers ---
 // Возвращает безопасные границы спавна с учётом рамки и небольшого запаса под анимации
+// Возвращает итоговый «след» объекта (размер коллизии) на этапе спавна.
+// Важно: здесь учитываем реальные габариты визуала (fat = x2, fatColored = x2, остальные = x1).
+function getSpawnFootprintSize(type, baseSize) {
+  if (type === 'fat' || (typeof type === 'string' && type.startsWith('fatColoredBug_'))) {
+    return baseSize * 2;
+  }
+  return baseSize;
+}
+
 function getSafeSpawnBounds(objSize) {
   // рамка + небольшой запас + 10% от размера под пульсации/сквиш
   const pad = FRAME_BORDER + SAFE_PADDING_EXTRA + Math.ceil(objSize * 0.1);
@@ -861,7 +880,7 @@ function getSafeSpawnBounds(objSize) {
 // Подтягивает объект внутрь безопасной зоны (при ресайзе/перестроении UI)
 function clampToSafeArea(obj) {
   const size = Math.max(obj.width, obj.height);
-  const { minX, maxX, minY, maxY } = getSafeSpawnBounds(size);
+  const { minX, maxX, minY, maxY } = getSafeSpawnBounds(footprint);
   if (minX <= maxX) obj.x = Math.min(Math.max(obj.x, minX), maxX);
   if (minY <= maxY) obj.y = Math.min(Math.max(obj.y, minY), maxY);
 }
@@ -885,17 +904,20 @@ function spawnObject() {
     );
     const size = isFat ? baseSize * 2/1.5 : baseSize;
 
-    const container = new PIXI.Container();
-    container.width = size;
-    container.height = size;
-    container.pivot.set(size / 2);
+    
+    const footprint = getSpawnFootprintSize(type, size);
+const container = new PIXI.Container();
+    container.width = footprint;
+    container.height = footprint;
+    container.pivot.set(footprint / 2);
+    container._footprint = footprint;
     container.interactive = true;
     container.buttonMode = true;
     container.animations = [];
     container.type = type; // ✅ важно для корректной логики в resumeGame()
 
     // Calculate safe spawn boundaries (accounting for border and animations)
-    const { minX, maxX, minY, maxY } = getSafeSpawnBounds(size);
+    const { minX, maxX, minY, maxY } = getSafeSpawnBounds(footprint);
 
     // Если безопасная область не вмещает объект — отложим спавн
     if (minX > maxX || minY > maxY) {
@@ -915,7 +937,7 @@ function spawnObject() {
 
         // Проверка на пересечение с другими объектами
         let hasCollision = false;
-        for (const child of playArea.children) {
+        for (const child of activeObjects) {
             if (child !== container && checkCollision(container, child)) {
                 hasCollision = true;
                 break;

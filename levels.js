@@ -20,8 +20,8 @@ const levels = [
     "lifeCount": 6,
     "params": {
       "maxObjects": 3,
-      "spawnInterval": 520,
-      "objectLifetime": 2300
+      "spawnInterval": 480,
+      "objectLifetime": 2200
     },
     "spawnWeights": {
       "bug": 1.0
@@ -33,26 +33,26 @@ const levels = [
     "lifeCount": 6,
     "params": {
       "maxObjects": 3,
-      "spawnInterval": 480,
-      "objectLifetime": 2250
+      "spawnInterval": 470,
+      "objectLifetime": 2050
     },
     "spawnWeights": {
       "bug": 0.8,
-      "bomb": 0.4
+      "coloredBug_red": 0.2
     }
   },
   {
     "id": 3,
-    "goalBugCount": 20,
+    "goalBugCount": 18,
     "lifeCount": 6,
     "params": {
       "maxObjects": 4,
-      "spawnInterval": 450,
-      "objectLifetime": 2200
+      "spawnInterval": 430,
+      "objectLifetime": 2050
     },
     "spawnWeights": {
-      "bug": 0.8,
-      "bomb": 0.5
+      "bug": 0.6,
+      "coloredBug_red": 0.4
     }
   },
   {
@@ -61,12 +61,12 @@ const levels = [
     "lifeCount": 6,
     "params": {
       "maxObjects": 4,
-      "spawnInterval": 420,
-      "objectLifetime": 2150
+      "spawnInterval": 430,
+      "objectLifetime": 1800
     },
     "spawnWeights": {
-      "bug": 0.7,
-      "coloredBug_red": 0.5
+      "bug": 0.6,
+      "coloredBug_red": 0.4
     }
   },
   {
@@ -75,13 +75,12 @@ const levels = [
     "lifeCount": 6,
     "params": {
       "maxObjects": 4,
-      "spawnInterval": 400,
-      "objectLifetime": 2100
+      "spawnInterval": 450,
+      "objectLifetime": 2000
     },
     "spawnWeights": {
-      "bug": 0.6,
-      "coloredBug_red": 0.6,
-      "fat": 0.3
+      "bug": 0.85,
+      "fat": 0.15
     }
   },
   {
@@ -89,348 +88,366 @@ const levels = [
     "goalBugCount": 20,
     "lifeCount": 6,
     "params": {
-      "maxObjects": 4,
-      "spawnInterval": 420,
+      "maxObjects": 3,
+      "spawnInterval": 460,
       "objectLifetime": 2100
     },
     "spawnWeights": {
-      "bug": 0.8,
-      "coloredBug_red": 0.4,
-      "coloredBug_blue": 0.4
-    }
-  },
-  {
-    "id": 7,
-    "goalBugCount": 22,
-    "lifeCount": 6,
-    "params": {
-      "maxObjects": 4,
-      "spawnInterval": 380,
-      "objectLifetime": 2050
-    },
-    "spawnWeights": {
-      "bug": 0.6,
-      "coloredBug_red": 0.6,
-      "coloredBug_blue": 0.6,
-      "fat": 0.3
-    }
-  },
-  {
-    "id": 8,
-    "goalBugCount": 22,
-    "lifeCount": 4,
-    "params": {
-      "maxObjects": 5,
-      "spawnInterval": 360,
-      "objectLifetime": 2000
-    },
-    "spawnWeights": {
-      "bug": 0.5,
-      "coloredBug_red": 0.6,
-      "fat": 0.4,
-      "fatColoredBug_red": 0.2
-    }
-  },
-  {
-    "id": 9,
-    "goalBugCount": 22,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 5,
-      "spawnInterval": 360,
-      "objectLifetime": 2000
-    },
-    "spawnWeights": {
-      "bug": 0.6,
-      "coloredBug_red": 0.6,
-      "coloredBug_blue": 0.6,
-      "fat": 0.3
-    }
-  },
-  {
-    "id": 10,
-    "goalBugCount": 22,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 5,
-      "spawnInterval": 350,
-      "objectLifetime": 1950
-    },
-    "spawnWeights": {
-      "bug": 0.5,
-      "fat": 0.3,
-      "bomb": 0.2
-    }
-  },
-  {
-    "id": 11,
-    "goalBugCount": 22,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 5,
-      "spawnInterval": 350,
-      "objectLifetime": 1950
-    },
-    "spawnWeights": {
-      "bug": 0.55,
-      "coloredBug_red": 0.55,
-      "coloredBug_blue": 0.55,
+      "bug": 0.75,
       "fat": 0.25
     }
   },
   {
-    "id": 12,
-    "goalBugCount": 24,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 6,
-      "spawnInterval": 340,
-      "objectLifetime": 1900
-    },
-    "spawnWeights": {
-      "bug": 0.45,
-      "coloredBug_red": 0.55,
-      "coloredBug_blue": 0.55,
-      "coloredBug_green": 0.4,
-      "fat": 0.35,
-      "bomb": 0.2
-    }
+      "id": 7,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 4,
+        "spawnInterval": 420,
+        "objectLifetime": 2000
+      },
+      "spawnWeights": {
+        "bug": 0.6,
+        "fat": 0.4
+      }
   },
   {
-    "id": 13,
-    "goalBugCount": 24,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 6,
-      "spawnInterval": 340,
-      "objectLifetime": 1850
-    },
-    "spawnWeights": {
-      "bug": 0.45,
-      "coloredBug_red": 0.55,
-      "coloredBug_blue": 0.55,
-      "fat": 0.35,
-      "fatColoredBug_red": 0.2
-    }
+      "id": 8,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 4,
+        "spawnInterval": 420,
+        "objectLifetime": 1750
+      },
+      "spawnWeights": {
+        "bug": 0.6,
+        "fat": 0.4
+      }
   },
   {
-    "id": 14,
-    "goalBugCount": 24,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 6,
-      "spawnInterval": 330,
-      "objectLifetime": 1850
-    },
-    "spawnWeights": {
-      "bug": 0.4,
-      "coloredBug_red": 0.5,
-      "coloredBug_blue": 0.5,
-      "coloredBug_green": 0.35,
-      "fat": 0.35
-    }
+      "id": 9,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 4,
+        "spawnInterval": 410,
+        "objectLifetime": 2200
+      },
+      "spawnWeights": {
+        "bug": 0.5,
+        "fat": 0.35,
+        "coloredBug_red": 0.15
+      }
   },
   {
-    "id": 15,
-    "goalBugCount": 24,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 5,
-      "spawnInterval": 320,
-      "objectLifetime": 1900
-    },
-    "spawnWeights": {
-      "bug": 0.4,
-      "coloredBug_red": 0.55,
-      "coloredBug_blue": 0.55,
-      "coloredBug_green": 0.4,
-      "fat": 0.35,
-      "fatColoredBug_red": 0.3,
-      "bomb": 0.2
-    }
+      "id": 10,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 5,
+        "spawnInterval": 390,
+        "objectLifetime": 1900
+      },
+      "spawnWeights": {
+        "bug": 0.45,
+        "fat": 0.35,
+        "coloredBug_red": 0.2
+      }
   },
   {
-    "id": 16,
-    "goalBugCount": 24,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 5,
-      "spawnInterval": 340,
-      "objectLifetime": 1850
-    },
-    "spawnWeights": {
-      "bug": 0.5,
-      "coloredBug_red": 0.5,
-      "coloredBug_blue": 0.5,
-      "fat": 0.3,
-      "fatColoredBug_blue": 0.2
-    }
+      "id": 11,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 5,
+        "spawnInterval": 390,
+        "objectLifetime": 1700
+      },
+      "spawnWeights": {
+        "bug": 0.45,
+        "fat": 0.35,
+        "coloredBug_red": 0.2
+      }
   },
   {
-    "id": 17,
-    "goalBugCount": 24,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 6,
-      "spawnInterval": 330,
-      "objectLifetime": 1850
-    },
-    "spawnWeights": {
-      "bug": 0.45,
-      "coloredBug_red": 0.5,
-      "coloredBug_blue": 0.5,
-      "coloredBug_green": 0.35,
-      "fat": 0.3,
-      "fatColoredBug_blue": 0.2
-    }
+      "id": 12,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 4,
+        "spawnInterval": 450,
+        "objectLifetime": 2000
+      },
+      "spawnWeights": {
+        "bug": 0.8,
+        "coloredBug_blue": 0.2
+      }
   },
   {
-    "id": 18,
-    "goalBugCount": 24,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 6,
-      "spawnInterval": 330,
-      "objectLifetime": 1800
-    },
-    "spawnWeights": {
-      "bug": 0.4,
-      "coloredBug_red": 0.5,
-      "coloredBug_blue": 0.5,
-      "coloredBug_green": 0.35,
-      "fat": 0.35,
-      "fatColoredBug_green": 0.25
-    }
+      "id": 13,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 3,
+        "spawnInterval": 460,
+        "objectLifetime": 2100
+      },
+      "spawnWeights": {
+        "bug": 0.7,
+        "coloredBug_blue": 0.3
+      }
   },
   {
-    "id": 19,
-    "goalBugCount": 24,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 5,
-      "spawnInterval": 420,
-      "objectLifetime": 1750
-    },
-    "spawnWeights": {
-      "bug": 0.5,
-      "coloredBug_red": 0.5,
-      "coloredBug_blue": 0.5,
-      "fat": 0.3
-    }
+      "id": 14,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 4,
+        "spawnInterval": 420,
+        "objectLifetime": 2000
+      },
+      "spawnWeights": {
+        "bug": 0.6,
+        "coloredBug_blue": 0.4
+      }
   },
   {
-    "id": 20,
-    "goalBugCount": 26,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 6,
-      "spawnInterval": 380,
-      "objectLifetime": 1700
-    },
-    "spawnWeights": {
-      "bug": 0.45,
-      "coloredBug_red": 0.5,
-      "coloredBug_blue": 0.5,
-      "coloredBug_green": 0.35,
-      "fat": 0.35,
-      "bomb": 0.2
-    }
+      "id": 15,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 4,
+        "spawnInterval": 420,
+        "objectLifetime": 1750
+      },
+      "spawnWeights": {
+        "bug": 0.6,
+        "coloredBug_blue": 0.4
+      }
   },
   {
-    "id": 21,
-    "goalBugCount": 26,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 6,
-      "spawnInterval": 360,
-      "objectLifetime": 1700
-    },
-    "spawnWeights": {
-      "bug": 0.4,
-      "coloredBug_red": 0.5,
-      "coloredBug_blue": 0.5,
-      "coloredBug_green": 0.35,
-      "fat": 0.35,
-      "fatColoredBug_red": 0.25,
-      "bomb": 0.2
-    }
+      "id": 16,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 5,
+        "spawnInterval": 400,
+        "objectLifetime": 1900
+      },
+      "spawnWeights": {
+        "bug": 0.45,
+        "coloredBug_blue": 0.35,
+        "fat": 0.2
+      }
   },
   {
-    "id": 22,
-    "goalBugCount": 26,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 6,
-      "spawnInterval": 340,
-      "objectLifetime": 1650
-    },
-    "spawnWeights": {
-      "bug": 0.35,
-      "coloredBug_red": 0.5,
-      "coloredBug_blue": 0.5,
-      "coloredBug_green": 0.35,
-      "fat": 0.35,
-      "fatColoredBug_blue": 0.25,
-      "bomb": 0.2
-    }
+      "id": 17,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 5,
+        "spawnInterval": 390,
+        "objectLifetime": 1900
+      },
+      "spawnWeights": {
+        "bug": 0.45,
+        "coloredBug_blue": 0.35,
+        "coloredBug_red": 0.2
+      }
   },
   {
-    "id": 23,
-    "goalBugCount": 26,
-    "lifeCount": 5,
-    "params": {
-      "maxObjects": 7,
-      "spawnInterval": 330,
-      "objectLifetime": 1650
-    },
-    "spawnWeights": {
-      "bug": 0.35,
-      "coloredBug_red": 0.5,
-      "coloredBug_blue": 0.5,
-      "coloredBug_green": 0.35,
-      "fat": 0.4,
-      "fatColoredBug_green": 0.3,
-      "bomb": 0.2
-    }
+      "id": 18,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 5,
+        "spawnInterval": 380,
+        "objectLifetime": 1850
+      },
+      "spawnWeights": {
+        "bug": 0.4,
+        "coloredBug_blue": 0.35,
+        "fat": 0.25
+      }
   },
   {
-    "id": 24,
-    "goalBugCount": 28,
-    "lifeCount": 4,
-    "params": {
-      "maxObjects": 7,
-      "spawnInterval": 320,
-      "objectLifetime": 1620
-    },
-    "spawnWeights": {
-      "bug": 0.3,
-      "coloredBug_red": 0.5,
-      "coloredBug_blue": 0.5,
-      "coloredBug_green": 0.4,
-      "fat": 0.4,
-      "fatColoredBug_red": 0.3,
-      "bomb": 0.25
-    }
+      "id": 19,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 5,
+        "spawnInterval": 370,
+        "objectLifetime": 1800
+      },
+      "spawnWeights": {
+        "bug": 0.4,
+        "coloredBug_blue": 0.35,
+        "coloredBug_red": 0.25
+      }
   },
   {
-    "id": 25,
-    "goalBugCount": 28,
-    "lifeCount": 4,
-    "params": {
-      "maxObjects": 7,
-      "spawnInterval": 320,
-      "objectLifetime": 1600
-    },
-    "spawnWeights": {
-      "bug": 0.3,
-      "coloredBug_red": 0.5,
-      "coloredBug_blue": 0.5,
-      "coloredBug_green": 0.4,
-      "fat": 0.45,
-      "fatColoredBug_yellow": 0.3,
-      "bomb": 0.25
-    }
+      "id": 20,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 4,
+        "spawnInterval": 450,
+        "objectLifetime": 2000
+      },
+      "spawnWeights": {
+        "bug": 0.8,
+        "fatColoredBug_red": 0.2
+      }
+  },
+  {
+      "id": 21,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 3,
+        "spawnInterval": 460,
+        "objectLifetime": 2100
+      },
+      "spawnWeights": {
+        "bug": 0.7,
+        "fatColoredBug_red": 0.3
+      }
+  },
+  {
+      "id": 22,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 4,
+        "spawnInterval": 420,
+        "objectLifetime": 2000
+      },
+      "spawnWeights": {
+        "bug": 0.6,
+        "fatColoredBug_red": 0.4
+      }
+  },
+  {
+      "id": 23,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 4,
+        "spawnInterval": 420,
+        "objectLifetime": 1700
+      },
+      "spawnWeights": {
+        "bug": 0.6,
+        "fatColoredBug_red": 0.4
+      }
+  },
+  {
+      "id": 24,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 5,
+        "spawnInterval": 400,
+        "objectLifetime": 1900
+      },
+      "spawnWeights": {
+        "bug": 0.45,
+        "fatColoredBug_red": 0.3,
+        "coloredBug_blue": 0.25
+      }
+  },
+  {
+      "id": 25,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 5,
+        "spawnInterval": 390,
+        "objectLifetime": 1850
+      },
+      "spawnWeights": {
+        "bug": 0.45,
+        "fatColoredBug_red": 0.35,
+        "coloredBug_red": 0.2
+      }
+  },
+  {
+      "id": 26,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 5,
+        "spawnInterval": 380,
+        "objectLifetime": 1800
+      },
+      "spawnWeights": {
+        "bug": 0.4,
+        "fatColoredBug_red": 0.35,
+        "coloredBug_blue": 0.25
+      }
+  },
+  {
+      "id": 27,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 5,
+        "spawnInterval": 375,
+        "objectLifetime": 1750
+      },
+      "spawnWeights": {
+        "bug": 0.4,
+        "fatColoredBug_red": 0.4,
+        "coloredBug_red": 0.2
+      }
+  },
+  {
+      "id": 28,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 4,
+        "spawnInterval": 450,
+        "objectLifetime": 2000
+      },
+      "spawnWeights": {
+        "bug": 0.8,
+        "coloredBug_green": 0.2
+      }
+  },
+  {
+      "id": 29,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 4,
+        "spawnInterval": 420,
+        "objectLifetime": 1950
+      },
+      "spawnWeights": {
+        "bug": 0.7,
+        "coloredBug_green": 0.3
+      }
+  },
+  {
+      "id": 30,
+      "goalBugCount": 20,
+      "lifeCount": 6,
+      "params": {
+        "maxObjects": 5,
+        "spawnInterval": 380,
+        "objectLifetime": 1850
+      },
+      "spawnWeights": {
+        "bug": 0.45,
+        "coloredBug_green": 0.3,
+        "coloredBug_blue": 0.25
+      }
   }
+
+
+
 ];
 
 export default levels;
