@@ -31,6 +31,9 @@ let life = 0;
 // состояние уровня
 let levelEnded = false; // true — как только показан попап победы
 
+// Показывается ли сейчас интро‑попап (блокируем спавн до закрытия)
+let introActive = false;
+
 
 // Color button state
 let activeColor = null;
@@ -566,19 +569,21 @@ function startLevel(index) {
   const { fieldWrapper, playField } = setupPlayArea();
   playArea = playField;
 
-  // реальный старт спавна
+    // реальный старт спавна
   const startSpawning = () => {
     prepareObjectQueue();
     spawnInterval = setInterval(spawnObject, levelData.params.spawnInterval);
     if (typeof levelData.onEnterLevel === 'function') levelData.onEnterLevel();
   };
 
-  // если в конфиге уровня есть интро-попап — показываем, затем стартуем
+  // если в конфиге уровня есть интро-попап — сначала показываем его, спавн не запускаем
   if (levelData.introPopup) {
+    introActive = true; // ⬅ блокируем спавн
     showIntroPopup(levelData.introPopup, startSpawning);
   } else {
     startSpawning();
   }
+
 }
 
 
@@ -912,8 +917,12 @@ function clampToSafeArea(obj) {
 
 // генерация объекта
 function spawnObject() {
+    // Пока открыт интро‑попап — ничего не спауним
+    if (introActive) return;
+
     if (activeObjects.length >= levelData.params.maxObjects) return;
     if (objectQueue.length === 0) return;
+
 
     const data = objectQueue.shift();
     const type = data.type;
@@ -1544,11 +1553,13 @@ function showIntroPopup(cfg, onClose) {
   // анимация появления
   animateAppear(c, 400);
 
-  const close = () => {
+    const close = () => {
     if (gameContainer.getChildByName('introOverlay')) gameContainer.removeChild(overlay);
     if (gameContainer.getChildByName('introPopup')) gameContainer.removeChild(c);
-    if (typeof onClose === 'function') onClose();
+    introActive = false; // ⬅ снимаем блок спавна
+    if (typeof onClose === 'function') onClose(); // запускаем подготовку очереди и интервал
   };
+
   ok.on('pointerdown', close);
 
  // адаптация при ресайзе (чтобы на десктопе всё было аккуратно)
