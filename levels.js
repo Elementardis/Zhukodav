@@ -17,7 +17,7 @@ const levels = [
   {
     "id": 1,
     "goalBugCount": 18,
-    "lifeCount": 6,
+    "lifeCount": 10,
     "params": {
       "maxObjects": 3,
       "spawnInterval": 480,
@@ -30,11 +30,11 @@ const levels = [
   {
     "id": 2,
     "goalBugCount": 18,
-    "lifeCount": 6,
+    "lifeCount": 10,
     "params": {
       "maxObjects": 3,
       "spawnInterval": 470,
-      "objectLifetime": 2050
+      "objectLifetime": 2300
     },
     "spawnWeights": {
       "bug": 0.8,
@@ -42,15 +42,15 @@ const levels = [
     },
     "introPopup": {
       "type": "coloredBug_red",
-      "descryption": "Жми на красную кнопку, чтобы убить"
+      "descryption": "Удерживай КРАСНУЮ кнопку и нажми на КРАСНОГО жука!",
     }
   },
   {
     "id": 3,
     "goalBugCount": 18,
-    "lifeCount": 6,
+    "lifeCount": 10,
     "params": {
-      "maxObjects": 4,
+      "maxObjects": 3,
       "spawnInterval": 430,
       "objectLifetime": 2050
     },
@@ -62,11 +62,11 @@ const levels = [
   {
     "id": 4,
     "goalBugCount": 20,
-    "lifeCount": 6,
+    "lifeCount": 10,
     "params": {
       "maxObjects": 4,
-      "spawnInterval": 430,
-      "objectLifetime": 1800
+      "spawnInterval": 450,
+      "objectLifetime": 2000
     },
     "spawnWeights": {
       "bug": 0.6,
@@ -76,7 +76,7 @@ const levels = [
   {
     "id": 5,
     "goalBugCount": 20,
-    "lifeCount": 6,
+    "lifeCount": 10,
     "params": {
       "maxObjects": 4,
       "spawnInterval": 450,
@@ -85,12 +85,16 @@ const levels = [
     "spawnWeights": {
       "bug": 0.85,
       "fat": 0.15
+    },
+    "introPopup": {
+      "type": "fat",
+      "descryption": "Нажми на жука 3 РАЗА!",
     }
   },
   {
     "id": 6,
     "goalBugCount": 20,
-    "lifeCount": 6,
+    "lifeCount": 10,
     "params": {
       "maxObjects": 3,
       "spawnInterval": 460,
@@ -104,7 +108,7 @@ const levels = [
   {
       "id": 7,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 4,
         "spawnInterval": 420,
@@ -118,11 +122,11 @@ const levels = [
   {
       "id": 8,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 4,
-        "spawnInterval": 420,
-        "objectLifetime": 1750
+        "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.6,
@@ -132,7 +136,7 @@ const levels = [
   {
       "id": 9,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 4,
         "spawnInterval": 410,
@@ -147,11 +151,11 @@ const levels = [
   {
       "id": 10,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 5,
-        "spawnInterval": 390,
-        "objectLifetime": 1900
+        "spawnInterval": 450,
+        "objectLifetime": 2000  
       },
       "spawnWeights": {
         "bug": 0.45,
@@ -162,11 +166,11 @@ const levels = [
   {
       "id": 11,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 5,
-        "spawnInterval": 390,
-        "objectLifetime": 1700
+        "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.45,
@@ -177,7 +181,7 @@ const levels = [
   {
       "id": 12,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 4,
         "spawnInterval": 450,
@@ -186,12 +190,16 @@ const levels = [
       "spawnWeights": {
         "bug": 0.8,
         "coloredBug_blue": 0.2
+      },
+      "introPopup": {
+        "type": "coloredBug_blue",
+        "descryption": "Удерживай СИНЮЮ кнопку и нажми СИНЕГО жука!",
       }
   },
   {
       "id": 13,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 3,
         "spawnInterval": 460,
@@ -205,7 +213,7 @@ const levels = [
   {
       "id": 14,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 4,
         "spawnInterval": 420,
@@ -219,11 +227,11 @@ const levels = [
   {
       "id": 15,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 4,
-        "spawnInterval": 420,
-        "objectLifetime": 1750
+        "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.6,
@@ -233,11 +241,11 @@ const levels = [
   {
       "id": 16,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 5,
-        "spawnInterval": 400,
-        "objectLifetime": 1900
+        "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.45,
@@ -248,11 +256,11 @@ const levels = [
   {
       "id": 17,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 5,
-        "spawnInterval": 390,
-        "objectLifetime": 1900
+        "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.45,
@@ -263,11 +271,11 @@ const levels = [
   {
       "id": 18,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 5,
-        "spawnInterval": 380,
-        "objectLifetime": 1850
+        "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.4,
@@ -278,11 +286,11 @@ const levels = [
   {
       "id": 19,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 5,
-        "spawnInterval": 370,
-        "objectLifetime": 1800
+        "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.4,
@@ -293,7 +301,7 @@ const levels = [
   {
       "id": 20,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 4,
         "spawnInterval": 450,
@@ -302,12 +310,16 @@ const levels = [
       "spawnWeights": {
         "bug": 0.8,
         "fatColoredBug_red": 0.2
+      },
+      "introPopup": {
+        "type": "fatColoredBug_red",
+        "descryption": "УДЕРЖИВАЙ КРАСНУЮ кнопку и жми на КРАСНОГО жука 3 РАЗА!",
       }
   },
   {
       "id": 21,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 3,
         "spawnInterval": 460,
@@ -321,7 +333,7 @@ const levels = [
   {
       "id": 22,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 4,
         "spawnInterval": 420,
@@ -335,11 +347,11 @@ const levels = [
   {
       "id": 23,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 4,
-        "spawnInterval": 420,
-        "objectLifetime": 1700
+        "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.6,
@@ -349,11 +361,11 @@ const levels = [
   {
       "id": 24,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 5,
-        "spawnInterval": 400,
-        "objectLifetime": 1900
+        "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.45,
@@ -364,11 +376,11 @@ const levels = [
   {
       "id": 25,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 5,
-        "spawnInterval": 390,
-        "objectLifetime": 1850
+       "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.45,
@@ -379,11 +391,11 @@ const levels = [
   {
       "id": 26,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 5,
-        "spawnInterval": 380,
-        "objectLifetime": 1800
+        "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.4,
@@ -394,11 +406,11 @@ const levels = [
   {
       "id": 27,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 5,
-        "spawnInterval": 375,
-        "objectLifetime": 1750
+        "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.4,
@@ -409,7 +421,7 @@ const levels = [
   {
       "id": 28,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 4,
         "spawnInterval": 450,
@@ -418,16 +430,20 @@ const levels = [
       "spawnWeights": {
         "bug": 0.8,
         "coloredBug_green": 0.2
+      },
+      "introPopup": {
+        "type": "coloredBug_green",
+        "descryption": "Удерживай ЗЕЛЁНУЮ кнопку и нажми на ЗЕЛЁНОГО жука!",
       }
   },
   {
       "id": 29,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 4,
-        "spawnInterval": 420,
-        "objectLifetime": 1950
+        "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.7,
@@ -437,11 +453,11 @@ const levels = [
   {
       "id": 30,
       "goalBugCount": 20,
-      "lifeCount": 6,
+      "lifeCount": 10,
       "params": {
         "maxObjects": 5,
-        "spawnInterval": 380,
-        "objectLifetime": 1850
+        "spawnInterval": 450,
+        "objectLifetime": 2000
       },
       "spawnWeights": {
         "bug": 0.45,

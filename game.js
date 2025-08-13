@@ -198,13 +198,32 @@ function updateButtonState(color, isActive) {
     if (button) {
         const activeIndicator = button.getChildAt(3); // Active indicator is the 4th child
         activeIndicator.visible = isActive;
-        gsap.to(button.scale, {
-            x: isActive ? 0.9 : button.originalScale,
-            y: isActive ? 0.9 : button.originalScale,
-            duration: 0.1
-        });
+
+        if (isActive) {
+            // При нажатии — быстрый сквиш и возврат
+            gsap.fromTo(button.scale,
+                { x: button.originalScale, y: button.originalScale },
+                {
+                    x: button.originalScale * 0.85,
+                    y: button.originalScale * 0.85,
+                    duration: 0.08,
+                    yoyo: true,
+                    repeat: 1,
+                    ease: "power2.inOut"
+                }
+            );
+        } else {
+            // При отпускании — мягкое возвращение с пружиной
+            gsap.to(button.scale, {
+                x: button.originalScale,
+                y: button.originalScale,
+                duration: 0.15,
+                ease: "elastic.out(1, 0.4)"
+            });
+        }
     }
 }
+
 
 function freezeActiveObjects() {
   activeObjects.forEach(obj => {
