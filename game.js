@@ -1,4 +1,5 @@
 import levels from './levels.js';
+import { initBackend, fetchRemoteLevel, saveProgress, trackEvent, recalcLeaderboard, rcNumber } from './firebase.js';
 
 // ==== Global Constants ====
 const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -130,6 +131,11 @@ const app = new PIXI.Application({
 // Add app view to DOM
 document.body.appendChild(app.view);
 
+// === Backend init (Firebase) ===
+initBackend()
+  .then(() => trackEvent('app_open', { ua: navigator.userAgent }))
+  .catch((e) => console.warn('Backend init failed', e));
+
 // Load sprites
 const loader = PIXI.Loader.shared;
 SPRITE_PATHS.forEach(({ name, path }) => {
@@ -198,34 +204,47 @@ const KEY_LAYOUT_MAP = {
 // Add helper function for button state updates
 function updateButtonState(color, isActive) {
     const button = colorButtonsContainer?.getChildByName(`colorButton_${color}`);
-    if (button) {
-        const activeIndicator = button.getChildAt(3); // Active indicator is the 4th child
-        activeIndicator.visible = isActive;
+    if (!button) return;
 
-        if (isActive) {
-            // При нажатии — быстрый сквиш и возврат
-            gsap.fromTo(button.scale,
-                { x: button.originalScale, y: button.originalScale },
-                {
-                    x: button.originalScale * 0.85,
-                    y: button.originalScale * 0.85,
-                    duration: 0.08,
+    const activeIndicator = button.getChildAt(3); // полупрозрачный круг-оверлей
+    activeIndicator.visible = isActive;
+
+    // Останавливаем предыдущую удерживающую анимацию, если была
+    if (button._holdAnim) {
+        button._holdAnim.kill();
+        button._holdAnim = null;
+    }
+
+    if (isActive) {
+        // Быстрый «вдавленный» клик: сквиш вниз и чуть шире
+        gsap.to(button.scale, {
+            x: button.originalScale * 1.06,
+            y: button.originalScale * 0.88,
+            duration: 0.06,
+            ease: "power2.inOut",
+            onComplete: () => {
+                // Переходим в мягкий пульс, пока кнопка удерживается
+                button._holdAnim = gsap.to(button.scale, {
+                    x: button.originalScale * 1.03,
+                    y: button.originalScale * 0.94,
+                    duration: 0.28,
                     yoyo: true,
-                    repeat: 1,
-                    ease: "power2.inOut"
-                }
-            );
-        } else {
-            // При отпускании — мягкое возвращение с пружиной
-            gsap.to(button.scale, {
-                x: button.originalScale,
-                y: button.originalScale,
-                duration: 0.15,
-                ease: "elastic.out(1, 0.4)"
-            });
-        }
+                    repeat: -1,
+                    ease: "sine.inOut"
+                });
+            }
+        });
+    } else {
+        // Возврат к исходному масштабу с лёгкой пружиной
+        gsap.to(button.scale, {
+            x: button.originalScale,
+            y: button.originalScale,
+            duration: 0.18,
+            ease: "elastic.out(1, 0.5)"
+        });
     }
 }
+
 
 
 function freezeActiveObjects() {
@@ -1315,17 +1334,26 @@ function endGame(won) {
     levelEnded = true;
     freezeActiveObjects();
 
-    
     // Remove remaining objects without penalties
     removeAllActiveObjectsSilent();
 
-const idx = levelData.id - 1;
+    // --- backend: прогресс, события, лидерборд (fire-and-forget) ---
+    saveProgress(levelData.id, score, won).catch(() => {});
+    trackEvent(won ? 'level_win' : 'level_lose', {
+        levelId: levelData.id,
+        score,
+        lifeLeft: life
+    }).catch(() => {});
+    recalcLeaderboard(levels.length).catch(() => {});
+
+    const idx = levelData.id - 1;
     if (won) {
         markLevelCompleted(idx);
-        showWinOverlayThenPopup(idx);  // ⬅ сначала оверлей с надписью, попап через 1s
+        showWinOverlayThenPopup(idx);
     } else {
-        showLoseOverlayThenPopup(idx); // ⬅ сначала оверлей с надписью, попап через 1s
+        showLoseOverlayThenPopup(idx);
     }
+
 }
 
 
@@ -2317,47 +2345,48 @@ function createColorButton(color, size, key, showKey = true) {
 
     // Update interaction handlers
     button.on('pointerdown', () => {
-        if (activeColor !== color) {
-            activeColor = color;
-            colorPressStart = Date.now();
-            updateButtonState(color, true);
-        }
+    if (activeColor !== color) {
+        activeColor = color;
+        colorPressStart = Date.now();
+    }
+    updateButtonState(color, true);
     });
 
-    button.on('pointerup', () => {
-        if (activeColor === color) {
-            activeColor = null;
-            updateButtonState(color, false);
-        }
-    });
+    const release = () => {
+        // На всякий случай чистим удерживающую анимацию
+        if (button._holdAnim) { button._holdAnim.kill(); button._holdAnim = null; }
+        if (activeColor === color) activeColor = null;
+        updateButtonState(color, false);
+    };
 
-    button.on('pointerupoutside', () => {
-        if (activeColor === color) {
-            activeColor = null;
-            updateButtonState(color, false);
-        }
-    });
+    button.on('pointerup', release);
+    button.on('pointerupoutside', release);
+
 
     // Add hover effect (only when button is not active)
     button.on('pointerover', () => {
-        if (activeColor !== color) {
-            gsap.to(button.scale, {
-                x: button.originalScale * 1.1,
-                y: button.originalScale * 1.1,
-                duration: 0.1
-            });
-        }
+    if (activeColor !== color) {
+        // если не зажата — лёгкий ховер-луп (без бесконечности)
+        gsap.to(button.scale, {
+            x: button.originalScale * 1.06,
+            y: button.originalScale * 1.06,
+            duration: 0.12
+        });
+    }
     });
 
     button.on('pointerout', () => {
         if (activeColor !== color) {
+            // если не зажата — вернуть к исходному
+            if (button._holdAnim) { button._holdAnim.kill(); button._holdAnim = null; }
             gsap.to(button.scale, {
                 x: button.originalScale,
                 y: button.originalScale,
-                duration: 0.1
+                duration: 0.12
             });
         }
     });
+
 
     return button;
 }
