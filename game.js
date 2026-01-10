@@ -298,6 +298,35 @@ function freezeActiveObjects() {
           });
         }
 
+        // Мгновенное удаление всех активных объектов (без анимаций) - для перехода между уровнями
+        function removeAllActiveObjectsImmediate() {
+          // Work on a copy because we'll mutate activeObjects during removal
+          const toRemove = [...activeObjects];
+          toRemove.forEach(obj => {
+            // stop lifetime checks
+            if (obj.lifetimeCheckTimeout) {
+              clearTimeout(obj.lifetimeCheckTimeout);
+              obj.lifetimeCheckTimeout = null;
+            }
+            // stop/kill animations immediately
+            if (obj.animations) {
+              obj.animations.forEach(anim => {
+                if (typeof anim.kill === 'function') anim.kill();
+                if (typeof anim.pause === 'function') anim.pause();
+              });
+              obj.animations = [];
+            }
+            // disable interactions
+            obj.interactive = false;
+            obj.buttonMode = false;
+            // remove immediately without animation
+            if (obj.parent) {
+              obj.parent.removeChild(obj);
+            }
+          });
+          activeObjects = [];
+        }
+
 // Update keyboard handlers to support both layouts
 window.addEventListener('keydown', (e) => {
     if (isPaused) return; // Don't handle keys during pause
@@ -573,13 +602,20 @@ function showLevelSelect() {
 
 // запускаем уровень
 function startLevel(index) {
+  // Очищаем предыдущий уровень: останавливаем интервалы и таймеры
+  clearInterval(spawnInterval);
+  
+  // Мгновенно удаляем все активные объекты предыдущего уровня
+  if (activeObjects.length > 0) {
+    removeAllActiveObjectsImmediate();
+  }
+  
   app.stage.removeChild(levelSelectContainer);
   app.stage.addChild(gameContainer);
   gameContainer.addChild(rootUI);
   levelData = levels[index];
   levelEnded = false;
 
-  activeObjects = [];
   maxSimultaneousObjects = levelData.params.maxObjects;
 
   score = 0;
@@ -647,6 +683,9 @@ function setupPlayArea() {
     playField.addChild(border);
     fieldWrapper.addChild(playField);
 
+    // Очищаем rootUI перед добавлением нового fieldWrapper (удаляем старый уровень)
+    rootUI.removeChildren();
+    
     // Add field wrapper to rootUI
     rootUI.addChild(fieldWrapper);
 
@@ -938,6 +977,9 @@ function clampToSafeArea(obj) {
 function spawnObject() {
     // Пока открыт интро‑попап — ничего не спауним
     if (introActive) return;
+    
+    // Если игра закончена (показ попапа победы/поражения) — ничего не спауним
+    if (levelEnded) return;
 
     if (activeObjects.length >= levelData.params.maxObjects) return;
     if (objectQueue.length === 0) return;
