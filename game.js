@@ -4,7 +4,7 @@ import { initBackend, fetchRemoteLevel, saveProgress, trackEvent, recalcLeaderbo
 // ==== Global Constants ====
 const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 const MIN_BAR_H = 110;    // px
-const BAR_H_PRC = 0.14;   // 14 % экрана тест
+const BAR_H_PRC = 0.16;   // 14 % экрана тест
 const GAP_HORZ = 12;      // промежутки
 const BORDER_RADIUS = 40;
 const FRAME_BORDER = 12;
@@ -2252,55 +2252,90 @@ function resumeGame() {
 }
 
 function buildBottomBar(coloredTypes) {
-    // единый контейнер панели
-    if (!bottomBar) {
-        bottomBar = new PIXI.Container();
-        rootUI.addChild(bottomBar);
-    }
-    bottomBar.removeChildren();
-
-    const barH = Math.max(window.innerHeight * BAR_H_PRC, MIN_BAR_H);
-    const btnSz = Math.floor(barH * 0.8);          // 80 % высоты панели
-    const pauseW = btnSz;
-    const n = coloredTypes.length;                 // 0–4
+    const barH = Math.max(app.screen.height * BAR_H_PRC, MIN_BAR_H);
+    const btnSz = Math.floor(barH * 0.72); // кнопки чуть меньше высоты блока
     const gap = GAP_HORZ;
 
-    const totalW = (btnSz * n) + pauseW + gap * (n + 2);
-    let x = (window.innerWidth - totalW) / 2 + gap;
+    // гарантируем, что bottomBar существует и добавлен в rootUI ПОСЛЕ поля (поверх/впереди)
+    if (!bottomBar) bottomBar = new PIXI.Container();
+    if (!bottomBar.parent) rootUI.addChild(bottomBar);
+    rootUI.setChildIndex(bottomBar, rootUI.children.length - 1);
 
-    // Reset dynamic key mapping
+    bottomBar.removeChildren();
+
+    // позиционируем блок строго внизу
+    bottomBar.x = 0;
+    bottomBar.y = app.screen.height - barH;
+
+    // фон блока (визуально выделенный)
+    const bg = new PIXI.Graphics();
+    bg.beginFill(0xFFE3A3);
+    bg.drawRoundedRect(0, 0, app.screen.width, barH, 24);
+    bg.endFill();
+
+    const border = new PIXI.Graphics();
+    border.lineStyle(6, 0xF68722, 1);
+    border.drawRoundedRect(0, 0, app.screen.width, barH, 24);
+
+    // делаем фон "съедающим" клики, чтобы поле под ним не ловило тапы
+    bg.interactive = true;
+    bg.hitArea = new PIXI.Rectangle(0, 0, app.screen.width, barH);
+
+    bottomBar.addChild(bg);
+    bottomBar.addChild(border);
+
+    // --- кнопки ---
     dynamicColorKeyMap = {};
 
-    // Get button order from level data or use default
     const defaultOrder = ['red', 'blue', 'green', 'yellow'];
     const buttonOrder = levelData.colorButtonOrder || defaultOrder;
 
-    // Цветные кнопки
+    // какие цвета реально нужны на уровне
+    const usedColors = buttonOrder.filter(color =>
+        coloredTypes.some(type => type.endsWith(`_${color}`))
+    );
+
+    // раскладка клавиш по позициям
     const keys = ['q', 'w', 'e', 'r'];
-    buttonOrder.forEach((color, i) => {
-        // Check if this color is used in the level
-        const isUsed = coloredTypes.some(type => type.endsWith(`_${color}`));
-        if (isUsed) {
-            // Map key to color based on button position
-            dynamicColorKeyMap[keys[i]] = color;
-            
-            const btn = createColorButton(color, btnSz, keys[i], !IS_TOUCH);
-            btn.x = x;
-            btn.y = window.innerHeight - barH + (barH - btnSz) / 2;
-            bottomBar.addChild(btn);
-            x += btnSz + gap;
-        }
+
+    // считаем ширину группы цветных кнопок
+    const n = usedColors.length;
+    const colorGroupW = n > 0 ? (n * btnSz + (n - 1) * gap) : 0;
+
+    // пауза справа
+    const pauseX = app.screen.width - gap - btnSz;
+    const y = (barH - btnSz) / 2;
+
+    // старт X для цветных: по центру, но так, чтобы не залезать на pause
+    const maxRight = pauseX - gap;
+    let startX = (app.screen.width - colorGroupW) / 2;
+    if (startX + colorGroupW > maxRight) {
+        startX = Math.max(gap, maxRight - colorGroupW);
+    }
+
+    let x = startX;
+
+    usedColors.forEach((color, i) => {
+        dynamicColorKeyMap[keys[i]] = color;
+
+        const btn = createColorButton(color, btnSz, keys[i], !IS_TOUCH);
+        btn.x = x;
+        btn.y = y;
+        bottomBar.addChild(btn);
+
+        x += btnSz + gap;
     });
 
-    // Create pause button if it doesn't exist
-    if (!bottomBar.getChildByName('pauseButton')) {
-        const pauseButton = new PIXI.Container();
+    // --- кнопка паузы ---
+    let pauseButton = bottomBar.getChildByName('pauseButton');
+    if (!pauseButton) {
+        pauseButton = new PIXI.Container();
         pauseButton.name = 'pauseButton';
 
-        const bg = new PIXI.Graphics();
-        bg.beginFill(0xFFB74D);
-        bg.drawRoundedRect(0, 0, btnSz, btnSz, 10);
-        bg.endFill();
+        const pbg = new PIXI.Graphics();
+        pbg.beginFill(0xFFB74D);
+        pbg.drawRoundedRect(0, 0, btnSz, btnSz, 18);
+        pbg.endFill();
 
         const icon = new PIXI.Text('⏸', {
             fontSize: Math.floor(btnSz * 0.5),
@@ -2311,23 +2346,20 @@ function buildBottomBar(coloredTypes) {
         icon.x = btnSz / 2;
         icon.y = btnSz / 2;
 
-        pauseButton.addChild(bg);
+        pauseButton.addChild(pbg);
         pauseButton.addChild(icon);
         pauseButton.interactive = true;
         pauseButton.buttonMode = true;
-        pauseButton.on('pointerdown', () => {
-            showPausePopup();
-        });
-
-        bottomBar.addChild(pauseButton);
+        pauseButton.on('pointerdown', showPausePopup);
     }
 
-    // Position pause button
-    const pauseButton = bottomBar.getChildByName('pauseButton');
-    pauseButton.width = pauseButton.height = btnSz;
-    pauseButton.x = window.innerWidth - gap - btnSz;
-    pauseButton.y = window.innerHeight - barH + (barH - btnSz) / 2;
+    pauseButton.x = pauseX;
+    pauseButton.y = y;
+
+    // важно: добавляем после фона/рамки
+    bottomBar.addChild(pauseButton);
 }
+
 
 function createColorButton(color, size, key, showKey = true) {
     const button = new PIXI.Container();
