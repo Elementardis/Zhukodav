@@ -57,7 +57,12 @@ const SPRITE_PATHS = [
     { name: 'coloredBug_blue', path: 'images/coloredBug_blue.png' },
     { name: 'coloredBug_green', path: 'images/coloredBug_green.png' },
     { name: 'coloredBug_yellow', path: 'images/coloredBug_yellow.png' },
-    { name: 'bomb_explosion', path: 'images/bomb.gif' }
+    { name: 'bomb_explosion', path: 'images/bomb.gif'},
+    { name: 'button_green',  path: 'images/ui/button_green.png' },
+    { name: 'button_blue',   path: 'images/ui/button_blue.png' },
+    { name: 'button_purple', path: 'images/ui/button_purple.png' },
+    { name: 'button_red',    path: 'images/ui/button_red.png' },
+    { name: 'button_yellow', path: 'images/ui/button_yellow.png' }
 ];
 
 // Store loaded textures
@@ -71,7 +76,7 @@ function showPreloader() {
     preloader.style.top = '0';
     preloader.style.width = '100vw';
     preloader.style.height = '100vh';
-    preloader.style.background = '#FFF0C2';
+    preloader.style.background = '#EEF2FF';
     preloader.style.display = 'flex';
     preloader.style.flexDirection = 'column';
     preloader.style.alignItems = 'center';
@@ -87,14 +92,14 @@ function showPreloader() {
     const progressBar = document.createElement('div');
     progressBar.style.width = '300px';
     progressBar.style.height = '20px';
-    progressBar.style.background = '#FFE089';
+    progressBar.style.background = '#E2E8F0';
     progressBar.style.borderRadius = '10px';
     progressBar.style.overflow = 'hidden';
     
     const progressFill = document.createElement('div');
     progressFill.style.width = '0%';
     progressFill.style.height = '100%';
-    progressFill.style.background = '#FFB300';
+    progressFill.style.background = '#6366F1';
     progressFill.style.transition = 'width 0.3s';
     
     progressBar.appendChild(progressFill);
@@ -121,7 +126,7 @@ const { preloader, progressFill } = showPreloader();
 const app = new PIXI.Application({
     width: window.innerWidth,
     height: window.innerHeight,
-    backgroundColor: 0xFFAC36,
+    backgroundColor: 0xEEF2FF,
     resolution: window.devicePixelRatio,
     autoDensity: true,
     resizeTo: window,
@@ -181,8 +186,10 @@ const COLORS = {
     red: 0xFF0000,
     blue: 0x0000FF,
     green: 0x00FF00,
-    yellow: 0xFFFF00
+    yellow: 0xFFFF00,
+    purple: 0x8000FF
 };
+
 
 // Remove static COLOR_KEY_MAP and add dynamic mapping
 let dynamicColorKeyMap = {};
@@ -208,6 +215,8 @@ function updateButtonState(color, isActive) {
 
     const activeIndicator = button.getChildAt(3); // полупрозрачный круг-оверлей
     activeIndicator.visible = isActive;
+
+    
 
     // Останавливаем предыдущую удерживающую анимацию, если была
     if (button._holdAnim) {
@@ -359,10 +368,10 @@ window.addEventListener('keyup', (e) => {
 
 const titleStyle = new PIXI.TextStyle({
     fontSize: 72,
-    fill: 0xFFB300,
+    fill: 0x6366F1,
     fontWeight: 'bold',
     fontFamily: 'Arial',
-    stroke: 0x3C1B00,
+    stroke: 0xCBD5E1,
     strokeThickness: 8,
     align: 'center'
 });
@@ -377,8 +386,8 @@ startContainer.addChild(title);
 const playButton = new PIXI.Graphics();
 const btnWidth = 200;
 const btnHeight = 70;
-playButton.beginFill(0xFFB300); // фон кнопки
-playButton.lineStyle(6, 0x3C1B00); // обводка
+playButton.beginFill(0x6366F1); // фон кнопки
+playButton.lineStyle(6, 0x4338CA); // обводка
 playButton.drawRoundedRect(-btnWidth / 2, -btnHeight / 2, btnWidth, btnHeight, 30);
 playButton.endFill();
 playButton.x = app.screen.width / 2;
@@ -393,7 +402,7 @@ startContainer.addChild(playButton);
 // Текст PLAY
 const playText = new PIXI.Text("PLAY", {
     fontSize: 36,
-    fill: 0x3C1B00,
+    fill: 0xCBD5E1,
     fontWeight: 'bold',
     fontFamily: 'Arial'
 });
@@ -421,7 +430,7 @@ function showLevelSelect() {
     // Новый стиль заголовка
     const title = new PIXI.Text("ВЫБЕРИ УРОВЕНЬ", {
         fontSize: 52,
-        fill: 0x4A1E0C,
+        fill: 0x0F172A,
         fontWeight: 'bold',
         fontFamily: 'Arial'
     });
@@ -452,13 +461,13 @@ function showLevelSelect() {
 
         // Тень под кнопкой
         const shadow = new PIXI.Graphics();
-        shadow.beginFill(0xD07A1A, 0.3);
-        shadow.drawRoundedRect(4, 4, buttonSize, buttonSize, 20);
+        shadow.beginFill(0x000000, 0.10);
+        shadow.drawRoundedRect(0, 0, buttonSize, buttonSize, 6);
         shadow.endFill();
 
         // Кнопка
         const button = new PIXI.Graphics();
-        button.beginFill(0xFFE089);
+        button.beginFill(0xFFFFFF);
         button.drawRoundedRect(0, 0, buttonSize, buttonSize, 20);
         button.endFill();
         button.x = offsetX + col * (buttonSize + spacing);
@@ -474,7 +483,7 @@ function showLevelSelect() {
         // Текст уровня
         const label = new PIXI.Text("" + (i + 1), {
             fontSize: 36,
-            fill: 0x4A1E0C,
+            fill: 0x0F172A,
             fontWeight: 'bold',
             fontFamily: 'Arial'
         });
@@ -671,13 +680,13 @@ function setupPlayArea() {
 
     // Background and border
     const background = new PIXI.Graphics();
-    background.beginFill(0xFFF0C2); // внутренний цвет
+    background.beginFill(0xFFFFFF); // внутренний цвет
     background.drawRoundedRect(0, 0, size, size, BORDER_RADIUS);
     background.endFill();
 
     const border = new PIXI.Graphics();
-    border.lineStyle(FRAME_BORDER, 0xF68722); // внешняя рамка
-    border.drawRoundedRect(0, 0, size, size, BORDER_RADIUS);
+    border.lineStyle(4, 0x94A3B8, 1);
+    border.drawRoundedRect(0, 0, size, size, BORDER_RADIUS);   
 
     playField.addChild(background);
     playField.addChild(border);
@@ -710,7 +719,7 @@ function buildLevelHeader(wrapper, level) {
 
     // --- фон полосы ---
     const bar = new PIXI.Graphics();
-    bar.beginFill(0xFFE3A3)
+    bar.beginFill(0xF8FAFC)
        .drawRoundedRect(0, 0, wrapper.width, headerH, 14)
        .endFill();
     header.addChild(bar);
@@ -718,7 +727,7 @@ function buildLevelHeader(wrapper, level) {
     // --- текст "Уровень N" (слева) ---
     const lvlText = new PIXI.Text(`Уровень ${level.id}`, {
         fontSize: headerH * 0.35,
-        fill: 0x5B250D,
+        fill: 0x0F172A,
         fontWeight: 'bold',
         fontFamily: 'Arial',
     });
@@ -1084,9 +1093,9 @@ const container = new PIXI.Container();
             fontSize: 28,
             fill: 0xFFFFFF,
             fontWeight: 'bold',
-            fontFamily: 'Arial',
+            fontFamily: 'Roboto',
             stroke: 0x000000,
-            strokeThickness: 4
+            strokeThickness: 6
         });
         countText.anchor.set(0.5);
         countText.name = 'clickText';
@@ -1565,9 +1574,9 @@ function showIntroPopup(cfg, onClose) {
   // Заголовок
   const title = new PIXI.Text('Новый жук!', new PIXI.TextStyle({
     fontSize: Math.round(app.screen.width * 0.10),
-    fill: 0xFFD54F,
+    fill: 0xF59E0B,
     fontWeight: '900',
-    stroke: 0x6A1B0A,
+    stroke: 0xFFFFFF,
     strokeThickness: 6,
     align: 'center'
   }));
@@ -1651,7 +1660,7 @@ function showIntroPopup(cfg, onClose) {
 
     const newBtnW = Math.min(app.screen.width * 0.6, 360);
     ok.clear();
-    ok.lineStyle(6, 0xFFB300).beginFill(0xFF8E00)
+    ok.lineStyle(6, 0x4F46E5).beginFill(0xFF8E00)
       .drawRoundedRect(-newBtnW/2, -btnH/2, newBtnW, btnH, 18).endFill();
     ok.x = app.screen.width / 2;
     ok.y = Math.min(app.screen.height - btnH - 24, desc.y + desc.height + 36);
@@ -1680,7 +1689,7 @@ function showWinOverlayThenPopup(currentLevelIndex) {
   gameContainer.addChild(overlay);
 
   const txt = new PIXI.Text('Победа!', new PIXI.TextStyle({
-    fill: 0xFFD54F, // «золото»
+    fill: 0xF59E0B, // «золото»
     fontSize: Math.round(app.screen.width * 0.08),
     fontWeight: '900',
     dropShadow: true,
@@ -1715,7 +1724,7 @@ function showLoseOverlayThenPopup(currentLevelIndex) {
   gameContainer.addChild(overlay);
 
   const txt = new PIXI.Text('Поражение', new PIXI.TextStyle({
-    fill: 0xFF6B6B, // приятный красный
+    fill: 0xEF4444, // приятный красный
     fontSize: Math.round(app.screen.width * 0.07),
     fontWeight: '900',
     dropShadow: true,
@@ -1754,12 +1763,12 @@ function showWinPopup(currentLevelIndex) {
 
     // Фон
     const bg = new PIXI.Graphics();
-    bg.beginFill(0xFFF0C2);
+    bg.beginFill(0x6366F1);
     bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 36);
     bg.endFill();
     // Рамка
     const border = new PIXI.Graphics();
-    border.lineStyle(8, 0xE47B1C);
+    border.lineStyle(8, 0xCBD5E1);
     border.drawRoundedRect(0, 0, popupWidth, popupHeight, 36);
     popup.addChild(bg);
     popup.addChild(border);
@@ -1767,7 +1776,7 @@ function showWinPopup(currentLevelIndex) {
     // Заголовок
     const title = new PIXI.Text('ПОБЕДА', {
         fontSize: Math.max(48, popupWidth * 0.12),
-        fill: 0x4A1E0C,
+        fill: 0x0F172A,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -1801,7 +1810,7 @@ function showWinPopup(currentLevelIndex) {
 
     const nextText = new PIXI.Text('СЛЕДУЮЩИЙ\nУРОВЕНЬ', {
         fontSize: 32,
-        fill: 0x4A1E0C,
+        fill: 0x0F172A,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -1833,7 +1842,7 @@ function showWinPopup(currentLevelIndex) {
 
     const menuText = new PIXI.Text('ГЛАВНОЕ\nМЕНЮ', {
         fontSize: 32,
-        fill: 0x4A1E0C,
+        fill: 0x0F172A,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -1863,12 +1872,12 @@ function showLosePopup(currentLevelIndex) {
 
     // Фон
     const bg = new PIXI.Graphics();
-    bg.beginFill(0xFFF0C2);
+    bg.beginFill(0xFFFFFF);
     bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 36);
     bg.endFill();
     // Рамка
     const border = new PIXI.Graphics();
-    border.lineStyle(8, 0x3C1B00);
+    border.lineStyle(8, 0x0F172A);
     border.drawRoundedRect(0, 0, popupWidth, popupHeight, 36);
     popup.addChild(bg);
     popup.addChild(border);
@@ -1876,7 +1885,7 @@ function showLosePopup(currentLevelIndex) {
     // Заголовок
     const title = new PIXI.Text('НЕ ПОВЕЗЛО!', {
         fontSize: Math.max(48, popupWidth * 0.12),
-        fill: 0x4A1E0C,
+        fill: 0xCBD5E1,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -1906,7 +1915,7 @@ function showLosePopup(currentLevelIndex) {
 
     const retryText = new PIXI.Text('ПОПРОБОВАТЬ\nЕЩЕ РАЗ', {
         fontSize: 32,
-        fill: 0x4A1E0C,
+        fill: 0x0F172A,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -1938,7 +1947,7 @@ function showLosePopup(currentLevelIndex) {
 
     const menuText = new PIXI.Text('МЕНЮ', {
         fontSize: 32,
-        fill: 0x4A1E0C,
+        fill: 0x0F172A,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -2001,13 +2010,13 @@ function showPausePopup() {
 
     // Background
     const bg = new PIXI.Graphics();
-    bg.beginFill(0xFFF0C2);
+    bg.beginFill(0xFFFFFF);
     bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 40);
     bg.endFill();
 
     // Border
     const border = new PIXI.Graphics();
-    border.lineStyle(8, 0x4A1E0C);
+    border.lineStyle(6, 0xCBD5E1);
     border.drawRoundedRect(0, 0, popupWidth, popupHeight, 40);
     popup.addChild(bg);
     popup.addChild(border);
@@ -2015,7 +2024,7 @@ function showPausePopup() {
     // Title
     const title = new PIXI.Text('ПАУЗА', {
         fontSize: 52,
-        fill: 0x4A1E0C,
+        fill: 0x0F172A,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -2041,8 +2050,8 @@ function showPausePopup() {
 
     // Кнопка звука
     const soundBtn = new PIXI.Graphics();
-    soundBtn.lineStyle(4, 0x4A1E0C);
-    soundBtn.beginFill(0xFFE089);
+    soundBtn.lineStyle(4, 0x0F172A);
+    soundBtn.beginFill(0xF1F5F9);
     soundBtn.drawRoundedRect(-iconBtnSize/2, -iconBtnSize/2, iconBtnSize, iconBtnSize, 18);
     soundBtn.endFill();
     soundBtn.interactive = true;
@@ -2051,7 +2060,7 @@ function showPausePopup() {
 
     const soundIcon = new PIXI.Text(isSoundEnabled ? '🔊' : '🔇', {
         fontSize: iconFontSize,
-        fill: 0x4A1E0C,
+        fill: 0x0F172A,
         fontWeight: 'bold',
         fontFamily: 'Arial',
     });
@@ -2062,8 +2071,8 @@ function showPausePopup() {
 
     // Кнопка музыки
     const musicBtn = new PIXI.Graphics();
-    musicBtn.lineStyle(4, 0x4A1E0C);
-    musicBtn.beginFill(0xFFE089);
+    musicBtn.lineStyle(4, 0x4338CA);
+    musicBtn.beginFill(0x6366F1);
     musicBtn.drawRoundedRect(-iconBtnSize/2, -iconBtnSize/2, iconBtnSize, iconBtnSize, 18);
     musicBtn.endFill();
     musicBtn.interactive = true;
@@ -2072,7 +2081,7 @@ function showPausePopup() {
 
     const musicIcon = new PIXI.Text(isMusicEnabled ? '♪' : '♫', {
         fontSize: iconFontSize,
-        fill: 0x4A1E0C,
+        fill: 0xFFFFFF,
         fontWeight: 'bold',
         fontFamily: 'Arial',
     });
@@ -2141,7 +2150,7 @@ function showPausePopup() {
 
 function createButton(width, height, text, onClick) {
     const btn = new PIXI.Graphics();
-    btn.lineStyle(4, 0x4A1E0C);
+    btn.lineStyle(4, 0x0F172A);
     btn.beginFill(0xFFE089);
     btn.drawRoundedRect(-width/2, -height/2, width, height, 18);
     btn.endFill();
@@ -2151,7 +2160,7 @@ function createButton(width, height, text, onClick) {
 
     const btnText = new PIXI.Text(text, {
         fontSize: 32,
-        fill: 0x4A1E0C,
+        fill: 0x0F172A,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -2269,12 +2278,12 @@ function buildBottomBar(coloredTypes) {
 
     // фон блока (визуально выделенный)
     const bg = new PIXI.Graphics();
-    bg.beginFill(0xFFE3A3);
+    bg.beginFill(0xFFF6E8);
     bg.drawRoundedRect(0, 0, app.screen.width, barH, 24);
-    bg.endFill();
+    bg.endFill();   
 
     const border = new PIXI.Graphics();
-    border.lineStyle(6, 0xF68722, 1);
+    border.lineStyle(4, 0xCBD5E1, 1);
     border.drawRoundedRect(0, 0, app.screen.width, barH, 24);
 
     // делаем фон "съедающим" клики, чтобы поле под ним не ловило тапы
@@ -2333,13 +2342,13 @@ function buildBottomBar(coloredTypes) {
         pauseButton.name = 'pauseButton';
 
         const pbg = new PIXI.Graphics();
-        pbg.beginFill(0xFFB74D);
+        pbg.beginFill(0x6366F1);
         pbg.drawRoundedRect(0, 0, btnSz, btnSz, 18);
         pbg.endFill();
 
         const icon = new PIXI.Text('⏸', {
             fontSize: Math.floor(btnSz * 0.5),
-            fill: 0x6A1B0A,
+            fill: 0xFFFFFF,
             fontWeight: 'bold',
         });
         icon.anchor.set(0.5);
@@ -2367,102 +2376,68 @@ function createColorButton(color, size, key, showKey = true) {
     button.interactive = true;
     button.buttonMode = true;
 
-    // Background circle
-    const bg = new PIXI.Graphics();
-    bg.beginFill(COLORS[color]);
-    bg.drawCircle(size/2, size/2, size/2);
-    bg.endFill();
+    // Хитбокс кнопки (чтобы клики работали стабильно)
+    button.hitArea = new PIXI.Rectangle(0, 0, size, size);
 
-    // Highlight effect
-    const highlight = new PIXI.Graphics();
-    highlight.beginFill(0xFFFFFF, 0.3);
-    highlight.drawCircle(size/2, size/3, size/4);
-    highlight.endFill();
+    const texName = `button_${color}`;
+    const tex = TEXTURES[texName];
 
-    // Border
-    const border = new PIXI.Graphics();
-    border.lineStyle(3, 0x000000, 0.3);
-    border.drawCircle(size/2, size/2, size/2);
+    if (tex) {
+        // === Вариант со спрайтом ===
+        const sprite = new PIXI.Sprite(tex);
+        sprite.anchor.set(0.5);
+        sprite.position.set(size / 2, size / 2);
 
-    // Active state indicator (initially invisible)
-    const activeIndicator = new PIXI.Graphics();
-    activeIndicator.beginFill(0xFFFFFF, 0.5);
-    activeIndicator.drawCircle(size/2, size/2, size/2);
-    activeIndicator.endFill();
-    activeIndicator.visible = false;
+        // Масштабируем так, чтобы картинка влезала в size x size
+        const s = Math.min(size / sprite.texture.width, size / sprite.texture.height);
+        sprite.scale.set(s);
 
-    button.addChild(bg);
-    button.addChild(highlight);
-    button.addChild(border);
-    button.addChild(activeIndicator);
+        button.addChild(sprite);
+    } else {
+        // === Фолбэк (если текстура не загрузилась) ===
+        const bg = new PIXI.Graphics();
+        bg.beginFill(COLORS[color] ?? 0x999999);
+        bg.drawCircle(size / 2, size / 2, size / 2);
+        bg.endFill();
+        button.addChild(bg);
+    }
 
-    // Add key label only if showKey is true
-    if (showKey) {
-        const label = new PIXI.Text(
-            key.toUpperCase(),
-            { 
-                fontSize: size * 0.35, 
-                fill: 0xffffff, 
-                fontWeight: '700',
-                fontFamily: 'Arial',
-                stroke: 0x000000,
-                strokeThickness: 3
-            }
-        );
+    // Подпись клавиши (если нужна)
+    if (showKey && key) {
+        const label = new PIXI.Text(key.toUpperCase(), {
+            fontSize: size * 0.35,
+            fill: 0xffffff,
+            fontWeight: '700',
+            fontFamily: 'Arial',
+            stroke: 0x0F172A,
+            strokeThickness: 4
+        });
         label.anchor.set(0.5);
-        label.position.set(size/2);
+        label.position.set(size / 2, size / 2);
         button.addChild(label);
     }
 
-    // Store original scale for animation
     button.originalScale = 1;
 
-    // Update interaction handlers
+    // Твои существующие обработчики (оставь как было)
     button.on('pointerdown', () => {
-    if (activeColor !== color) {
-        activeColor = color;
-        colorPressStart = Date.now();
-    }
-    updateButtonState(color, true);
-    });
-
-    const release = () => {
-        // На всякий случай чистим удерживающую анимацию
-        if (button._holdAnim) { button._holdAnim.kill(); button._holdAnim = null; }
-        if (activeColor === color) activeColor = null;
-        updateButtonState(color, false);
-    };
-
-    button.on('pointerup', release);
-    button.on('pointerupoutside', release);
-
-
-    // Add hover effect (only when button is not active)
-    button.on('pointerover', () => {
-    if (activeColor !== color) {
-        // если не зажата — лёгкий ховер-луп (без бесконечности)
-        gsap.to(button.scale, {
-            x: button.originalScale * 1.06,
-            y: button.originalScale * 1.06,
-            duration: 0.12
-        });
-    }
-    });
-
-    button.on('pointerout', () => {
         if (activeColor !== color) {
-            // если не зажата — вернуть к исходному
-            if (button._holdAnim) { button._holdAnim.kill(); button._holdAnim = null; }
-            gsap.to(button.scale, {
-                x: button.originalScale,
-                y: button.originalScale,
-                duration: 0.12
-            });
+            activeColor = color;
+            colorPressStart = Date.now();
         }
+        updateButtonState(color, true);
     });
 
+    button.on('pointerup', () => {
+        updateButtonState(color, false);
+    });
+
+    button.on('pointerupoutside', () => {
+        updateButtonState(color, false);
+    });
 
     return button;
 }
+
 
 export default levels;
