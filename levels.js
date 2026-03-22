@@ -61,7 +61,7 @@ const levels = [
   },
   {
     "id": 4,
-    "goalBugCount": 20,
+    "goalBugCount": 45,
     "lifeCount": 10,
     "params": {
       "maxObjects": 4,
@@ -75,7 +75,7 @@ const levels = [
   },
   {
     "id": 5,
-    "goalBugCount": 20,
+    "goalBugCount": 45,
     "lifeCount": 10,
     "params": {
       "maxObjects": 4,
@@ -93,7 +93,7 @@ const levels = [
   },
   {
     "id": 6,
-    "goalBugCount": 20,
+    "goalBugCount": 45,
     "lifeCount": 10,
     "params": {
       "maxObjects": 3,
@@ -107,7 +107,7 @@ const levels = [
   },
   {
       "id": 7,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 4,
@@ -121,7 +121,7 @@ const levels = [
   },
   {
       "id": 8,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 4,
@@ -135,7 +135,7 @@ const levels = [
   },
   {
       "id": 9,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 4,
@@ -150,7 +150,7 @@ const levels = [
   },
   {
       "id": 10,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 5,
@@ -165,7 +165,7 @@ const levels = [
   },
   {
       "id": 11,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 5,
@@ -180,7 +180,7 @@ const levels = [
   },
   {
       "id": 12,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 4,
@@ -193,12 +193,12 @@ const levels = [
       },
       "introPopup": {
         "type": "coloredBug_blue",
-        "descryption": "Удерживай СИНЮЮ кнопку и нажми СИНЕГО жука!",
+        "descryption": "Удерживай ФИОЛЕТОВУЮ кнопку и нажми ФИОЛЕТОВОГО жука!",
       }
   },
   {
       "id": 13,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 3,
@@ -212,7 +212,7 @@ const levels = [
   },
   {
       "id": 14,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 4,
@@ -226,7 +226,7 @@ const levels = [
   },
   {
       "id": 15,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 4,
@@ -240,7 +240,7 @@ const levels = [
   },
   {
       "id": 16,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 5,
@@ -255,7 +255,7 @@ const levels = [
   },
   {
       "id": 17,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 5,
@@ -270,7 +270,7 @@ const levels = [
   },
   {
       "id": 18,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 5,
@@ -285,7 +285,7 @@ const levels = [
   },
   {
       "id": 19,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 5,
@@ -300,7 +300,7 @@ const levels = [
   },
   {
       "id": 20,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 4,
@@ -318,7 +318,7 @@ const levels = [
   },
   {
       "id": 21,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 3,
@@ -332,7 +332,7 @@ const levels = [
   },
   {
       "id": 22,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 4,
@@ -346,7 +346,7 @@ const levels = [
   },
   {
       "id": 23,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 4,
@@ -360,7 +360,7 @@ const levels = [
   },
   {
       "id": 24,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 5,
@@ -375,7 +375,7 @@ const levels = [
   },
   {
       "id": 25,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 5,
@@ -390,7 +390,7 @@ const levels = [
   },
   {
       "id": 26,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 5,
@@ -405,7 +405,7 @@ const levels = [
   },
   {
       "id": 27,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 5,
@@ -420,7 +420,7 @@ const levels = [
   },
   {
       "id": 28,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 4,
@@ -438,7 +438,7 @@ const levels = [
   },
   {
       "id": 29,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 4,
@@ -452,7 +452,7 @@ const levels = [
   },
   {
       "id": 30,
-      "goalBugCount": 20,
+      "goalBugCount": 45,
       "lifeCount": 10,
       "params": {
         "maxObjects": 5,

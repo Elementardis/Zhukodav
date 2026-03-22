@@ -68,6 +68,29 @@ const SPRITE_PATHS = [
 
 // Store loaded textures
 const TEXTURES = {};
+const THEME = {
+    appBgCss: '#FFE39A',
+    appBg: 0xFFD77A,
+    preloaderBg: '#FFE39A',
+    preloaderTrack: '#FFE7B8',
+    preloaderFill: '#F29B38',
+    fieldBg: 0xFFF7E8,
+    cardBg: 0xFFF3D9,
+    headerBg: 0xFFE7B8,
+    textDark: 0x6B3E1F,
+    border: 0xF29B38,
+    borderDark: 0x9A5422,
+    shadow: 0xD98B32,
+    success: 0x6ED36E,
+    fail: 0xFF7A7A,
+    pause: 0x7C6CF2,
+    primary: 0xFFB84D,
+    secondary: 0xFFE8C2,
+    levelDoneGlow: 0xDFF4D0,
+    star: 0xFFD93D,
+    white: 0xFFFFFF,
+    overlay: 0x000000
+};
 
 function showPreloader() {
     const preloader = document.createElement('div');
@@ -77,7 +100,7 @@ function showPreloader() {
     preloader.style.top = '0';
     preloader.style.width = '100vw';
     preloader.style.height = '100vh';
-    preloader.style.background = '#EEF2FF';
+    preloader.style.background = THEME.preloaderBg;
     preloader.style.display = 'flex';
     preloader.style.flexDirection = 'column';
     preloader.style.alignItems = 'center';
@@ -93,14 +116,14 @@ function showPreloader() {
     const progressBar = document.createElement('div');
     progressBar.style.width = '300px';
     progressBar.style.height = '20px';
-    progressBar.style.background = '#E2E8F0';
+    progressBar.style.background = THEME.preloaderTrack;
     progressBar.style.borderRadius = '10px';
     progressBar.style.overflow = 'hidden';
     
     const progressFill = document.createElement('div');
     progressFill.style.width = '0%';
     progressFill.style.height = '100%';
-    progressFill.style.background = '#6366F1';
+    progressFill.style.background = THEME.preloaderFill;
     progressFill.style.transition = 'width 0.3s';
     
     progressBar.appendChild(progressFill);
@@ -127,7 +150,7 @@ const { preloader, progressFill } = showPreloader();
 const app = new PIXI.Application({
     width: window.innerWidth,
     height: window.innerHeight,
-    backgroundColor: 0xEEF2FF,
+    backgroundColor: THEME.appBg,
     resolution: window.devicePixelRatio,
     autoDensity: true,
     resizeTo: window,
@@ -136,6 +159,7 @@ const app = new PIXI.Application({
 
 // Add app view to DOM
 document.body.appendChild(app.view);
+document.body.style.backgroundColor = THEME.appBgCss;
 
 // === Backend init (Firebase) ===
 initBackend()
@@ -184,11 +208,11 @@ loader.load(() => {
 
 // Color definitions and key mappings
 const COLORS = {
-    red: 0xFF0000,
-    blue: 0x0000FF,
-    green: 0x00FF00,
-    yellow: 0xFFFF00,
-    purple: 0x8000FF
+    red: 0xFF6B6B,
+    blue: 0xA46BFF,
+    green: 0x58D68D,
+    yellow: 0xFFD75E,
+    purple: THEME.pause
 };
 
 
@@ -338,6 +362,15 @@ function freezeActiveObjects() {
         }
 
 // Update keyboard handlers to support both layouts
+function clearActiveColor() {
+    activeColor = null;
+    activeColorPointerId = null;
+
+    if (colorButtonsContainer) {
+        ['red', 'blue', 'green', 'yellow'].forEach(color => updateButtonState(color, false));
+    }
+}
+
 window.addEventListener('keydown', (e) => {
     if (isPaused) return; // Don't handle keys during pause
     
@@ -365,14 +398,20 @@ window.addEventListener('keyup', (e) => {
     }
 });
 
+window.addEventListener('touchcancel', clearActiveColor);
+window.addEventListener('blur', clearActiveColor);
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) clearActiveColor();
+});
+
 // ==== Стартовый экран ====
 
 const titleStyle = new PIXI.TextStyle({
     fontSize: 72,
-    fill: 0x6366F1,
+    fill: THEME.primary,
     fontWeight: 'bold',
     fontFamily: 'Arial',
-    stroke: 0xCBD5E1,
+    stroke: THEME.borderDark,
     strokeThickness: 8,
     align: 'center'
 });
@@ -387,8 +426,8 @@ startContainer.addChild(title);
 const playButton = new PIXI.Graphics();
 const btnWidth = 200;
 const btnHeight = 70;
-playButton.beginFill(0x6366F1); // фон кнопки
-playButton.lineStyle(6, 0x4338CA); // обводка
+playButton.beginFill(THEME.primary); // фон кнопки
+playButton.lineStyle(6, THEME.borderDark); // обводка
 playButton.drawRoundedRect(-btnWidth / 2, -btnHeight / 2, btnWidth, btnHeight, 30);
 playButton.endFill();
 playButton.x = app.screen.width / 2;
@@ -403,7 +442,7 @@ startContainer.addChild(playButton);
 // Текст PLAY
 const playText = new PIXI.Text("PLAY", {
     fontSize: 36,
-    fill: 0xCBD5E1,
+    fill: THEME.white,
     fontWeight: 'bold',
     fontFamily: 'Arial'
 });
@@ -431,7 +470,7 @@ function showLevelSelect() {
     // Новый стиль заголовка
     const title = new PIXI.Text("ВЫБЕРИ УРОВЕНЬ", {
         fontSize: 52,
-        fill: 0x0F172A,
+        fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial'
     });
@@ -462,13 +501,14 @@ function showLevelSelect() {
 
         // Тень под кнопкой
         const shadow = new PIXI.Graphics();
-        shadow.beginFill(0x000000, 0.10);
+        shadow.beginFill(THEME.shadow, 0.18);
         shadow.drawRoundedRect(0, 0, buttonSize, buttonSize, 6);
         shadow.endFill();
 
         // Кнопка
         const button = new PIXI.Graphics();
-        button.beginFill(0xFFFFFF);
+        button.lineStyle(completed.includes(i) ? 4 : 3, completed.includes(i) ? THEME.success : 0xE09A49, 1);
+        button.beginFill(completed.includes(i) ? THEME.levelDoneGlow : THEME.cardBg);
         button.drawRoundedRect(0, 0, buttonSize, buttonSize, 20);
         button.endFill();
         button.x = offsetX + col * (buttonSize + spacing);
@@ -484,7 +524,7 @@ function showLevelSelect() {
         // Текст уровня
         const label = new PIXI.Text("" + (i + 1), {
             fontSize: 36,
-            fill: 0x0F172A,
+            fill: THEME.textDark,
             fontWeight: 'bold',
             fontFamily: 'Arial'
         });
@@ -499,7 +539,7 @@ function showLevelSelect() {
         if (completed.includes(i)) {
             const star = new PIXI.Text('★', {
                 fontSize: 32,
-                fill: 0xFFD600,
+                fill: THEME.star,
                 fontWeight: 'bold',
                 fontFamily: 'Arial'
             });
@@ -681,12 +721,12 @@ function setupPlayArea() {
 
     // Background and border
     const background = new PIXI.Graphics();
-    background.beginFill(0xFFFFFF); // внутренний цвет
+    background.beginFill(THEME.fieldBg); // внутренний цвет
     background.drawRoundedRect(0, 0, size, size, BORDER_RADIUS);
     background.endFill();
 
     const border = new PIXI.Graphics();
-    border.lineStyle(4, 0x94A3B8, 1);
+    border.lineStyle(4, THEME.border, 1);
     border.drawRoundedRect(0, 0, size, size, BORDER_RADIUS);   
 
     playField.addChild(background);
@@ -720,7 +760,7 @@ function buildLevelHeader(wrapper, level) {
 
     // --- фон полосы ---
     const bar = new PIXI.Graphics();
-    bar.beginFill(0xF8FAFC)
+    bar.beginFill(THEME.headerBg)
        .drawRoundedRect(0, 0, wrapper.width, headerH, 14)
        .endFill();
     header.addChild(bar);
@@ -728,7 +768,7 @@ function buildLevelHeader(wrapper, level) {
     // --- текст "Уровень N" (слева) ---
     const lvlText = new PIXI.Text(`Уровень ${level.id}`, {
         fontSize: headerH * 0.35,
-        fill: 0x0F172A,
+        fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial',
     });
@@ -739,7 +779,7 @@ function buildLevelHeader(wrapper, level) {
     // --- текст прогресса (справа) ---
     const progText = new PIXI.Text(`0/${level.goalBugCount}`, {
         fontSize: headerH * 0.35,
-        fill: 0x5B250D,
+        fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'right',
@@ -759,7 +799,7 @@ function buildLevelHeader(wrapper, level) {
     // иконка-текстура (можно заменить на спрайт из атласа)
     const heartStyle = {
         fontSize: heartSz,
-        fill: 0xFF4B30,
+        fill: THEME.fail,
         fontFamily: 'Arial',
     };
 
@@ -791,10 +831,10 @@ function updateLevelHeader(score, life) {
         const h = hearts.children[i];
         if (i < life) {
             h.text = '❤';        // осталось
-            h.style.fill = 0xFF4B30;
+            h.style.fill = THEME.fail;
         } else {
             h.text = '♡';        // потрачено
-            h.style.fill = 0xFFDB8F;
+            h.style.fill = THEME.headerBg;
         }
     }       
 
@@ -1067,6 +1107,7 @@ const container = new PIXI.Container();
     if (type.startsWith('fatColoredBug_')) {
         const color = type.split('_')[1];
         visual = new PIXI.Sprite(TEXTURES[`coloredBug_${color}`]);
+        if (color === 'blue') visual.tint = COLORS.blue;
         visual.anchor.set(0.5);
         visual.width = size * 2;
         visual.height = size * 2;
@@ -1104,6 +1145,7 @@ const container = new PIXI.Container();
     } else if (type.startsWith('coloredBug_')) {
         const color = type.split('_')[1];
         visual = new PIXI.Sprite(TEXTURES[`coloredBug_${color}`]);
+        if (color === 'blue') visual.tint = COLORS.blue;
         visual.anchor.set(0.5);
         visual.width = size;
         visual.height = size;
@@ -1560,7 +1602,7 @@ function getTextureForType(t) {
 function showIntroPopup(cfg, onClose) {
   // overlay
   const overlay = new PIXI.Graphics();
-  overlay.beginFill(0x000000, 0.55);
+  overlay.beginFill(THEME.overlay, 0.42);
   overlay.drawRect(0, 0, app.screen.width, app.screen.height);
   overlay.endFill();
   overlay.name = 'introOverlay';
@@ -1575,9 +1617,9 @@ function showIntroPopup(cfg, onClose) {
   // Заголовок
   const title = new PIXI.Text('Новый жук!', new PIXI.TextStyle({
     fontSize: Math.round(app.screen.width * 0.10),
-    fill: 0xF59E0B,
+    fill: THEME.primary,
     fontWeight: '900',
-    stroke: 0xFFFFFF,
+    stroke: THEME.white,
     strokeThickness: 6,
     align: 'center'
   }));
@@ -1599,7 +1641,7 @@ function showIntroPopup(cfg, onClose) {
   // Текст-описание (берём из cfg.descryption)
   const desc = new PIXI.Text(String(cfg?.descryption ?? ''), new PIXI.TextStyle({
     fontSize: Math.round(app.screen.width * 0.05),
-    fill: 0xFFE066,
+    fill: THEME.textDark,
     fontWeight: '700',
     align: 'center',
     wordWrap: true,
@@ -1614,8 +1656,8 @@ function showIntroPopup(cfg, onClose) {
   const btnW = Math.min(app.screen.width * 0.6, 360);
   const btnH = 64;
   const ok = new PIXI.Graphics();
-  ok.lineStyle(6, 0xFFB300);
-  ok.beginFill(0xFF8E00);
+  ok.lineStyle(6, THEME.borderDark);
+  ok.beginFill(THEME.primary);
   ok.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
   ok.endFill();
   ok.x = app.screen.width / 2;
@@ -1624,7 +1666,7 @@ function showIntroPopup(cfg, onClose) {
   ok.buttonMode = true;
 
   const okLabel = new PIXI.Text('ОК', {
-    fontSize: 32, fill: 0xFFFFFF, fontWeight: '900', stroke: 0x6A1B0A, strokeThickness: 4
+    fontSize: 32, fill: THEME.white, fontWeight: '900', stroke: THEME.borderDark, strokeThickness: 4
   });
   okLabel.anchor.set(0.5);
   ok.addChild(okLabel);
@@ -1661,7 +1703,7 @@ function showIntroPopup(cfg, onClose) {
 
     const newBtnW = Math.min(app.screen.width * 0.6, 360);
     ok.clear();
-    ok.lineStyle(6, 0x4F46E5).beginFill(0xFF8E00)
+    ok.lineStyle(6, THEME.borderDark).beginFill(THEME.primary)
       .drawRoundedRect(-newBtnW/2, -btnH/2, newBtnW, btnH, 18).endFill();
     ok.x = app.screen.width / 2;
     ok.y = Math.min(app.screen.height - btnH - 24, desc.y + desc.height + 36);
@@ -1682,7 +1724,7 @@ function showWinOverlayThenPopup(currentLevelIndex) {
   clearAllPopups();
 
   const overlay = new PIXI.Graphics();
-  overlay.beginFill(0x000000, 0.35);
+  overlay.beginFill(THEME.overlay, 0.30);
   overlay.drawRect(0, 0, app.screen.width, app.screen.height);
   overlay.endFill();
   overlay.name = 'winOverlay';
@@ -1690,7 +1732,7 @@ function showWinOverlayThenPopup(currentLevelIndex) {
   gameContainer.addChild(overlay);
 
   const txt = new PIXI.Text('Победа!', new PIXI.TextStyle({
-    fill: 0xF59E0B, // «золото»
+    fill: THEME.success,
     fontSize: Math.round(app.screen.width * 0.08),
     fontWeight: '900',
     dropShadow: true,
@@ -1717,7 +1759,7 @@ function showLoseOverlayThenPopup(currentLevelIndex) {
   clearAllPopups();
 
   const overlay = new PIXI.Graphics();
-  overlay.beginFill(0x000000, 0.35);
+  overlay.beginFill(THEME.overlay, 0.30);
   overlay.drawRect(0, 0, app.screen.width, app.screen.height);
   overlay.endFill();
   overlay.name = 'loseOverlay';
@@ -1725,7 +1767,7 @@ function showLoseOverlayThenPopup(currentLevelIndex) {
   gameContainer.addChild(overlay);
 
   const txt = new PIXI.Text('Поражение', new PIXI.TextStyle({
-    fill: 0xEF4444, // приятный красный
+    fill: THEME.fail,
     fontSize: Math.round(app.screen.width * 0.07),
     fontWeight: '900',
     dropShadow: true,
@@ -1764,12 +1806,12 @@ function showWinPopup(currentLevelIndex) {
 
     // Фон
     const bg = new PIXI.Graphics();
-    bg.beginFill(0x6366F1);
+    bg.beginFill(THEME.cardBg);
     bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 36);
     bg.endFill();
     // Рамка
     const border = new PIXI.Graphics();
-    border.lineStyle(8, 0xCBD5E1);
+    border.lineStyle(8, THEME.success);
     border.drawRoundedRect(0, 0, popupWidth, popupHeight, 36);
     popup.addChild(bg);
     popup.addChild(border);
@@ -1777,7 +1819,7 @@ function showWinPopup(currentLevelIndex) {
     // Заголовок
     const title = new PIXI.Text('ПОБЕДА', {
         fontSize: Math.max(48, popupWidth * 0.12),
-        fill: 0x0F172A,
+        fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -1791,8 +1833,8 @@ function showWinPopup(currentLevelIndex) {
     const nextBtn = new PIXI.Graphics();
     const btnW = popupWidth * 0.8;
     const btnH = 70;
-    nextBtn.lineStyle(4, 0xA05A1C);
-    nextBtn.beginFill(0xFFE089);
+    nextBtn.lineStyle(4, THEME.borderDark);
+    nextBtn.beginFill(THEME.primary);
     nextBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
     nextBtn.endFill();
     nextBtn.x = popupWidth / 2;
@@ -1811,7 +1853,7 @@ function showWinPopup(currentLevelIndex) {
 
     const nextText = new PIXI.Text('СЛЕДУЮЩИЙ\nУРОВЕНЬ', {
         fontSize: 32,
-        fill: 0x0F172A,
+        fill: THEME.white,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -1823,8 +1865,8 @@ function showWinPopup(currentLevelIndex) {
 
     // Кнопка "Главное меню"
     const menuBtn = new PIXI.Graphics();
-    menuBtn.lineStyle(4, 0xA05A1C);
-    menuBtn.beginFill(0xFFE089);
+    menuBtn.lineStyle(4, 0xB56A2D);
+    menuBtn.beginFill(THEME.secondary);
     menuBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
     menuBtn.endFill();
     menuBtn.x = popupWidth / 2;
@@ -1843,7 +1885,7 @@ function showWinPopup(currentLevelIndex) {
 
     const menuText = new PIXI.Text('ГЛАВНОЕ\nМЕНЮ', {
         fontSize: 32,
-        fill: 0x0F172A,
+        fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -1873,12 +1915,12 @@ function showLosePopup(currentLevelIndex) {
 
     // Фон
     const bg = new PIXI.Graphics();
-    bg.beginFill(0xFFFFFF);
+    bg.beginFill(THEME.cardBg);
     bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 36);
     bg.endFill();
     // Рамка
     const border = new PIXI.Graphics();
-    border.lineStyle(8, 0x0F172A);
+    border.lineStyle(8, THEME.fail);
     border.drawRoundedRect(0, 0, popupWidth, popupHeight, 36);
     popup.addChild(bg);
     popup.addChild(border);
@@ -1886,7 +1928,7 @@ function showLosePopup(currentLevelIndex) {
     // Заголовок
     const title = new PIXI.Text('НЕ ПОВЕЗЛО!', {
         fontSize: Math.max(48, popupWidth * 0.12),
-        fill: 0xCBD5E1,
+        fill: THEME.fail,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -1900,8 +1942,8 @@ function showLosePopup(currentLevelIndex) {
     const retryBtn = new PIXI.Graphics();
     const btnW = popupWidth * 0.8;
     const btnH = 70;
-    retryBtn.lineStyle(4, 0xA05A1C);
-    retryBtn.beginFill(0xFFE089);
+    retryBtn.lineStyle(4, THEME.borderDark);
+    retryBtn.beginFill(THEME.primary);
     retryBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
     retryBtn.endFill();
     retryBtn.x = popupWidth / 2;
@@ -1916,7 +1958,7 @@ function showLosePopup(currentLevelIndex) {
 
     const retryText = new PIXI.Text('ПОПРОБОВАТЬ\nЕЩЕ РАЗ', {
         fontSize: 32,
-        fill: 0x0F172A,
+        fill: THEME.white,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -1928,8 +1970,8 @@ function showLosePopup(currentLevelIndex) {
 
     // Кнопка "Меню"
     const menuBtn = new PIXI.Graphics();
-    menuBtn.lineStyle(4, 0xA05A1C);
-    menuBtn.beginFill(0xFFE089);
+    menuBtn.lineStyle(4, 0xB56A2D);
+    menuBtn.beginFill(THEME.secondary);
     menuBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
     menuBtn.endFill();
     menuBtn.x = popupWidth / 2;
@@ -1948,7 +1990,7 @@ function showLosePopup(currentLevelIndex) {
 
     const menuText = new PIXI.Text('МЕНЮ', {
         fontSize: 32,
-        fill: 0x0F172A,
+        fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -1991,7 +2033,7 @@ function showPausePopup() {
 
     // Add semi-transparent overlay FIRST
     const overlay = new PIXI.Graphics();
-    overlay.beginFill(0x000000, 0.5);
+    overlay.beginFill(THEME.overlay, 0.34);
     overlay.drawRect(0, 0, app.screen.width, app.screen.height);
     overlay.endFill();
     overlay.name = 'pauseOverlay';
@@ -2011,13 +2053,13 @@ function showPausePopup() {
 
     // Background
     const bg = new PIXI.Graphics();
-    bg.beginFill(0xFFFFFF);
+    bg.beginFill(THEME.cardBg);
     bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 40);
     bg.endFill();
 
     // Border
     const border = new PIXI.Graphics();
-    border.lineStyle(6, 0xCBD5E1);
+    border.lineStyle(6, THEME.pause);
     border.drawRoundedRect(0, 0, popupWidth, popupHeight, 40);
     popup.addChild(bg);
     popup.addChild(border);
@@ -2025,7 +2067,7 @@ function showPausePopup() {
     // Title
     const title = new PIXI.Text('ПАУЗА', {
         fontSize: 52,
-        fill: 0x0F172A,
+        fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -2051,8 +2093,8 @@ function showPausePopup() {
 
     // Кнопка звука
     const soundBtn = new PIXI.Graphics();
-    soundBtn.lineStyle(4, 0x0F172A);
-    soundBtn.beginFill(0xF1F5F9);
+    soundBtn.lineStyle(4, 0xB56A2D);
+    soundBtn.beginFill(THEME.secondary);
     soundBtn.drawRoundedRect(-iconBtnSize/2, -iconBtnSize/2, iconBtnSize, iconBtnSize, 18);
     soundBtn.endFill();
     soundBtn.interactive = true;
@@ -2061,7 +2103,7 @@ function showPausePopup() {
 
     const soundIcon = new PIXI.Text(isSoundEnabled ? '🔊' : '🔇', {
         fontSize: iconFontSize,
-        fill: 0x0F172A,
+        fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial',
     });
@@ -2072,8 +2114,8 @@ function showPausePopup() {
 
     // Кнопка музыки
     const musicBtn = new PIXI.Graphics();
-    musicBtn.lineStyle(4, 0x4338CA);
-    musicBtn.beginFill(0x6366F1);
+    musicBtn.lineStyle(4, 0x5E4AE0);
+    musicBtn.beginFill(0x8E7CFF);
     musicBtn.drawRoundedRect(-iconBtnSize/2, -iconBtnSize/2, iconBtnSize, iconBtnSize, 18);
     musicBtn.endFill();
     musicBtn.interactive = true;
@@ -2121,7 +2163,7 @@ function showPausePopup() {
     const continueBtn = createButton(btnW, btnH, 'ПРОДОЛЖИТЬ', () => {
         cleanupPauseState();
         resumeGame();
-    });
+    }, 'pause');
     continueBtn.y = 0;
     buttonsContainer.addChild(continueBtn);
 
@@ -2129,7 +2171,7 @@ function showPausePopup() {
     const retryBtn = createButton(btnW, btnH, 'ЗАНОВО', () => {
         cleanupPauseState();
         startLevel(levelData.id - 1);
-    });
+    }, 'primary');
     retryBtn.y = btnH + btnSpacing;
     buttonsContainer.addChild(retryBtn);
 
@@ -2141,7 +2183,7 @@ function showPausePopup() {
         }
         gameContainer.removeChildren();
         showLevelSelect();
-    });
+    }, 'secondary');
     menuBtn.y = (btnH + btnSpacing) * 2;
     buttonsContainer.addChild(menuBtn);
 
@@ -2149,10 +2191,18 @@ function showPausePopup() {
     gameContainer.addChild(popup);
 }
 
-function createButton(width, height, text, onClick) {
+function createButton(width, height, text, onClick, variant = 'primary') {
+    const styles = {
+        primary: { fill: THEME.primary, border: THEME.borderDark, text: THEME.white },
+        secondary: { fill: THEME.secondary, border: 0xB56A2D, text: THEME.textDark },
+        pause: { fill: 0x8E7CFF, border: 0x5E4AE0, text: THEME.white },
+        success: { fill: THEME.success, border: 0x4AAE4A, text: THEME.white }
+    };
+    const style = styles[variant] || styles.primary;
+
     const btn = new PIXI.Graphics();
-    btn.lineStyle(4, 0x0F172A);
-    btn.beginFill(0xFFE089);
+    btn.lineStyle(4, style.border);
+    btn.beginFill(style.fill);
     btn.drawRoundedRect(-width/2, -height/2, width, height, 18);
     btn.endFill();
     btn.interactive = true;
@@ -2161,7 +2211,7 @@ function createButton(width, height, text, onClick) {
 
     const btnText = new PIXI.Text(text, {
         fontSize: 32,
-        fill: 0x0F172A,
+        fill: style.text,
         fontWeight: 'bold',
         fontFamily: 'Arial',
         align: 'center',
@@ -2265,6 +2315,9 @@ function buildBottomBar(coloredTypes) {
     const barH = Math.max(app.screen.height * BAR_H_PRC, MIN_BAR_H);
     const btnSz = Math.floor(barH * 0.72); // кнопки чуть меньше высоты блока
     const gap = GAP_HORZ;
+    const fieldWrapper = playArea?.parent;
+    const barWidth = fieldWrapper?.width ?? app.screen.width;
+    const barX = fieldWrapper?.x ?? 0;
 
     // гарантируем, что bottomBar существует и добавлен в rootUI ПОСЛЕ поля (поверх/впереди)
     if (!bottomBar) bottomBar = new PIXI.Container();
@@ -2274,22 +2327,22 @@ function buildBottomBar(coloredTypes) {
     bottomBar.removeChildren();
 
     // позиционируем блок строго внизу
-    bottomBar.x = 0;
+    bottomBar.x = barX;
     bottomBar.y = app.screen.height - barH;
 
     // фон блока (визуально выделенный)
     const bg = new PIXI.Graphics();
-    bg.beginFill(0xFFF6E8);
-    bg.drawRoundedRect(0, 0, app.screen.width, barH, 24);
+    bg.beginFill(THEME.cardBg);
+    bg.drawRoundedRect(0, 0, barWidth, barH, 24);
     bg.endFill();   
 
     const border = new PIXI.Graphics();
-    border.lineStyle(4, 0xCBD5E1, 1);
-    border.drawRoundedRect(0, 0, app.screen.width, barH, 24);
+    border.lineStyle(4, THEME.border, 1);
+    border.drawRoundedRect(0, 0, barWidth, barH, 24);
 
     // делаем фон "съедающим" клики, чтобы поле под ним не ловило тапы
     bg.interactive = true;
-    bg.hitArea = new PIXI.Rectangle(0, 0, app.screen.width, barH);
+    bg.hitArea = new PIXI.Rectangle(0, 0, barWidth, barH);
 
     bottomBar.addChild(bg);
     bottomBar.addChild(border);
@@ -2313,12 +2366,12 @@ function buildBottomBar(coloredTypes) {
     const colorGroupW = n > 0 ? (n * btnSz + (n - 1) * gap) : 0;
 
     // пауза справа
-    const pauseX = app.screen.width - gap - btnSz;
+    const pauseX = barWidth - gap - btnSz;
     const y = (barH - btnSz) / 2;
 
     // старт X для цветных: по центру, но так, чтобы не залезать на pause
     const maxRight = pauseX - gap;
-    let startX = (app.screen.width - colorGroupW) / 2;
+    let startX = (barWidth - colorGroupW) / 2;
     if (startX + colorGroupW > maxRight) {
         startX = Math.max(gap, maxRight - colorGroupW);
     }
@@ -2343,7 +2396,8 @@ function buildBottomBar(coloredTypes) {
         pauseButton.name = 'pauseButton';
 
         const pbg = new PIXI.Graphics();
-        pbg.beginFill(0x6366F1);
+        pbg.lineStyle(3, 0x5E4AE0, 1);
+        pbg.beginFill(0x8E7CFF);
         pbg.drawRoundedRect(0, 0, btnSz, btnSz, 18);
         pbg.endFill();
 
@@ -2383,16 +2437,16 @@ function createColorButton(color, size, key, showKey = true) {
     bg.endFill();
 
     const highlight = new PIXI.Graphics();
-    highlight.beginFill(0xFFFFFF, 0.3);
+    highlight.beginFill(0xFFFFFF, 0.24);
     highlight.drawCircle(size / 2, size / 3, size / 4);
     highlight.endFill();
 
     const border = new PIXI.Graphics();
-    border.lineStyle(3, 0x000000, 0.3);
+    border.lineStyle(3, THEME.borderDark, 0.35);
     border.drawCircle(size / 2, size / 2, size / 2);
 
     const activeIndicator = new PIXI.Graphics();
-    activeIndicator.beginFill(0xFFFFFF, 0.5);
+    activeIndicator.beginFill(0xFFF7E8, 0.55);
     activeIndicator.drawCircle(size / 2, size / 2, size / 2);
     activeIndicator.endFill();
     activeIndicator.visible = false;
@@ -2408,7 +2462,7 @@ function createColorButton(color, size, key, showKey = true) {
             fill: 0xffffff,
             fontWeight: '700',
             fontFamily: 'Arial',
-            stroke: 0x000000,
+            stroke: THEME.borderDark,
             strokeThickness: 3
         });
         label.anchor.set(0.5);
