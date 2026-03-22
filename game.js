@@ -38,6 +38,7 @@ let introActive = false;
 
 // Color button state
 let activeColor = null;
+let activeColorPointerId = null;
 let colorPressStart = 0;
 let colorButtonsContainer = null;
 
@@ -2376,64 +2377,103 @@ function createColorButton(color, size, key, showKey = true) {
     button.interactive = true;
     button.buttonMode = true;
 
-    // Хитбокс кнопки (чтобы клики работали стабильно)
-    button.hitArea = new PIXI.Rectangle(0, 0, size, size);
+    const bg = new PIXI.Graphics();
+    bg.beginFill(COLORS[color]);
+    bg.drawCircle(size / 2, size / 2, size / 2);
+    bg.endFill();
 
-    const texName = `button_${color}`;
-    const tex = TEXTURES[texName];
+    const highlight = new PIXI.Graphics();
+    highlight.beginFill(0xFFFFFF, 0.3);
+    highlight.drawCircle(size / 2, size / 3, size / 4);
+    highlight.endFill();
 
-    if (tex) {
-        // === Вариант со спрайтом ===
-        const sprite = new PIXI.Sprite(tex);
-        sprite.anchor.set(0.5);
-        sprite.position.set(size / 2, size / 2);
+    const border = new PIXI.Graphics();
+    border.lineStyle(3, 0x000000, 0.3);
+    border.drawCircle(size / 2, size / 2, size / 2);
 
-        // Масштабируем так, чтобы картинка влезала в size x size
-        const s = Math.min(size / sprite.texture.width, size / sprite.texture.height);
-        sprite.scale.set(s);
+    const activeIndicator = new PIXI.Graphics();
+    activeIndicator.beginFill(0xFFFFFF, 0.5);
+    activeIndicator.drawCircle(size / 2, size / 2, size / 2);
+    activeIndicator.endFill();
+    activeIndicator.visible = false;
 
-        button.addChild(sprite);
-    } else {
-        // === Фолбэк (если текстура не загрузилась) ===
-        const bg = new PIXI.Graphics();
-        bg.beginFill(COLORS[color] ?? 0x999999);
-        bg.drawCircle(size / 2, size / 2, size / 2);
-        bg.endFill();
-        button.addChild(bg);
-    }
+    button.addChild(bg);
+    button.addChild(highlight);
+    button.addChild(border);
+    button.addChild(activeIndicator);
 
-    // Подпись клавиши (если нужна)
-    if (showKey && key) {
+    if (showKey) {
         const label = new PIXI.Text(key.toUpperCase(), {
             fontSize: size * 0.35,
             fill: 0xffffff,
             fontWeight: '700',
             fontFamily: 'Arial',
-            stroke: 0x0F172A,
-            strokeThickness: 4
+            stroke: 0x000000,
+            strokeThickness: 3
         });
         label.anchor.set(0.5);
-        label.position.set(size / 2, size / 2);
+        label.position.set(size / 2);
         button.addChild(label);
     }
 
     button.originalScale = 1;
 
-    // Твои существующие обработчики (оставь как было)
-    button.on('pointerdown', () => {
-        if (activeColor !== color) {
-            activeColor = color;
-            colorPressStart = Date.now();
-        }
+    const getPointerId = (event) =>
+        event?.data?.pointerId ??
+        event?.data?.originalEvent?.pointerId ??
+        null;
+
+    button.on('pointerdown', (event) => {
+        const pointerId = getPointerId(event);
+
+        activeColor = color;
+        activeColorPointerId = pointerId;
+        colorPressStart = Date.now();
+
         updateButtonState(color, true);
     });
 
-    button.on('pointerup', () => {
-        updateButtonState(color, false);
+    const release = (event) => {
+        const pointerId = getPointerId(event);
+
+        // Сбрасываем только тот цвет, который удерживал именно этот палец
+        if (activeColor === color) {
+            if (activeColorPointerId === null || pointerId === null || activeColorPointerId === pointerId) {
+                activeColor = null;
+                activeColorPointerId = null;
+                updateButtonState(color, false);
+            }
+        }
+    };
+
+    button.on('pointerup', release);
+    button.on('pointerupoutside', release);
+    button.on('pointercancel', release);
+
+    button.on('pointerover', () => {
+        if (IS_TOUCH) return;
+        if (activeColor !== color) {
+            gsap.to(button.scale, {
+                x: button.originalScale * 1.06,
+                y: button.originalScale * 1.06,
+                duration: 0.12
+            });
+        }
     });
 
-    button.on('pointerupoutside', () => {
-        updateButtonState(color, false);
+    button.on('pointerout', () => {
+        if (IS_TOUCH) return;
+        if (activeColor !== color) {
+            if (button._holdAnim) {
+                button._holdAnim.kill();
+                button._holdAnim = null;
+            }
+            gsap.to(button.scale, {
+                x: button.originalScale,
+                y: button.originalScale,
+                duration: 0.12
+            });
+        }
     });
 
     return button;
