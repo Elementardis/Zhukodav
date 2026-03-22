@@ -1535,10 +1535,7 @@ function resizeGame() {
     // Handle intro popup if it exists
     const introPopup = gameContainer.getChildByName('introPopup');
     if (introPopup) {
-        const popupWidth = Math.min(app.screen.width * 0.8, 480);
-        const popupHeight = Math.min(app.screen.height * 0.7, 420);
-        introPopup.x = (app.screen.width - popupWidth) / 2;
-        introPopup.y = (app.screen.height - popupHeight) / 2;
+        introPopup._resizeHandler?.();
     }
 
     // Handle pause overlay if it exists
@@ -1614,54 +1611,49 @@ function showIntroPopup(cfg, onClose) {
   c.name = 'introPopup';
   gameContainer.addChild(c);
 
+  const bg = new PIXI.Graphics();
+  const border = new PIXI.Graphics();
+  const descBox = new PIXI.Graphics();
+  c.addChild(bg);
+  c.addChild(border);
+  c.addChild(descBox);
+
   // Заголовок
   const title = new PIXI.Text('Новый жук!', new PIXI.TextStyle({
-    fontSize: Math.round(app.screen.width * 0.10),
+    fontSize: 48,
     fill: THEME.primary,
     fontWeight: '900',
     stroke: THEME.white,
     strokeThickness: 6,
-    align: 'center'
+    align: 'center',
+    wordWrap: true
   }));
-  title.anchor.set(0.5);
-  title.x = app.screen.width / 2;
-  title.y = Math.max(32, app.screen.height * 0.12);
+  title.anchor.set(0.5, 0);
   c.addChild(title);
 
   // Иконка из типа
   const iconTex = getTextureForType(cfg?.type);
   const icon = new PIXI.Sprite(iconTex);
   icon.anchor.set(0.5);
-  const iconSize = Math.min(app.screen.width, app.screen.height) * 0.22;
-  icon.width = icon.height = iconSize;
-  icon.x = app.screen.width / 2;
-  icon.y = title.y + title.height + iconSize * 0.75;
+  if (cfg?.type?.includes('_blue')) icon.tint = COLORS.blue;
   c.addChild(icon);
 
   // Текст-описание (берём из cfg.descryption)
   const desc = new PIXI.Text(String(cfg?.descryption ?? ''), new PIXI.TextStyle({
-    fontSize: Math.round(app.screen.width * 0.05),
+    fontSize: 24,
     fill: THEME.textDark,
     fontWeight: '700',
     align: 'center',
     wordWrap: true,
-    wordWrapWidth: Math.min(app.screen.width * 0.85, 560)
+    breakWords: true,
+    lineHeight: 30
   }));
   desc.anchor.set(0.5, 0);
-  desc.x = app.screen.width / 2;
-  desc.y = icon.y + icon.height * 0.65;
   c.addChild(desc);
 
   // Кнопка "ОК"
-  const btnW = Math.min(app.screen.width * 0.6, 360);
   const btnH = 64;
   const ok = new PIXI.Graphics();
-  ok.lineStyle(6, THEME.borderDark);
-  ok.beginFill(THEME.primary);
-  ok.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
-  ok.endFill();
-  ok.x = app.screen.width / 2;
-  ok.y = Math.min(app.screen.height - btnH - 24, desc.y + desc.height + 36);
   ok.interactive = true;
   ok.buttonMode = true;
 
@@ -1673,48 +1665,92 @@ function showIntroPopup(cfg, onClose) {
   c.addChild(ok);
 
   // анимация появления
-  animateAppear(c, 400);
-
-    const close = () => {
+  const close = () => {
+    window.removeEventListener('resize', c._resizeHandler);
     if (gameContainer.getChildByName('introOverlay')) gameContainer.removeChild(overlay);
     if (gameContainer.getChildByName('introPopup')) gameContainer.removeChild(c);
-    introActive = false; // ⬅ снимаем блок спавна
-    if (typeof onClose === 'function') onClose(); // запускаем подготовку очереди и интервал
+    introActive = false;
+    if (typeof onClose === 'function') onClose();
   };
 
-  ok.on('pointerdown', close);
+  const layoutIntroPopup = () => {
+    const fieldWrapper = playArea?.parent;
+    const popupWidth = Math.min(fieldWrapper?.width ?? (app.screen.width - 24), app.screen.width - 24);
+    const popupHeight = Math.min(fieldWrapper?.height ?? (app.screen.height - 24), app.screen.height - 24);
+    const popupX = fieldWrapper?.x ?? ((app.screen.width - popupWidth) / 2);
+    const popupY = fieldWrapper?.y ?? Math.max(12, (app.screen.height - popupHeight) / 2);
+    const padX = Math.max(18, Math.round(popupWidth * 0.06));
+    const padTop = Math.max(18, Math.round(popupHeight * 0.05));
+    const padBottom = Math.max(18, Math.round(popupHeight * 0.05));
+    const gap = Math.max(12, Math.round(popupHeight * 0.03));
+    const titleWrapWidth = popupWidth - padX * 2;
+    const descWrapWidth = popupWidth - padX * 2 - 24;
+    const buttonHeight = Math.max(58, Math.round(popupHeight * 0.12));
+    const buttonWidth = Math.min(popupWidth - padX * 2, 320);
+    const descPadY = 10;
+    const descBoxWidth = popupWidth - padX * 2;
 
- // адаптация при ресайзе (чтобы на десктопе всё было аккуратно)
+    c.x = popupX;
+    c.y = popupY;
+
+    bg.clear();
+    bg.beginFill(THEME.cardBg);
+    bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 32);
+    bg.endFill();
+
+    border.clear();
+    border.lineStyle(6, THEME.border, 1);
+    border.drawRoundedRect(0, 0, popupWidth, popupHeight, 32);
+
+    title.style.fontSize = Math.max(26, Math.min(50, Math.round(popupWidth * 0.11)));
+    title.style.wordWrapWidth = titleWrapWidth;
+    title.style.lineHeight = Math.round(title.style.fontSize * 1.05);
+    title.x = popupWidth / 2;
+    title.y = padTop;
+
+    desc.style.fontSize = Math.max(16, Math.min(24, Math.round(popupWidth * 0.05)));
+    desc.style.lineHeight = Math.round(desc.style.fontSize * 1.3);
+    desc.style.wordWrapWidth = descWrapWidth;
+
+    const maxIconSize = Math.min(popupWidth * 0.34, popupHeight * 0.22);
+    const remainingForIcon = popupHeight - padTop - title.height - gap - desc.height - gap - buttonHeight - padBottom - gap - descPadY * 2;
+    const iconSize = Math.max(72, Math.min(maxIconSize, remainingForIcon));
+    icon.width = icon.height = iconSize;
+    icon.x = popupWidth / 2;
+    icon.y = title.y + title.height + gap + iconSize / 2;
+
+    descBox.clear();
+    descBox.beginFill(THEME.headerBg, 0.85);
+    descBox.drawRoundedRect(0, 0, descBoxWidth, desc.height + descPadY * 2, 18);
+    descBox.endFill();
+    descBox.x = padX;
+    descBox.y = icon.y + iconSize / 2 + gap;
+
+    desc.x = popupWidth / 2;
+    desc.y = descBox.y + descPadY;
+
+    ok.clear();
+    ok.lineStyle(6, THEME.borderDark);
+    ok.beginFill(THEME.primary);
+    ok.drawRoundedRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 18);
+    ok.endFill();
+    ok.x = popupWidth / 2;
+    ok.y = descBox.y + descBox.height + gap + buttonHeight / 2;
+
+    okLabel.style.fontSize = Math.max(26, Math.min(32, Math.round(buttonHeight * 0.48)));
+    okLabel.x = 0;
+    okLabel.y = 0;
+  };
+
+  layoutIntroPopup();
+  animateAppear(c, 400);
   c._resizeHandler = () => {
     overlay.width = app.screen.width;
     overlay.height = app.screen.height;
-
-    title.x = app.screen.width / 2;
-    title.y = Math.max(32, app.screen.height * 0.12);
-
-    const newIconSize = Math.min(app.screen.width, app.screen.height) * 0.22;
-    icon.width = icon.height = newIconSize;
-    icon.x = app.screen.width / 2;
-    icon.y = title.y + title.height + newIconSize * 0.75;
-
-    desc.style.wordWrapWidth = Math.min(app.screen.width * 0.85, 560);
-    desc.x = app.screen.width / 2;
-    desc.y = icon.y + icon.height * 0.65;
-
-    const newBtnW = Math.min(app.screen.width * 0.6, 360);
-    ok.clear();
-    ok.lineStyle(6, THEME.borderDark).beginFill(THEME.primary)
-      .drawRoundedRect(-newBtnW/2, -btnH/2, newBtnW, btnH, 18).endFill();
-    ok.x = app.screen.width / 2;
-    ok.y = Math.min(app.screen.height - btnH - 24, desc.y + desc.height + 36);
+    layoutIntroPopup();
   };
   window.addEventListener('resize', c._resizeHandler);
-
-  // навешиваем окончательный обработчик клика
-  ok.on('pointerdown', () => {
-    window.removeEventListener('resize', c._resizeHandler);
-    close();
-  });
+  ok.on('pointerdown', close);
 }
 
 
@@ -2535,3 +2571,4 @@ function createColorButton(color, size, key, showKey = true) {
 
 
 export default levels;
+
