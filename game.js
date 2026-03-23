@@ -15,7 +15,12 @@ const HEART_SIZE_PRC = 0.50;   // 50 % высоты шапки
 const HEART_GAP = 6;      // px между сердцами
 const BUG_SIZE_PRC = 0.15;    // 15% от размера игрового поля
 const MIN_BUG_SIZE = 60;      // минимальный размер жука
-const MAX_BUG_SIZE = 120;     // максимальный размер жука
+const MAX_BUG_SIZE = 120;
+const FROZEN_EFFECT_DURATION_MS = 5000;
+const FROZEN_LIFETIME_MULTIPLIER = 2;
+const FROZEN_LIFETIME_RATE = 1 / FROZEN_LIFETIME_MULTIPLIER;
+const FROZEN_ANIMATION_TIME_SCALE = 0.5;
+const FROZEN_WAVE_COLOR = 0x8FE8FF;     // максимальный размер жука
 
 // ==== Global Variables ====
 let activeObjects = [];
@@ -30,6 +35,9 @@ let isPaused = false;
 let spawnTimer = null;
 let score = 0;
 let life = 0;
+let frozenEffectStartedAt = 0;
+let frozenEffectEndsAt = 0;
+let frozenEffectTimer = null;
 // состояние уровня
 let levelEnded = false; // true — как только показан попап победы
 
@@ -66,10 +74,11 @@ function getRuntimeBugBalance(type) {
     const baseBalance = getBugBaseBalance(type);
     const lifetimeMultiplier = getLevelLifetimeMultiplier(type);
     const spawnIntervalMultiplier = getLevelSpawnIntervalMultiplier(type);
+    const frozenLifetimeMultiplier = isFrozenEffectActive() ? FROZEN_LIFETIME_MULTIPLIER : 1;
 
     // Итоговые параметры жука считаются из базовых значений вида * коэффициенты уровня.
     return {
-        lifetime: baseBalance.lifetime * lifetimeMultiplier,
+        lifetime: baseBalance.lifetime * lifetimeMultiplier * frozenLifetimeMultiplier,
         spawnInterval: baseBalance.spawnInterval / spawnIntervalMultiplier,
         clicks: baseBalance.clicks,
     };
@@ -90,6 +99,54 @@ function scheduleNextSpawn(delay) {
 
     const nextDelay = Math.max(50, Math.round(delay ?? objectQueue[0].spawnInterval ?? 450));
     spawnTimer = setTimeout(spawnObject, nextDelay);
+}
+
+function isFrozenEffectActive(now = Date.now()) {
+    return frozenEffectEndsAt > now;
+}
+
+function getLifetimeDecayMs(startTime, endTime) {
+    if (endTime <= startTime) return 0;
+
+    const elapsed = endTime - startTime;
+    if (!frozenEffectStartedAt || frozenEffectEndsAt <= startTime || frozenEffectStartedAt >= endTime) {
+        return elapsed;
+    }
+
+    const overlapStart = Math.max(startTime, frozenEffectStartedAt);
+    const overlapEnd = Math.min(endTime, frozenEffectEndsAt);
+    const frozenOverlap = Math.max(0, overlapEnd - overlapStart);
+    return elapsed - frozenOverlap * (1 - FROZEN_LIFETIME_RATE);
+}
+
+function syncObjectLifetime(obj, now = Date.now()) {
+    if (obj.remainingLifetimeMs == null) {
+        obj.remainingLifetimeMs = 0;
+    }
+
+    if (obj.lastLifetimeSyncAt == null) {
+        obj.lastLifetimeSyncAt = now;
+        return obj.remainingLifetimeMs;
+    }
+
+    const decay = getLifetimeDecayMs(obj.lastLifetimeSyncAt, now);
+    obj.remainingLifetimeMs = Math.max(0, obj.remainingLifetimeMs - decay);
+    obj.lastLifetimeSyncAt = now;
+    return obj.remainingLifetimeMs;
+}
+
+function getObjectAnimationTimeScale(now = Date.now()) {
+    return isFrozenEffectActive(now) ? FROZEN_ANIMATION_TIME_SCALE : 1;
+}
+
+function applyObjectAnimationTimeScale(obj, now = Date.now()) {
+    if (!obj.animations) return;
+    const timeScale = getObjectAnimationTimeScale(now);
+    obj.animations.forEach(anim => {
+        if (typeof anim.timeScale === 'function') {
+            anim.timeScale(timeScale);
+        }
+    });
 }
 
 
@@ -120,7 +177,8 @@ const SPRITE_PATHS = [
     { name: 'button_blue',   path: 'images/ui/button_blue.png' },
     { name: 'button_purple', path: 'images/ui/button_purple.png' },
     { name: 'button_red',    path: 'images/ui/button_red.png' },
-    { name: 'button_yellow', path: 'images/ui/button_yellow.png' }
+    { name: 'button_yellow', path: 'images/ui/button_yellow.png' },
+    { name: 'frozen', path: 'images/ui/frozen.png' }
 ];
 
 // Store loaded textures
@@ -273,21 +331,26 @@ const COLORS = {
 };
 
 
-// Remove static COLOR_KEY_MAP and add dynamic mapping
+// Color buttons always keep the same left-to-right slots.
+const COLOR_BUTTON_SLOTS = [
+    { color: 'red', key: 'q' },
+    { color: 'blue', key: 'w' },
+    { color: 'green', key: 'e' },
+    { color: 'yellow', key: 'r' },
+];
+
 let dynamicColorKeyMap = {};
 
-// Add keyboard layout mapping in both directions
+// Support both English and Russian keyboard layouts for the same fixed slots.
 const KEY_LAYOUT_MAP = {
-    // English to Russian
-    'q': 'й',
-    'w': 'ц',
-    'e': 'у',
-    'r': 'к',
-    // Russian to English (reverse mapping)
-    'й': 'q',
-    'ц': 'w',
-    'у': 'e',
-    'к': 'r'
+    'q': 'q',
+    'w': 'w',
+    'e': 'e',
+    'r': 'r',
+    '\u0439': 'q',
+    '\u0446': 'w',
+    '\u0443': 'e',
+    '\u043a': 'r',
 };
 
 // Add helper function for button state updates
@@ -334,6 +397,112 @@ function updateButtonState(color, isActive) {
             ease: "elastic.out(1, 0.5)"
         });
     }
+}
+
+function removeExpiredObject(obj) {
+    gsap.to(obj, {
+        y: obj.y + 100,
+        alpha: 0,
+        duration: 0.4,
+        ease: "power1.in",
+        onComplete: () => {
+            if (playArea.children.includes(obj)) {
+                playArea.removeChild(obj);
+                activeObjects = activeObjects.filter(o => o !== obj);
+
+                if (!levelEnded && obj.type !== 'bomb') {
+                    life--;
+                    updateUI();
+                    if (life <= 0) endGame(false);
+                }
+            }
+        }
+    });
+}
+
+function startLifetimeCheck(obj) {
+    if (obj.lifetimeCheckTimeout) {
+        clearTimeout(obj.lifetimeCheckTimeout);
+    }
+
+    const checkLifetime = () => {
+        if (!playArea.children.includes(obj) || isPaused) return;
+
+        const remainingTime = syncObjectLifetime(obj);
+        if (remainingTime <= 0) {
+            removeExpiredObject(obj);
+            return;
+        }
+
+        obj.lifetimeCheckTimeout = setTimeout(checkLifetime, Math.min(remainingTime, 1000));
+    };
+
+    obj.lifetimeCheckTimeout = setTimeout(checkLifetime, 100);
+}
+
+function showFrozenWave(x, y) {
+    const wave = new PIXI.Graphics();
+    wave.lineStyle(10, FROZEN_WAVE_COLOR, 0.85);
+    wave.drawCircle(0, 0, 36);
+    wave.x = x;
+    wave.y = y;
+    wave.alpha = 0.9;
+    wave.scale.set(0.2);
+    playArea.addChild(wave);
+
+    gsap.to(wave.scale, {
+        x: 6,
+        y: 6,
+        duration: 0.5,
+        ease: "power2.out"
+    });
+    gsap.to(wave, {
+        alpha: 0,
+        duration: 0.5,
+        ease: "power1.out",
+        onComplete: () => {
+            if (wave.parent) wave.parent.removeChild(wave);
+            wave.destroy();
+        }
+    });
+}
+
+function finishFrozenEffect() {
+    const now = Date.now();
+
+    if (!isPaused) {
+        activeObjects.forEach(obj => syncObjectLifetime(obj, now));
+    }
+
+    frozenEffectStartedAt = 0;
+    frozenEffectEndsAt = 0;
+
+    if (frozenEffectTimer) {
+        clearTimeout(frozenEffectTimer);
+        frozenEffectTimer = null;
+    }
+
+    if (!isPaused) {
+        activeObjects.forEach(obj => applyObjectAnimationTimeScale(obj, now));
+    }
+}
+
+function activateFrozenEffect() {
+    const now = Date.now();
+
+    if (isFrozenEffectActive(now) && !isPaused) {
+        activeObjects.forEach(obj => syncObjectLifetime(obj, now));
+    }
+
+    frozenEffectStartedAt = now;
+    frozenEffectEndsAt = now + FROZEN_EFFECT_DURATION_MS;
+
+    if (frozenEffectTimer) {
+        clearTimeout(frozenEffectTimer);
+    }
+
+    frozenEffectTimer = setTimeout(finishFrozenEffect, FROZEN_EFFECT_DURATION_MS);
+    activeObjects.forEach(obj => applyObjectAnimationTimeScale(obj, now));
 }
 
 
@@ -711,6 +880,7 @@ function showLevelSelect() {
 function startLevel(index) {
   // Очищаем предыдущий уровень: останавливаем интервалы и таймеры
   clearSpawnTimer();
+  finishFrozenEffect();
   
   // Мгновенно удаляем все активные объекты предыдущего уровня
   if (activeObjects.length > 0) {
@@ -927,6 +1097,7 @@ function prepareObjectQueue() {
     const killableTypes = Object.keys(spawnWeights).filter(type =>
         type !== 'bomb' &&
         (type === 'bug' ||
+         type === 'frozen' ||
          type === 'fat' ||
          type.startsWith('coloredBug_') ||
          type.startsWith('fatColoredBug_'))
@@ -989,13 +1160,23 @@ function prepareObjectQueue() {
     }
 }
 
+const FIELD_PULSE_SCALE = 1.2;
+const DEFAULT_PULSE_DURATION = 0.2;
+const FAT_PULSE_DURATION = 0.7;
+const COLLISION_PADDING = 8;
+
+function getCollisionRadius(obj) {
+    const footprint = (obj && obj._footprint) ? obj._footprint : Math.max(obj.width, obj.height);
+    return (footprint * FIELD_PULSE_SCALE) / 2;
+}
+
 function checkCollision(obj1, obj2) {
-    const padding = 4;
-    const r1 = (obj1 && obj1._footprint) ? obj1._footprint / 2 : Math.max(obj1.width, obj1.height) / 2;
-    const r2 = (obj2 && obj2._footprint) ? obj2._footprint / 2 : Math.max(obj2.width, obj2.height) / 2;
+    const r1 = getCollisionRadius(obj1);
+    const r2 = getCollisionRadius(obj2);
     const dx = (obj1.x) - (obj2.x);
     const dy = (obj1.y) - (obj2.y);
-    return Math.abs(dx) < (r1 + r2 + padding) && Math.abs(dy) < (r1 + r2 + padding);
+    const minDistance = r1 + r2 + COLLISION_PADDING;
+    return (dx * dx + dy * dy) < (minDistance * minDistance);
 }
 
 // Проверка, что объект полностью в пределах поля
@@ -1053,6 +1234,18 @@ function animateFatBugSquish(container) {
         });
 }
 
+function addFieldPulseAnimation(container, duration = DEFAULT_PULSE_DURATION) {
+    const pulseAnim = gsap.to(container.scale, {
+        x: FIELD_PULSE_SCALE,
+        y: FIELD_PULSE_SCALE,
+        duration,
+        yoyo: true,
+        repeat: -1,
+        ease: "sine.inOut"
+    });
+    container.animations.push(pulseAnim);
+}
+
 // --- Safe bounds helpers ---
 // Возвращает безопасные границы спавна с учётом рамки и небольшого запаса под анимации
 // Возвращает итоговый «след» объекта (размер коллизии) на этапе спавна.
@@ -1076,8 +1269,8 @@ function getSafeSpawnBounds(objSize) {
 
 // Подтягивает объект внутрь безопасной зоны (при ресайзе/перестроении UI)
 function clampToSafeArea(obj) {
-  const size = Math.max(obj.width, obj.height);
-  const { minX, maxX, minY, maxY } = getSafeSpawnBounds(footprint);
+  const size = obj._footprint || Math.max(obj.width, obj.height);
+  const { minX, maxX, minY, maxY } = getSafeSpawnBounds(size);
   if (minX <= maxX) obj.x = Math.min(Math.max(obj.x, minX), maxX);
   if (minY <= maxY) obj.y = Math.min(Math.max(obj.y, minY), maxY);
 }
@@ -1167,28 +1360,10 @@ const container = new PIXI.Container();
     if (type.startsWith('fatColoredBug_')) {
         const color = type.split('_')[1];
         visual = new PIXI.Sprite(TEXTURES[`coloredBug_${color}`]);
-        if (color === 'blue') visual.tint = COLORS.blue;
         visual.anchor.set(0.5);
         visual.width = size * 2;
         visual.height = size * 2;
         container.addChild(visual);
-
-        // Add glow effect for colored bugs
-        const glow = new PIXI.Graphics();
-        glow.beginFill(COLORS[color], 0.3);
-        glow.drawCircle(0, 0, size * 1.2);
-        glow.endFill();
-        container.addChildAt(glow, 0);
-
-        // Pulse animation for colored bugs
-        const pulseAnim = gsap.to(glow, {
-            alpha: 0.1,
-            duration: 0.8,
-            yoyo: true,
-            repeat: -1,
-            ease: "sine.inOut"
-        });
-        container.animations.push(pulseAnim);
 
         // White text with remaining clicks
         const countText = new PIXI.Text(data.clicks, {
@@ -1205,28 +1380,10 @@ const container = new PIXI.Container();
     } else if (type.startsWith('coloredBug_')) {
         const color = type.split('_')[1];
         visual = new PIXI.Sprite(TEXTURES[`coloredBug_${color}`]);
-        if (color === 'blue') visual.tint = COLORS.blue;
         visual.anchor.set(0.5);
         visual.width = size;
         visual.height = size;
         container.addChild(visual);
-
-        // Add glow effect for colored bugs
-        const glow = new PIXI.Graphics();
-        glow.beginFill(COLORS[color], 0.3);
-        glow.drawCircle(0, 0, size * 0.6);
-        glow.endFill();
-        container.addChildAt(glow, 0);
-
-        // Pulse animation for colored bugs
-        const pulseAnim = gsap.to(glow, {
-            alpha: 0.1,
-            duration: 0.8,
-            yoyo: true,
-            repeat: -1,
-            ease: "sine.inOut"
-        });
-        container.animations.push(pulseAnim);
     } else if (type === 'fat') {
         visual = new PIXI.Sprite(TEXTURES['bug']);
         visual.anchor.set(0.5);
@@ -1246,41 +1403,28 @@ const container = new PIXI.Container();
         countText.anchor.set(0.5);
         countText.name = 'clickText';
         container.addChild(countText);
+    } else if (type === 'frozen') {
+        visual = new PIXI.Sprite(TEXTURES['frozen'] || TEXTURES['bug']);
+        visual.anchor.set(0.5);
+        visual.width = size;
+        visual.height = size;
+        container.addChild(visual);
     } else {
         visual = new PIXI.Sprite(TEXTURES[type]);
         visual.anchor.set(0.5);
         visual.width = size;
         visual.height = size;
         container.addChild(visual);
-        
-        // Пульсация для бомбы
-        const pulseAnim = gsap.to(container.scale, {
-            x: 1.2,
-            y: 1.2,
-            duration: 0.2,
-            yoyo: true,
-            repeat: -1,
-            ease: "sine.inOut"
-        });
-        container.animations.push(pulseAnim);
     }
 
-    // Store lifetime end time
-    // Lifetime already comes from species base config multiplied by the level modifier.
-    container.lifetimeEnd = Date.now() + data.lifetime;
+    // Lifetime is tracked as remaining time so temporary effects can scale it at runtime.
+    container.remainingLifetimeMs = data.lifetime;
+    container.lastLifetimeSyncAt = Date.now();
 
-    // Update animation code to store animations
-    if (type === 'bomb') {
-        const pulseAnim = gsap.to(container.scale, {
-            x: 1.2,
-            y: 1.2,
-            duration: 0.2,
-            yoyo: true,
-            repeat: -1,
-            ease: "sine.inOut"
-        });
-        container.animations.push(pulseAnim);
-    }
+    // Every bug gets the same field pulse; fat bugs pulse slower.
+    const pulseDuration = isFat ? FAT_PULSE_DURATION : DEFAULT_PULSE_DURATION;
+    addFieldPulseAnimation(container, pulseDuration);
+    applyObjectAnimationTimeScale(container);
 
     // Click handling
     container.on('pointerdown', () => {
@@ -1376,6 +1520,22 @@ const container = new PIXI.Container();
                 // Not enough clicks yet - show squish animation
                 animateFatBugSquish(container);
             }
+        } else if (type === 'frozen') {
+            score++;
+            container.interactive = false;
+            container.buttonMode = false;
+            showFrozenWave(container.x, container.y);
+            activateFrozenEffect();
+            gsap.delayedCall(0.12, () => {
+                animateRemoveObject(container, () => {
+                    updateUI();
+                    if (score >= levelData.goalBugCount) {
+                        endGame(true);
+                    } else if (life <= 0) {
+                        endGame(false);
+                    }
+                });
+            });
         } else {
             // Regular bug
             score++;
@@ -1410,39 +1570,10 @@ const container = new PIXI.Container();
         delay: 0.1
     });
     container.animations.push(fadeAnim);
+    applyObjectAnimationTimeScale(container);
 
-    // Update lifetime timeout to use stored end time
-    const checkLifetime = () => {
-        if (!playArea.children.includes(container)) return;
-        
-        const remainingTime = container.lifetimeEnd - Date.now();
-        if (remainingTime <= 0 && !isPaused) { // Only remove if not paused
-            // Lifetime expired - remove object
-            gsap.to(container, {
-                y: container.y + 100,
-                alpha: 0,
-                duration: 0.4,
-                ease: "power1.in",
-                onComplete: () => {
-                    if (playArea.children.includes(container)) {
-                        playArea.removeChild(container);
-                        activeObjects = activeObjects.filter(o => o !== container);
-
-                        if (!levelEnded && type !== 'bomb') {
-                            life--;
-                            updateUI();
-                            if (life <= 0) endGame(false);
-                        }
-                    }
-                }
-            });
-        } else {
-            // Check again in a bit, but more frequently if paused
-            const checkInterval = isPaused ? 100 : Math.min(remainingTime, 1000);
-            container.lifetimeCheckTimeout = setTimeout(checkLifetime, checkInterval);
-        }
-    };
-    container.lifetimeCheckTimeout = setTimeout(checkLifetime, 100);
+    // Spawned bugs start their lifetime checks from remaining lifetime state.
+    startLifetimeCheck(container);
 
     // Schedule the next spawn using this bug type's resolved spawn interval.
     scheduleNextSpawn(data.spawnInterval);
@@ -1489,6 +1620,7 @@ function updateUI() {
 // конец игры
 function endGame(won) {
     clearSpawnTimer();
+    finishFrozenEffect();
     levelEnded = true;
     freezeActiveObjects();
 
@@ -1652,6 +1784,9 @@ function animateAppear(obj, duration = 500) {
 // Универсальная выдача текстуры по типу
 function getTextureForType(t) {
   if (!t) return TEXTURES['bug'];
+  if (t === 'frozen') {
+    return TEXTURES['bug'];
+  }
   if (t.startsWith('fatColoredBug_')) {
     const color = t.split('_')[1];
     return TEXTURES[`coloredBug_${color}`] || TEXTURES['bug'];
@@ -1699,7 +1834,7 @@ function showIntroPopup(cfg, onClose) {
   const iconTex = getTextureForType(cfg?.type);
   const icon = new PIXI.Sprite(iconTex);
   icon.anchor.set(0.5);
-  if (cfg?.type?.includes('_blue')) icon.tint = COLORS.blue;
+  if (cfg?.type === 'frozen') icon.tint = FROZEN_WAVE_COLOR;
   c.addChild(icon);
 
   // Текст-описание (берём из cfg.descryption)
@@ -2113,8 +2248,7 @@ function showPausePopup() {
     // Pause all active objects
     activeObjects.forEach(obj => {
         // Store the remaining lifetime
-        const remainingTime = obj.lifetimeEnd - Date.now();
-        obj.pausedLifetime = remainingTime;
+        obj.pausedLifetime = syncObjectLifetime(obj);
         
         // Clear existing lifetime check timeout
         if (obj.lifetimeCheckTimeout) {
@@ -2361,51 +2495,17 @@ function resumeGame() {
     const currentTime = Date.now();
     activeObjects.forEach(obj => {
         if (obj.pausedLifetime) {
-            // Update lifetime end based on remaining time
-            obj.lifetimeEnd = currentTime + obj.pausedLifetime;
+            obj.remainingLifetimeMs = obj.pausedLifetime;
+            obj.lastLifetimeSyncAt = currentTime;
             delete obj.pausedLifetime;
-            
-            // Restart lifetime check
-            const checkLifetime = () => {
-                if (!playArea.children.includes(obj)) return;
-                
-                const remainingTime = obj.lifetimeEnd - Date.now();
-                if (remainingTime <= 0 && !isPaused) {
-                    // Lifetime expired - remove object
-                    gsap.to(obj, {
-                        y: obj.y + 100,
-                        alpha: 0,
-                        duration: 0.4,
-                        ease: "power1.in",
-                        onComplete: () => {
-                            if (playArea.children.includes(obj)) {
-                                playArea.removeChild(obj);
-                                activeObjects = activeObjects.filter(o => o !== obj);
-                                
-                                const type = obj.type;
-                                if (!levelEnded && type !== 'bomb') { // ⛔ после победы не штрафуем
-                                    life--;
-                                    updateUI();
-                                    if (life <= 0) endGame(false);
-                                }
-                            }
-                        }
-                    });
-                } else {
-                    // Check again in a bit
-                    const checkInterval = isPaused ? 100 : Math.min(remainingTime, 1000);
-                    obj.lifetimeCheckTimeout = setTimeout(checkLifetime, checkInterval);
-                }
-            };
-            obj.lifetimeCheckTimeout = setTimeout(checkLifetime, 100);
+            startLifetimeCheck(obj);
         }
-        
-        // Resume any active animations
+
         if (obj.animations) {
+            applyObjectAnimationTimeScale(obj, currentTime);
             obj.animations.forEach(anim => anim.resume());
         }
-        
-        // Re-enable interaction
+
         obj.interactive = true;
         obj.buttonMode = true;
     });
@@ -2449,47 +2549,34 @@ function buildBottomBar(coloredTypes) {
 
     // --- кнопки ---
     dynamicColorKeyMap = {};
+    colorButtonsContainer = bottomBar;
 
-    const defaultOrder = ['red', 'blue', 'green', 'yellow'];
-    const buttonOrder = levelData.colorButtonOrder || defaultOrder;
-
-    // какие цвета реально нужны на уровне
-    const usedColors = buttonOrder.filter(color =>
-        coloredTypes.some(type => type.endsWith(`_${color}`))
+    const usedColors = new Set(
+        coloredTypes.map(type => type.split('_')[1]).filter(Boolean)
     );
 
-    // раскладка клавиш по позициям
-    const keys = ['q', 'w', 'e', 'r'];
-
-    // считаем ширину группы цветных кнопок
-    const n = usedColors.length;
-    const colorGroupW = n > 0 ? (n * btnSz + (n - 1) * gap) : 0;
-
-    // пауза справа
     const pauseX = barWidth - gap - btnSz;
     const y = (barH - btnSz) / 2;
 
-    // старт X для цветных: по центру, но так, чтобы не залезать на pause
+    // Fixed slots: red, purple(blue internal key), green, yellow.
+    const slotCount = COLOR_BUTTON_SLOTS.length;
+    const colorGroupW = slotCount * btnSz + (slotCount - 1) * gap;
     const maxRight = pauseX - gap;
     let startX = (barWidth - colorGroupW) / 2;
     if (startX + colorGroupW > maxRight) {
         startX = Math.max(gap, maxRight - colorGroupW);
     }
 
-    let x = startX;
+    COLOR_BUTTON_SLOTS.forEach((slot, index) => {
+        if (!usedColors.has(slot.color)) return;
+        dynamicColorKeyMap[slot.key] = slot.color;
 
-    usedColors.forEach((color, i) => {
-        dynamicColorKeyMap[keys[i]] = color;
-
-        const btn = createColorButton(color, btnSz, keys[i], !IS_TOUCH);
-        btn.x = x;
+        const btn = createColorButton(slot.color, btnSz, slot.key, !IS_TOUCH);
+        btn.x = startX + index * (btnSz + gap);
         btn.y = y;
         bottomBar.addChild(btn);
-
-        x += btnSz + gap;
     });
 
-    // --- кнопка паузы ---
     let pauseButton = bottomBar.getChildByName('pauseButton');
     if (!pauseButton) {
         pauseButton = new PIXI.Container();

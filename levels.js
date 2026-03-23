@@ -208,7 +208,7 @@ const levels = [
     lifeCount: 7,
     params: {
       maxObjects: 3,
-      lifetimeMultiplier: 1,
+      lifetimeMultiplier: 2,
       spawnMultiplier: 1,
       spawnWeights: {
         coloredBug_red: 1,
@@ -259,6 +259,7 @@ const levels = [
         bug: 0.5,
         coloredBug_red: 1,
         fat: 0.5,
+        frozen: 0.3,
       },
     },
   },
@@ -661,7 +662,7 @@ const levels = [
     goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
+      maxObjects: 3,
       lifetimeMultiplier: 1.2,
       spawnMultiplier: 1,
       spawnWeights: {
@@ -679,11 +680,12 @@ const levels = [
     goalBugCount: 45,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
+      maxObjects: 6,
       lifetimeMultiplier: 1,
-      spawnMultiplier: 1,
+      spawnMultiplier: 0.9,
       spawnWeights: {
-
+        bug: 1,
+        bomb: 0.6,
       },
     },
   },
@@ -692,33 +694,39 @@ const levels = [
     goalBugCount: 45,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 1.2,
       spawnMultiplier: 1,
       spawnWeights: {
-
+        bug: 0.4,
+        coloredBug_red: 1,
+        coloredBug_blue: 1,
       },
     },
   },
   {
     id: 48,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
       maxObjects: 4,
       lifetimeMultiplier: 1,
       spawnMultiplier: 1,
       spawnWeights: {
-
+        coloredBug_green: 1,
       },
+    },
+    introPopup: {
+      type: "coloredBug_green",
+      descryption: "НАЖМИ и Удерживай ЗЕЛЁНУЮ кнопку и нажми на ЗЕЛЁНОГО жука!",
     },
   },
   {
     id: 49,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
+      maxObjects: 6,
       lifetimeMultiplier: 1,
       spawnMultiplier: 1,
       spawnWeights: {
@@ -728,11 +736,11 @@ const levels = [
   },
   {
     id: 50,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 6,
+      lifetimeMultiplier: 1.5,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -741,11 +749,11 @@ const levels = [
   },
   {
     id: 51,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 1.4,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -754,10 +762,10 @@ const levels = [
   },
   {
     id: 52,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
+      maxObjects: 5,
       lifetimeMultiplier: 1,
       spawnMultiplier: 1,
       spawnWeights: {
@@ -767,11 +775,11 @@ const levels = [
   },
   {
     id: 53,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 1.2,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -780,11 +788,11 @@ const levels = [
   },
   {
     id: 54,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
       maxObjects: 4,
-      lifetimeMultiplier: 1,
+      lifetimeMultiplier: 0.7,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -793,11 +801,11 @@ const levels = [
   },
   {
     id: 55,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 1.5,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -806,11 +814,11 @@ const levels = [
   },
   {
     id: 56,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 1.5,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -819,11 +827,11 @@ const levels = [
   },
   {
     id: 57,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 1.4,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -832,10 +840,10 @@ const levels = [
   },
   {
     id: 58,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
+      maxObjects: 5,
       lifetimeMultiplier: 1,
       spawnMultiplier: 1,
       spawnWeights: {
@@ -845,11 +853,11 @@ const levels = [
   },
   {
     id: 59,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 1.2,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -858,11 +866,11 @@ const levels = [
   },
   {
     id: 60,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 6,
+      lifetimeMultiplier: 0.7,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -871,11 +879,11 @@ const levels = [
   },
   {
     id: 61,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 6,
+      lifetimeMultiplier: 1.5,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -884,11 +892,11 @@ const levels = [
   },
   {
     id: 62,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 6,
+      lifetimeMultiplier: 1.5,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -897,11 +905,11 @@ const levels = [
   },
   {
     id: 63,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 6,
+      lifetimeMultiplier: 1.4,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -910,10 +918,10 @@ const levels = [
   },
   {
     id: 64,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
+      maxObjects: 6,
       lifetimeMultiplier: 1,
       spawnMultiplier: 1,
       spawnWeights: {
@@ -923,11 +931,11 @@ const levels = [
   },
   {
     id: 65,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 6,
+      lifetimeMultiplier: 1.2,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -936,11 +944,11 @@ const levels = [
   },
   {
     id: 66,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 6,
+      lifetimeMultiplier: 0.7,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -949,11 +957,11 @@ const levels = [
   },
   {
     id: 67,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 6,
+      lifetimeMultiplier: 1.5,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -962,11 +970,11 @@ const levels = [
   },
   {
     id: 68,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 6,
+      lifetimeMultiplier: 1.5,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -975,11 +983,11 @@ const levels = [
   },
   {
     id: 69,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 6,
+      lifetimeMultiplier: 1.4,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -988,10 +996,10 @@ const levels = [
   },
   {
     id: 70,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
+      maxObjects: 6,
       lifetimeMultiplier: 1,
       spawnMultiplier: 1,
       spawnWeights: {
@@ -1001,11 +1009,11 @@ const levels = [
   },
   {
     id: 71,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 1.2,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -1014,11 +1022,11 @@ const levels = [
   },
   {
     id: 72,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 0.7,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -1027,11 +1035,11 @@ const levels = [
   },
   {
     id: 73,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 1.5,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -1040,11 +1048,11 @@ const levels = [
   },
   {
     id: 74,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 1.5,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -1053,11 +1061,11 @@ const levels = [
   },
   {
     id: 75,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 1.4,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -1066,10 +1074,10 @@ const levels = [
   },
   {
     id: 76,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
+      maxObjects: 5,
       lifetimeMultiplier: 1,
       spawnMultiplier: 1,
       spawnWeights: {
@@ -1079,11 +1087,11 @@ const levels = [
   },
   {
     id: 77,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 1.2,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -1092,11 +1100,11 @@ const levels = [
   },
   {
     id: 78,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 0.7,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -1105,11 +1113,11 @@ const levels = [
   },
   {
     id: 79,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 5,
+      lifetimeMultiplier: 1.5,
       spawnMultiplier: 1,
       spawnWeights: {
 
@@ -1118,14 +1126,14 @@ const levels = [
   },
   {
     id: 80,
-    goalBugCount: 45,
+    goalBugCount: 60,
     lifeCount: 10,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1,
+      maxObjects: 6,
+      lifetimeMultiplier: 0.5,
       spawnMultiplier: 1,
       spawnWeights: {
-
+        bug: 1,
       },
     },
   }

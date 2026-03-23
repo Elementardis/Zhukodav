@@ -16,6 +16,11 @@ export const BUG_BALANCE = {
     spawnInterval: 450,
     clicks: 1,
   },
+  "frozen": {
+    lifetime: 2000,
+    spawnInterval: 450,
+    clicks: 1,
+  },
   "coloredBug_red": {
     lifetime: 2250,
     spawnInterval: 400,
