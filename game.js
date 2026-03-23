@@ -1785,7 +1785,7 @@ function animateAppear(obj, duration = 500) {
 function getTextureForType(t) {
   if (!t) return TEXTURES['bug'];
   if (t === 'frozen') {
-    return TEXTURES['bug'];
+    return TEXTURES['frozen'] || TEXTURES['bug'];
   }
   if (t.startsWith('fatColoredBug_')) {
     const color = t.split('_')[1];
@@ -1834,7 +1834,6 @@ function showIntroPopup(cfg, onClose) {
   const iconTex = getTextureForType(cfg?.type);
   const icon = new PIXI.Sprite(iconTex);
   icon.anchor.set(0.5);
-  if (cfg?.type === 'frozen') icon.tint = FROZEN_WAVE_COLOR;
   c.addChild(icon);
 
   // Текст-описание (берём из cfg.descryption)
