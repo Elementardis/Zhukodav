@@ -1,4 +1,5 @@
 import levels from './levels.js';
+import { getBugBaseBalance } from './bug-config.js';
 import { initBackend, fetchRemoteLevel, saveProgress, trackEvent, recalcLeaderboard, rcNumber } from './firebase.js';
 
 // ==== Global Constants ====
@@ -26,7 +27,7 @@ let playArea, scoreText, lifeText;
 let levelData;
 let objectQueue = [];
 let isPaused = false;
-let spawnInterval;
+let spawnTimer = null;
 let score = 0;
 let life = 0;
 // состояние уровня
@@ -34,6 +35,62 @@ let levelEnded = false; // true — как только показан попа�
 
 // Показывается ли сейчас интро‑попап (блокируем спавн до закрытия)
 let introActive = false;
+
+// Runtime balance is always derived from base bug config * level multipliers.
+function getLevelLifetimeMultiplier(type) {
+    const multiplier = levelData?.params?.lifetimeMultiplier ?? 1;
+    if (typeof multiplier === 'number') return multiplier;
+    return multiplier[type] ?? multiplier.default ?? 1;
+}
+
+function getLevelSpawnConfig() {
+    return levelData?.params?.spawnMultiplier ?? {};
+}
+
+function getLevelSpawnIntervalMultiplier(type) {
+    const spawnMultiplier = getLevelSpawnConfig();
+    if (typeof spawnMultiplier === 'number') return spawnMultiplier;
+
+    const interval = spawnMultiplier.intervalMultiplier;
+    if (typeof interval === 'number') return interval;
+    if (interval && typeof interval === 'object') {
+        return interval[type] ?? interval.default ?? 1;
+    }
+
+    return spawnMultiplier.default ?? 1;
+}
+
+
+
+function getRuntimeBugBalance(type) {
+    const baseBalance = getBugBaseBalance(type);
+    const lifetimeMultiplier = getLevelLifetimeMultiplier(type);
+    const spawnIntervalMultiplier = getLevelSpawnIntervalMultiplier(type);
+
+    // Итоговые параметры жука считаются из базовых значений вида * коэффициенты уровня.
+    return {
+        lifetime: baseBalance.lifetime * lifetimeMultiplier,
+        spawnInterval: baseBalance.spawnInterval / spawnIntervalMultiplier,
+        clicks: baseBalance.clicks,
+    };
+}
+
+function clearSpawnTimer() {
+    if (spawnTimer) {
+        clearTimeout(spawnTimer);
+        spawnTimer = null;
+    }
+}
+
+function scheduleNextSpawn(delay) {
+    clearSpawnTimer();
+
+    if (isPaused || introActive || levelEnded) return;
+    if (objectQueue.length === 0) return;
+
+    const nextDelay = Math.max(50, Math.round(delay ?? objectQueue[0].spawnInterval ?? 450));
+    spawnTimer = setTimeout(spawnObject, nextDelay);
+}
 
 
 // Color button state
@@ -653,7 +710,7 @@ function showLevelSelect() {
 // запускаем уровень
 function startLevel(index) {
   // Очищаем предыдущий уровень: останавливаем интервалы и таймеры
-  clearInterval(spawnInterval);
+  clearSpawnTimer();
   
   // Мгновенно удаляем все активные объекты предыдущего уровня
   if (activeObjects.length > 0) {
@@ -677,7 +734,7 @@ function startLevel(index) {
     // реальный старт спавна
   const startSpawning = () => {
     prepareObjectQueue();
-    spawnInterval = setInterval(spawnObject, levelData.params.spawnInterval);
+    scheduleNextSpawn(0);
     if (typeof levelData.onEnterLevel === 'function') levelData.onEnterLevel();
   };
 
@@ -743,7 +800,7 @@ function setupPlayArea() {
     const header = buildLevelHeader(fieldWrapper, levelData);
 
     // Setup bottom bar with colored types
-    const coloredTypes = Object.keys(levelData.spawnWeights).filter(type => 
+    const coloredTypes = Object.keys(levelData.params.spawnWeights || {}).filter(type => 
         type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_')
     );
     buildBottomBar(coloredTypes);
@@ -865,45 +922,45 @@ function weightedRandomChoice(weights) {
 // очередь объектов
 function prepareObjectQueue() {
     objectQueue = [];
+    const spawnWeights = levelData.params.spawnWeights || {};
 
-    // Разделяем типы на убиваемые и неубиваемые
-    const killableTypes = Object.keys(levelData.spawnWeights).filter(type => 
-        type !== 'bomb' && 
-        (type === 'bug' || 
-         type === 'fat' || 
-         type.startsWith('coloredBug_') || 
+    const killableTypes = Object.keys(spawnWeights).filter(type =>
+        type !== 'bomb' &&
+        (type === 'bug' ||
+         type === 'fat' ||
+         type.startsWith('coloredBug_') ||
          type.startsWith('fatColoredBug_'))
     );
 
-    const unkillableTypes = Object.keys(levelData.spawnWeights).filter(type => 
-        type === 'bomb'
-    );
-
-    // Создаем отдельные веса для убиваемых и неубиваемых
+    const unkillableTypes = Object.keys(spawnWeights).filter(type => type === 'bomb');
     const killableWeights = {};
     const unkillableWeights = {};
 
     for (const type of killableTypes) {
-        killableWeights[type] = levelData.spawnWeights[type];
+        killableWeights[type] = spawnWeights[type];
     }
     for (const type of unkillableTypes) {
-        unkillableWeights[type] = levelData.spawnWeights[type];
+        unkillableWeights[type] = spawnWeights[type];
     }
 
-    // Генерируем убиваемых жуков (минимум goalBugCount * 3)
     const minKillableCount = levelData.goalBugCount * 3;
     let killableCount = 0;
-    
+
     while (killableCount < minKillableCount) {
         const type = weightedRandomChoice(killableWeights);
         if (!type) break;
 
-        // Создаем объект с нужными параметрами
-        const objectData = { type };
-        
-        // Добавляем специфичные параметры для разных типов
+        const runtimeBalance = getRuntimeBugBalance(type);
+
+        // Final bug params are resolved at runtime from species base values and level multipliers.
+        const objectData = {
+            type,
+            lifetime: runtimeBalance.lifetime,
+            spawnInterval: runtimeBalance.spawnInterval,
+        };
+
         if (type === 'fat' || type.startsWith('fatColoredBug_')) {
-            objectData.clicks = 3; // Требуется 3 клика для уничтожения толстого жука
+            objectData.clicks = runtimeBalance.clicks;
         }
         if (type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_')) {
             objectData.color = type.split('_')[1];
@@ -913,23 +970,25 @@ function prepareObjectQueue() {
         killableCount++;
     }
 
-    // Добавляем неубиваемых (бомбы)
-    const bombCount = Math.floor(killableCount * 0.2); // 20% от количества убиваемых
+    const bombCount = Math.floor(killableCount * 0.2);
     for (let i = 0; i < bombCount; i++) {
         const type = weightedRandomChoice(unkillableWeights);
-        if (type) {
-            objectQueue.push({ type });
-        }
+        if (!type) continue;
+
+        const runtimeBalance = getRuntimeBugBalance(type);
+        objectQueue.push({
+            type,
+            lifetime: runtimeBalance.lifetime,
+            spawnInterval: runtimeBalance.spawnInterval,
+        });
     }
 
-    // Перемешиваем очередь
     for (let i = objectQueue.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [objectQueue[i], objectQueue[j]] = [objectQueue[j], objectQueue[i]];
     }
 }
 
-// Проверка пересечения двух объектов
 function checkCollision(obj1, obj2) {
     const padding = 4;
     const r1 = (obj1 && obj1._footprint) ? obj1._footprint / 2 : Math.max(obj1.width, obj1.height) / 2;
@@ -1025,15 +1084,14 @@ function clampToSafeArea(obj) {
 
 // генерация объекта
 function spawnObject() {
-    // Пока открыт интро‑попап — ничего не спауним
-    if (introActive) return;
-    
-    // Если игра закончена (показ попапа победы/поражения) — ничего не спауним
-    if (levelEnded) return;
+    // Runtime spawn uses the queued bug config instead of hardcoded level spawn values.
+    if (introActive || levelEnded) return;
 
-    if (activeObjects.length >= levelData.params.maxObjects) return;
+    if (activeObjects.length >= levelData.params.maxObjects) {
+        scheduleNextSpawn(100);
+        return;
+    }
     if (objectQueue.length === 0) return;
-
 
     const data = objectQueue.shift();
     const type = data.type;
@@ -1067,6 +1125,7 @@ const container = new PIXI.Container();
     // Если безопасная область не вмещает объект — отложим спавн
     if (minX > maxX || minY > maxY) {
         objectQueue.unshift(data);
+        scheduleNextSpawn(100);
         return;
     }
 
@@ -1099,6 +1158,7 @@ const container = new PIXI.Container();
     // Если не найдена позиция, возвращаем объект в очередь
     if (!positionFound) {
         objectQueue.unshift(data);
+        scheduleNextSpawn(100);
         return;
     }
 
@@ -1206,7 +1266,8 @@ const container = new PIXI.Container();
     }
 
     // Store lifetime end time
-    container.lifetimeEnd = Date.now() + levelData.params.objectLifetime;
+    // Lifetime already comes from species base config multiplied by the level modifier.
+    container.lifetimeEnd = Date.now() + data.lifetime;
 
     // Update animation code to store animations
     if (type === 'bomb') {
@@ -1383,6 +1444,9 @@ const container = new PIXI.Container();
     };
     container.lifetimeCheckTimeout = setTimeout(checkLifetime, 100);
 
+    // Schedule the next spawn using this bug type's resolved spawn interval.
+    scheduleNextSpawn(data.spawnInterval);
+
     playArea.addChild(container);
     activeObjects.push(container);
 }
@@ -1424,7 +1488,7 @@ function updateUI() {
 
 // конец игры
 function endGame(won) {
-    clearInterval(spawnInterval);
+    clearSpawnTimer();
     levelEnded = true;
     freezeActiveObjects();
 
@@ -2044,7 +2108,7 @@ function showPausePopup() {
     isPaused = true;
     
     // Clear the spawn interval
-    clearInterval(spawnInterval);
+    clearSpawnTimer();
 
     // Pause all active objects
     activeObjects.forEach(obj => {
@@ -2290,8 +2354,8 @@ function animateRemoveObject(container, onAfterRemove) {
 }
 
 function resumeGame() {
-    // Resume spawn interval
-    spawnInterval = setInterval(spawnObject, levelData.params.spawnInterval);
+    // Resume spawn timer using the next queued bug balance.
+    scheduleNextSpawn();
 
     // Resume all active objects
     const currentTime = Date.now();

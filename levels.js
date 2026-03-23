@@ -1,473 +1,1134 @@
-// ========================== levels.js (v2) ==========================
-// Методология баланса (коротко):
-//   Давление = simultaneity * clickTax * colorTax
-//   simultaneity ≈ min(maxObjects, objectLifetime / spawnInterval)
-//   clickTax: среднее по весам типов (bug=1; colored=1; fat=3; fatColored=3)
-//   colorTax: 1 + 0.15 * (N_colors - 1)   // ограничиваем до 3 цветов одновременно
-//   Bombs: учитываются скорее как когнитивный шум (штраф только за клик).
-// Цели по потоку:
-//   1–3 онбординг (легко), 4–8 растяжка, 9–14 мастерство, 15 мини-пик,
-//   16–18 разгрузка, 19–25 плавный рост к финалу без ям и пиков.
-// Примечания по когн. нагрузке:
-//   • Одновременно держим 2–3 цвета (ранее спайки из 4+ цветов не допускаем).
-//   • В лейте растёт доля «толстых» (многокликовых) вместо чистого спама объектов.
-// ====================================================================
-
 const levels = [
   {
-    "id": 1,
-    "goalBugCount": 18,
-    "lifeCount": 10,
-    "params": {
-      "maxObjects": 3,
-      "spawnInterval": 480,
-      "objectLifetime": 2200
+    id: 1,
+    goalBugCount: 10,
+    lifeCount: 5,
+    params: {
+      maxObjects: 3,
+      lifetimeMultiplier: 1.1,
+      spawnMultiplier: 0.9,
+      spawnWeights: {
+        bug: 1,
+      },
     },
-    "spawnWeights": {
-      "bug": 1.0
-    }
   },
   {
-    "id": 2,
-    "goalBugCount": 18,
-    "lifeCount": 10,
-    "params": {
-      "maxObjects": 3,
-      "spawnInterval": 470,
-      "objectLifetime": 2300
+    id: 2,
+    goalBugCount: 15,
+    lifeCount: 5,
+    params: {
+      maxObjects: 3,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 1,
+      },
     },
-    "spawnWeights": {
-      "bug": 0.8,
-      "coloredBug_red": 0.2
+  },
+  {
+    id: 3,
+    goalBugCount: 20,
+    lifeCount: 5,
+    params: {
+      maxObjects: 3,
+      lifetimeMultiplier: 1.2,
+      spawnMultiplier: 0.8,
+      spawnWeights: {
+        bug: 1,
+        bomb: 1,
+      },
     },
-    "introPopup": {
-      "type": "coloredBug_red",
-      "descryption": "Удерживай КРАСНУЮ кнопку и нажми на КРАСНОГО жука!",
-    }
-  },
-  {
-    "id": 3,
-    "goalBugCount": 18,
-    "lifeCount": 10,
-    "params": {
-      "maxObjects": 3,
-      "spawnInterval": 430,
-      "objectLifetime": 2050
+    introPopup: {
+      type: "bomb",
+      descryption: "Берегись! Жуки-бомбардиры снимают жизни",
     },
-    "spawnWeights": {
-      "bug": 0.6,
-      "coloredBug_red": 0.4
-    }
   },
   {
-    "id": 4,
-    "goalBugCount": 45,
-    "lifeCount": 10,
-    "params": {
-      "maxObjects": 4,
-      "spawnInterval": 450,
-      "objectLifetime": 2000
+    id: 4,
+    goalBugCount: 30,
+    lifeCount: 5,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1.2,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 0.5,
+        bomb: 1,
+      },
     },
-    "spawnWeights": {
-      "bug": 0.6,
-      "coloredBug_red": 0.4
-    }
   },
   {
-    "id": 5,
-    "goalBugCount": 45,
-    "lifeCount": 10,
-    "params": {
-      "maxObjects": 4,
-      "spawnInterval": 450,
-      "objectLifetime": 2000
+    id: 5,
+    goalBugCount: 30,
+    lifeCount: 5,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 1,
+        bomb: 0.5,
+      },
     },
-    "spawnWeights": {
-      "bug": 0.85,
-      "fat": 0.15
+  },
+  {
+    id: 6,
+    goalBugCount: 30,
+    lifeCount: 5,
+    params: {
+      maxObjects: 5,
+      lifetimeMultiplier: 1.2,
+      spawnMultiplier: 0.9,
+      spawnWeights: {
+        bug: 1,
+        bomb: 0.3,
+      },
     },
-    "introPopup": {
-      "type": "fat",
-      "descryption": "Нажми на жука 3 РАЗА!",
-    }
   },
   {
-    "id": 6,
-    "goalBugCount": 45,
-    "lifeCount": 10,
-    "params": {
-      "maxObjects": 3,
-      "spawnInterval": 460,
-      "objectLifetime": 2100
+    id: 7,
+    goalBugCount: 45,
+    lifeCount: 5,
+    params: {
+      maxObjects: 5,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 1,
+        bomb: 1,
+      },
     },
-    "spawnWeights": {
-      "bug": 0.75,
-      "fat": 0.25
-    }
   },
   {
-      "id": 7,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 4,
-        "spawnInterval": 420,
-        "objectLifetime": 2000
+    id: 8,
+    goalBugCount: 30,
+    lifeCount: 5,
+    params: {
+      maxObjects: 6,
+      lifetimeMultiplier: 1.3,
+      spawnMultiplier: 1.2,
+      spawnWeights: {
+        bug: 2,
+        bomb: 0.5,
       },
-      "spawnWeights": {
-        "bug": 0.6,
-        "fat": 0.4
-      }
+    },
   },
   {
-      "id": 8,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 4,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 9,
+    goalBugCount: 30,
+    lifeCount: 5,
+    params: {
+      maxObjects: 6,
+      lifetimeMultiplier: 1.1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 2,
+        bomb: 1,
       },
-      "spawnWeights": {
-        "bug": 0.6,
-        "fat": 0.4
-      }
+    },
   },
   {
-      "id": 9,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 4,
-        "spawnInterval": 410,
-        "objectLifetime": 2200
+    id: 10,
+    goalBugCount: 20,
+    lifeCount: 7,
+    params: {
+      maxObjects: 5,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 0.7,
+      spawnWeights: {
+        bug: 1,
+        bomb: 0.3,
       },
-      "spawnWeights": {
-        "bug": 0.5,
-        "fat": 0.35,
-        "coloredBug_red": 0.15
-      }
+    },
   },
   {
-      "id": 10,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 5,
-        "spawnInterval": 450,
-        "objectLifetime": 2000  
+    id: 11,
+    goalBugCount: 15,
+    lifeCount: 7,
+    params: {
+      maxObjects: 3,
+      lifetimeMultiplier: 1.2,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 0.5,
+        fat: 1,
       },
-      "spawnWeights": {
-        "bug": 0.45,
-        "fat": 0.35,
-        "coloredBug_red": 0.2
-      }
+    },
+    introPopup: {
+      type: "fat",
+      descryption: "Нужно нажать 3 раза, чтобы Толстяк убежал",
+    },
   },
   {
-      "id": 11,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 5,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 12,
+    goalBugCount: 30,
+    lifeCount: 7,
+    params: {
+      maxObjects: 3,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1.5,
+      spawnWeights: {
+        bug: 0.7,
+        fat: 1,
       },
-      "spawnWeights": {
-        "bug": 0.45,
-        "fat": 0.35,
-        "coloredBug_red": 0.2
-      }
+    },
   },
   {
-      "id": 12,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 4,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 13,
+    goalBugCount: 45,
+    lifeCount: 7,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 0.9,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 0.8,
+        fat: 1,
       },
-      "spawnWeights": {
-        "bug": 0.8,
-        "coloredBug_blue": 0.2
-      },
-      "introPopup": {
-        "type": "coloredBug_blue",
-        "descryption": "Удерживай ФИОЛЕТОВУЮ кнопку и нажми ФИОЛЕТОВОГО жука!",
-      }
+    },
   },
   {
-      "id": 13,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 3,
-        "spawnInterval": 460,
-        "objectLifetime": 2100
+    id: 14,
+    goalBugCount: 45,
+    lifeCount: 7,
+    params: {
+      maxObjects: 3,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 1,
+        fat: 0.5,
+        bomb: 0.3,
       },
-      "spawnWeights": {
-        "bug": 0.7,
-        "coloredBug_blue": 0.3
-      }
+    },
   },
   {
-      "id": 14,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 4,
-        "spawnInterval": 420,
-        "objectLifetime": 2000
+    id: 15,
+    goalBugCount: 20,
+    lifeCount: 7,
+    params: {
+      maxObjects: 3,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        coloredBug_red: 1,
       },
-      "spawnWeights": {
-        "bug": 0.6,
-        "coloredBug_blue": 0.4
-      }
+    },
+    introPopup: {
+      type: "coloredBug_red",
+      descryption: "НАЖМИ и Удерживай КРАСНУЮ кнопку и нажми на КРАСНОГО жука!",
+    },
   },
   {
-      "id": 15,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 4,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 16,
+    goalBugCount: 45,
+    lifeCount: 7,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1.2,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 1,
+        coloredBug_red: 1,
       },
-      "spawnWeights": {
-        "bug": 0.6,
-        "coloredBug_blue": 0.4
-      }
+    },
   },
   {
-      "id": 16,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 5,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 17,
+    goalBugCount: 30,
+    lifeCount: 7,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1.1,
+      spawnMultiplier: 1.2,
+      spawnWeights: {
+        coloredBug_red: 1,
+        bomb: 0.5,
       },
-      "spawnWeights": {
-        "bug": 0.45,
-        "coloredBug_blue": 0.35,
-        "fat": 0.2
-      }
+    },
   },
   {
-      "id": 17,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 5,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 18,
+    goalBugCount: 45,
+    lifeCount: 7,
+    params: {
+      maxObjects: 5,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 0.7,
+      spawnWeights: {
+        bug: 0.5,
+        coloredBug_red: 1,
+        fat: 0.5,
       },
-      "spawnWeights": {
-        "bug": 0.45,
-        "coloredBug_blue": 0.35,
-        "coloredBug_red": 0.2
-      }
+    },
   },
   {
-      "id": 18,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 5,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 19,
+    goalBugCount: 45,
+    lifeCount: 7,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 0.7,
+      spawnWeights: {
+        bug: 0.5,
+        coloredBug_red: 0.4,
+        fat: 1,
       },
-      "spawnWeights": {
-        "bug": 0.4,
-        "coloredBug_blue": 0.35,
-        "fat": 0.25
-      }
+    },
   },
   {
-      "id": 19,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 5,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 20,
+    goalBugCount: 45,
+    lifeCount: 7,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 1,
+        coloredBug_red: 0.3,
+        fat: 0.5,
       },
-      "spawnWeights": {
-        "bug": 0.4,
-        "coloredBug_blue": 0.35,
-        "coloredBug_red": 0.25
-      }
+    },
   },
   {
-      "id": 20,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 4,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 21,
+    goalBugCount: 45,
+    lifeCount: 8,
+    params: {
+      maxObjects: 5,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 0.8,
+      spawnWeights: {
+        bug: 1,
+        coloredBug_red: 0.5,
+        bomb: 0.5,
       },
-      "spawnWeights": {
-        "bug": 0.8,
-        "fatColoredBug_red": 0.2
-      },
-      "introPopup": {
-        "type": "fatColoredBug_red",
-        "descryption": "УДЕРЖИВАЙ КРАСНУЮ кнопку и жми на КРАСНОГО жука 3 РАЗА!",
-      }
+    },
   },
   {
-      "id": 21,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 3,
-        "spawnInterval": 460,
-        "objectLifetime": 2100
+    id: 22,
+    goalBugCount: 45,
+    lifeCount: 8,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        coloredBug_blue: 1,
       },
-      "spawnWeights": {
-        "bug": 0.7,
-        "fatColoredBug_red": 0.3
-      }
+    },
+    introPopup: {
+      type: "coloredBug_blue",
+      descryption: "НАЖМИ и Удерживай СИНЮЮ кнопку и нажми на СИНЕГО жука!",
+    },
   },
   {
-      "id": 22,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 4,
-        "spawnInterval": 420,
-        "objectLifetime": 2000
+    id: 23,
+    goalBugCount: 45,
+    lifeCount: 8,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1.2,
+      spawnMultiplier: 1.3,
+      spawnWeights: {
+        coloredBug_red: 0.5,
+        coloredBug_blue: 1,
       },
-      "spawnWeights": {
-        "bug": 0.6,
-        "fatColoredBug_red": 0.4
-      }
+    },
   },
   {
-      "id": 23,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 4,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 24,
+    goalBugCount: 45,
+    lifeCount: 8,
+    params: {
+      maxObjects: 3,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1.2,
+      spawnWeights: {
+        coloredBug_red: 1,
+        coloredBug_blue: 1,
       },
-      "spawnWeights": {
-        "bug": 0.6,
-        "fatColoredBug_red": 0.4
-      }
+    },
   },
   {
-      "id": 24,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 5,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 25,
+    goalBugCount: 45,
+    lifeCount: 8,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        coloredBug_red: 1,
+        coloredBug_blue: 1,
+        bomb: 0.3,
       },
-      "spawnWeights": {
-        "bug": 0.45,
-        "fatColoredBug_red": 0.3,
-        "coloredBug_blue": 0.25
-      }
+    },
   },
   {
-      "id": 25,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 5,
-       "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 26,
+    goalBugCount: 45,
+    lifeCount: 8,
+    params: {
+      maxObjects: 5,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        coloredBug_red: 1,
+        coloredBug_blue: 0.5,
+        bomb: 0.5,
       },
-      "spawnWeights": {
-        "bug": 0.45,
-        "fatColoredBug_red": 0.35,
-        "coloredBug_red": 0.2
-      }
+    },
   },
   {
-      "id": 26,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 5,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 27,
+    goalBugCount: 45,
+    lifeCount: 8,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 1,
+        coloredBug_red: 1,
+        coloredBug_blue: 1,
       },
-      "spawnWeights": {
-        "bug": 0.4,
-        "fatColoredBug_red": 0.35,
-        "coloredBug_blue": 0.25
-      }
+    },
   },
   {
-      "id": 27,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 5,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 28,
+    goalBugCount: 45,
+    lifeCount: 8,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        coloredBug_red: 1,
+        fat: 0.3,
+        coloredBug_blue: 1,
       },
-      "spawnWeights": {
-        "bug": 0.4,
-        "fatColoredBug_red": 0.4,
-        "coloredBug_red": 0.2
-      }
+    },
   },
   {
-      "id": 28,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 4,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 29,
+    goalBugCount: 45,
+    lifeCount: 8,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 1,
+        coloredBug_red: 0.5,
+        coloredBug_blue: 0.5,
       },
-      "spawnWeights": {
-        "bug": 0.8,
-        "coloredBug_green": 0.2
-      },
-      "introPopup": {
-        "type": "coloredBug_green",
-        "descryption": "Удерживай ЗЕЛЁНУЮ кнопку и нажми на ЗЕЛЁНОГО жука!",
-      }
+    },
   },
   {
-      "id": 29,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 4,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 30,
+    goalBugCount: 45,
+    lifeCount: 8,
+    params: {
+      maxObjects: 5,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        coloredBug_red: 0.5,
+        fat: 1,
+        coloredBug_blue: 0.5,
       },
-      "spawnWeights": {
-        "bug": 0.7,
-        "coloredBug_green": 0.3
-      }
+    },
   },
   {
-      "id": 30,
-      "goalBugCount": 45,
-      "lifeCount": 10,
-      "params": {
-        "maxObjects": 5,
-        "spawnInterval": 450,
-        "objectLifetime": 2000
+    id: 31,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 3,
+      lifetimeMultiplier: 1.2,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 1,
+        coloredBug_red: 1,
+        fat: 0.5,
+        coloredBug_blue: 1,
       },
-      "spawnWeights": {
-        "bug": 0.45,
-        "coloredBug_green": 0.3,
-        "coloredBug_blue": 0.25
-      }
+    },
+  },
+  {
+    id: 32,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1.3,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 1,
+        coloredBug_red: 1,
+        fat: 0.5,
+        coloredBug_blue: 1,
+      },
+    },
+  },
+  {
+    id: 33,
+    goalBugCount: 30,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1.3,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        coloredBug_red: 1,
+        fat: 0.5,
+        coloredBug_blue: 1,
+        bomb: 1,
+      },
+    },
+  },
+  {
+    id: 34,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        coloredBug_red: 1,
+        fat: 0.5,
+        coloredBug_blue: 1,
+        bomb: 1,
+      },
+    },
+  },
+  {
+    id: 35,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        coloredBug_red: 1,
+        fatColoredBug_red: 1,
+      },
+    },
+    introPopup: {
+      type: "fatColoredBug_red",
+      descryption: "НАЖМИ и Удерживай КРАСНУЮ кнопку и нажми 3 раза на КРАСНОГО жука!",
+    },
+  },
+  {
+    id: 36,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        coloredBug_red: 0.5,
+        fatColoredBug_red: 1,
+      },
+    },
+  },
+  {
+    id: 37,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        coloredBug_red: 0.5,
+        coloredBug_blue: 0.5,
+        fatColoredBug_red: 1,
+      },
+    },
+  },
+  {
+    id: 38,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        fat: 1,
+        fatColoredBug_red: 1,
+      },
+    },
+  },
+  {
+    id: 39,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        fat: 1,
+        bomb: 1,
+        fatColoredBug_red: 1,
+      },
+    },
+  },
+  {
+    id: 40,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 1,
+        fat: 1,
+        fatColoredBug_red: 1,
+      },
+    },
+  },
+  {
+    id: 41,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        coloredBug_red: 1,
+        fatColoredBug_red: 1,
+      },
+    },
+  },
+  {
+    id: 42,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        fat: 1,
+        coloredBug_blue: 1,
+        fatColoredBug_red: 1,
+      },
+    },
+  },
+  {
+    id: 43,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        fat: 1,
+        bomb: 1,
+        fatColoredBug_red: 1,
+      },
+    },
+  },
+  {
+    id: 44,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        coloredBug_red: 1,
+        bomb: 1,
+        fatColoredBug_red: 1,
+      },
+    },
+  },
+  {
+    id: 45,
+    goalBugCount: 60,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1.2,
+      spawnMultiplier: 1,
+      spawnWeights: {
+        bug: 1,
+        coloredBug_red: 1,
+        fat: 1,
+        coloredBug_blue: 1,
+        bomb: 1,
+        fatColoredBug_red: 1,
+      },
+    },
+  },
+  {
+    id: 46,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 47,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 48,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 49,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 50,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 51,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 52,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 53,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 54,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 55,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 56,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 57,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 58,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 59,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 60,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 61,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 62,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 63,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 64,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 65,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 66,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 67,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 68,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 69,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 70,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 71,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 72,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 73,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 74,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 75,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 76,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 77,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 78,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 79,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
+  },
+  {
+    id: 80,
+    goalBugCount: 45,
+    lifeCount: 10,
+    params: {
+      maxObjects: 4,
+      lifetimeMultiplier: 1,
+      spawnMultiplier: 1,
+      spawnWeights: {
+
+      },
+    },
   }
-
-
-
 ];
 
 export default levels;
