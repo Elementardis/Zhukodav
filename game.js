@@ -127,6 +127,11 @@ function ensureSpawnTimerAfterUiChange() {
     scheduleNextSpawn(0);
 }
 
+function removeObjectFromActiveList(target) {
+    activeObjects = activeObjects.filter((obj) => obj !== target);
+    ensureSpawnTimerAfterUiChange();
+}
+
 function isFrozenEffectActive(now = Date.now()) {
     return frozenEffectEndsAt > now;
 }
@@ -533,8 +538,7 @@ function removeExpiredObject(obj) {
         onComplete: () => {
             if (playArea.children.includes(obj)) {
                 playArea.removeChild(obj);
-                activeObjects = activeObjects.filter(o => o !== obj);
-                ensureSpawnTimerAfterUiChange();
+                removeObjectFromActiveList(obj);
 
                 if (!levelEnded && obj.type !== 'bomb') {
                     life--;
@@ -678,7 +682,7 @@ function freezeActiveObjects() {
               ease: "power1.in",
               onComplete: () => {
                 if (obj.parent) obj.parent.removeChild(obj);
-                activeObjects = activeObjects.filter(o => o !== obj);
+                removeObjectFromActiveList(obj);
               }
             });
           });
@@ -2787,8 +2791,7 @@ function animateRemoveObject(container, onAfterRemove) {
                 ease: "back.in",
                 onComplete: () => {
                     if (container.parent) container.parent.removeChild(container);
-                    activeObjects = activeObjects.filter(o => o !== container);
-                    ensureSpawnTimerAfterUiChange();
+                    removeObjectFromActiveList(container);
                     if (onAfterRemove) onAfterRemove();
                 }
             });
