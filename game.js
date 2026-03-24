@@ -778,6 +778,54 @@ function clearActiveColor() {
     }
 }
 
+function getCenteredPopupBounds({
+    widthRatio = 0.8,
+    maxWidth = 480,
+    heightRatio = 0.72,
+    maxHeight = 420,
+    minHeight = 240,
+    screenMargin = 12
+} = {}) {
+    const availableWidth = Math.max(220, app.screen.width - screenMargin * 2);
+    const availableHeight = Math.max(180, app.screen.height - screenMargin * 2);
+    const targetWidth = Math.max(Math.min(280, availableWidth), Math.round(app.screen.width * widthRatio));
+    const targetHeight = Math.max(Math.min(minHeight, availableHeight), Math.round(app.screen.height * heightRatio));
+
+    const width = Math.min(maxWidth, availableWidth, targetWidth);
+    const height = Math.min(maxHeight, availableHeight, targetHeight);
+
+    return {
+        width,
+        height,
+        x: Math.round((app.screen.width - width) / 2),
+        y: Math.round((app.screen.height - height) / 2)
+    };
+}
+
+function getVerticalStackLayout({
+    popupHeight,
+    topY,
+    itemCount,
+    bottomPadding,
+    preferredHeight,
+    preferredGap,
+    minHeight = 42,
+    minGap = 8
+} = {}) {
+    const available = Math.max(0, popupHeight - topY - bottomPadding);
+    const rawHeight = itemCount > 0
+        ? Math.floor((available - minGap * Math.max(0, itemCount - 1)) / itemCount)
+        : preferredHeight;
+    const itemHeight = Math.max(minHeight, Math.min(preferredHeight, rawHeight));
+    const gap = itemCount > 1
+        ? Math.max(minGap, Math.min(preferredGap, Math.floor((available - itemHeight * itemCount) / (itemCount - 1))))
+        : 0;
+    const totalHeight = itemHeight * itemCount + gap * Math.max(0, itemCount - 1);
+    const startY = topY + Math.max(0, Math.floor((available - totalHeight) / 2)) + itemHeight / 2;
+
+    return { itemHeight, gap, startY };
+}
+
 window.addEventListener('keydown', (e) => {
     if (isPaused) return; // Don't handle keys during pause
     
@@ -1094,12 +1142,19 @@ function showLevelEntryPopup(levelIndex) {
     overlay.on('pointerdown', closeLevelEntryPopup);
     levelSelectContainer.addChild(overlay);
 
-    const popupWidth = Math.min(app.screen.width * 0.78, 420);
-    const popupHeight = Math.min(app.screen.height * 0.46, 260);
+    const popupBounds = getCenteredPopupBounds({
+        widthRatio: 0.78,
+        maxWidth: 420,
+        heightRatio: 0.42,
+        maxHeight: 300,
+        minHeight: 220
+    });
+    const popupWidth = popupBounds.width;
+    const popupHeight = popupBounds.height;
     const popup = new PIXI.Container();
     popup.name = 'levelEntryPopup';
-    popup.x = (app.screen.width - popupWidth) / 2;
-    popup.y = (app.screen.height - popupHeight) / 2;
+    popup.x = popupBounds.x;
+    popup.y = popupBounds.y;
 
     const bg = new PIXI.Graphics();
     bg.beginFill(THEME.cardBg);
@@ -1114,7 +1169,7 @@ function showLevelEntryPopup(levelIndex) {
     popup.addChild(border);
 
     const title = new PIXI.Text(`Уровень ${levelIndex + 1}`, {
-        fontSize: Math.max(30, Math.min(46, popupWidth * 0.1)),
+        fontSize: Math.max(24, Math.min(42, Math.round(Math.min(popupWidth * 0.09, popupHeight * 0.14)))),
         fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial',
@@ -1122,24 +1177,33 @@ function showLevelEntryPopup(levelIndex) {
     });
     title.anchor.set(0.5, 0);
     title.x = popupWidth / 2;
-    title.y = 34;
+    title.y = Math.max(18, Math.round(popupHeight * 0.11));
     popup.addChild(title);
 
     const subtitle = new PIXI.Text('Готов начать уровень?', {
-        fontSize: Math.max(20, Math.min(28, popupWidth * 0.06)),
+        fontSize: Math.max(16, Math.min(26, Math.round(Math.min(popupWidth * 0.055, popupHeight * 0.095)))),
         fill: THEME.textDark,
         fontFamily: 'Arial',
         align: 'center',
     });
     subtitle.anchor.set(0.5, 0);
     subtitle.x = popupWidth / 2;
-    subtitle.y = title.y + title.height + 14;
+    subtitle.y = title.y + title.height + Math.max(10, Math.round(popupHeight * 0.05));
     popup.addChild(subtitle);
 
     const btnWidth = Math.min(260, popupWidth * 0.68);
-    const btnHeight = 58;
-    const btnGap = 18;
-    const buttonsY = popupHeight - 78;
+    const buttonLayout = getVerticalStackLayout({
+        popupHeight,
+        topY: subtitle.y + subtitle.height + Math.max(14, Math.round(popupHeight * 0.07)),
+        itemCount: 2,
+        bottomPadding: Math.max(18, Math.round(popupHeight * 0.08)),
+        preferredHeight: 58,
+        preferredGap: 18,
+        minHeight: 44,
+        minGap: 10
+    });
+    const btnHeight = buttonLayout.itemHeight;
+    const btnFontSize = Math.max(22, Math.min(30, Math.round(btnHeight * 0.42)));
 
     const playBtn = createButton(btnWidth, btnHeight, 'ИГРАТЬ', () => {
         const index = selectedLevelIndex;
@@ -1147,16 +1211,16 @@ function showLevelEntryPopup(levelIndex) {
         if (index !== null) {
             startLevel(index);
         }
-    }, 'primary');
+    }, 'primary', btnFontSize);
     playBtn.x = popupWidth / 2;
-    playBtn.y = buttonsY - btnHeight / 2 - btnGap;
+    playBtn.y = buttonLayout.startY;
     popup.addChild(playBtn);
 
     const backBtn = createButton(btnWidth, btnHeight, 'НАЗАД', () => {
         closeLevelEntryPopup();
-    }, 'secondary');
+    }, 'secondary', btnFontSize);
     backBtn.x = popupWidth / 2;
-    backBtn.y = buttonsY + btnHeight / 2;
+    backBtn.y = buttonLayout.startY + btnHeight + buttonLayout.gap;
     popup.addChild(backBtn);
 
     levelSelectContainer.addChild(popup);
@@ -2122,10 +2186,15 @@ function resizeGame() {
     // Handle pause popup if it exists
     const pausePopup = gameContainer.getChildByName('pausePopup');
     if (pausePopup) {
-        const popupWidth = Math.min(app.screen.width * 0.8, 480);
-        const popupHeight = Math.min(app.screen.height * 0.7, 420);
-        pausePopup.x = (app.screen.width - popupWidth) / 2;
-        pausePopup.y = (app.screen.height - popupHeight) / 2;
+        const popupBounds = getCenteredPopupBounds({
+            widthRatio: 0.82,
+            maxWidth: 480,
+            heightRatio: 0.82,
+            maxHeight: 520,
+            minHeight: 300
+        });
+        pausePopup.x = popupBounds.x;
+        pausePopup.y = popupBounds.y;
     }
     // Handle intro popup if it exists
     const introPopup = gameContainer.getChildByName('introPopup');
@@ -2430,15 +2499,20 @@ function showWinPopup(currentLevelIndex) {
     clearAllPopups();
 
 
-    const popupWidth = Math.min(app.screen.width * 0.8, 480);
-    const popupHeight = Math.min(app.screen.height * 0.7, 420);
-    const popupX = (app.screen.width - popupWidth) / 2;
-    const popupY = (app.screen.height - popupHeight) / 2;
+    const popupBounds = getCenteredPopupBounds({
+        widthRatio: 0.8,
+        maxWidth: 480,
+        heightRatio: 0.62,
+        maxHeight: 420,
+        minHeight: 250
+    });
+    const popupWidth = popupBounds.width;
+    const popupHeight = popupBounds.height;
 
     const popup = new PIXI.Container();
     popup.name = 'winPopup';
-    popup.x = popupX;
-    popup.y = popupY;
+    popup.x = popupBounds.x;
+    popup.y = popupBounds.y;
 
     // Фон
     const bg = new PIXI.Graphics();
@@ -2454,7 +2528,7 @@ function showWinPopup(currentLevelIndex) {
 
     // Заголовок
     const title = new PIXI.Text('ПОБЕДА', {
-        fontSize: Math.max(48, popupWidth * 0.12),
+        fontSize: Math.max(28, Math.min(46, Math.round(Math.min(popupWidth * 0.1, popupHeight * 0.16)))),
         fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial',
@@ -2462,19 +2536,30 @@ function showWinPopup(currentLevelIndex) {
     });
     title.anchor.set(0.5, 0);
     title.x = popupWidth / 2;
-    title.y = 40;
+    title.y = Math.max(20, Math.round(popupHeight * 0.11));
     popup.addChild(title);
 
     // Кнопка "Следующий уровень"
     const nextBtn = new PIXI.Graphics();
     const btnW = popupWidth * 0.8;
-    const btnH = 70;
+    const buttonLayout = getVerticalStackLayout({
+        popupHeight,
+        topY: title.y + title.height + Math.max(18, Math.round(popupHeight * 0.09)),
+        itemCount: 2,
+        bottomPadding: Math.max(20, Math.round(popupHeight * 0.1)),
+        preferredHeight: 70,
+        preferredGap: 18,
+        minHeight: 46,
+        minGap: 12
+    });
+    const btnH = buttonLayout.itemHeight;
+    const btnFontSize = Math.max(20, Math.min(32, Math.round(btnH * 0.42)));
     nextBtn.lineStyle(4, THEME.borderDark);
     nextBtn.beginFill(THEME.primary);
     nextBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
     nextBtn.endFill();
     nextBtn.x = popupWidth / 2;
-    nextBtn.y = popupHeight / 2 - 20;
+    nextBtn.y = buttonLayout.startY;
     nextBtn.interactive = true;
     nextBtn.buttonMode = true;
     nextBtn.on('pointerdown', () => {
@@ -2488,7 +2573,7 @@ function showWinPopup(currentLevelIndex) {
     popup.addChild(nextBtn);
 
     const nextText = new PIXI.Text('СЛЕДУЮЩИЙ\nУРОВЕНЬ', {
-        fontSize: 32,
+        fontSize: btnFontSize,
         fill: THEME.white,
         fontWeight: 'bold',
         fontFamily: 'Arial',
@@ -2506,7 +2591,7 @@ function showWinPopup(currentLevelIndex) {
     menuBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
     menuBtn.endFill();
     menuBtn.x = popupWidth / 2;
-    menuBtn.y = popupHeight / 2 + btnH + 18;
+    menuBtn.y = buttonLayout.startY + btnH + buttonLayout.gap;
     menuBtn.interactive = true;
     menuBtn.buttonMode = true;
     menuBtn.on('pointerdown', () => {
@@ -2520,7 +2605,7 @@ function showWinPopup(currentLevelIndex) {
     popup.addChild(menuBtn);
 
     const menuText = new PIXI.Text('ГЛАВНОЕ\nМЕНЮ', {
-        fontSize: 32,
+        fontSize: btnFontSize,
         fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial',
@@ -2539,15 +2624,20 @@ function showLosePopup(currentLevelIndex) {
     clearAllPopups();
 
 
-    const popupWidth = Math.min(app.screen.width * 0.8, 480);
-    const popupHeight = Math.min(app.screen.height * 0.7, 420);
-    const popupX = (app.screen.width - popupWidth) / 2;
-    const popupY = (app.screen.height - popupHeight) / 2;
+    const popupBounds = getCenteredPopupBounds({
+        widthRatio: 0.8,
+        maxWidth: 480,
+        heightRatio: 0.62,
+        maxHeight: 420,
+        minHeight: 250
+    });
+    const popupWidth = popupBounds.width;
+    const popupHeight = popupBounds.height;
 
     const popup = new PIXI.Container();
     popup.name = 'losePopup';
-    popup.x = popupX;
-    popup.y = popupY;
+    popup.x = popupBounds.x;
+    popup.y = popupBounds.y;
 
     // Фон
     const bg = new PIXI.Graphics();
@@ -2563,7 +2653,7 @@ function showLosePopup(currentLevelIndex) {
 
     // Заголовок
     const title = new PIXI.Text('НЕ ПОВЕЗЛО!', {
-        fontSize: Math.max(48, popupWidth * 0.12),
+        fontSize: Math.max(28, Math.min(46, Math.round(Math.min(popupWidth * 0.1, popupHeight * 0.16)))),
         fill: THEME.fail,
         fontWeight: 'bold',
         fontFamily: 'Arial',
@@ -2571,19 +2661,30 @@ function showLosePopup(currentLevelIndex) {
     });
     title.anchor.set(0.5, 0);
     title.x = popupWidth / 2;
-    title.y = 40;
+    title.y = Math.max(20, Math.round(popupHeight * 0.11));
     popup.addChild(title);
 
     // Кнопка "Попробовать ещё раз"
-    const retryBtn = new PIXI.Graphics();
     const btnW = popupWidth * 0.8;
-    const btnH = 70;
+    const buttonLayout = getVerticalStackLayout({
+        popupHeight,
+        topY: title.y + title.height + Math.max(18, Math.round(popupHeight * 0.09)),
+        itemCount: 2,
+        bottomPadding: Math.max(20, Math.round(popupHeight * 0.1)),
+        preferredHeight: 70,
+        preferredGap: 18,
+        minHeight: 46,
+        minGap: 12
+    });
+    const btnH = buttonLayout.itemHeight;
+    const btnFontSize = Math.max(20, Math.min(32, Math.round(btnH * 0.42)));
+    const retryBtn = new PIXI.Graphics();
     retryBtn.lineStyle(4, THEME.borderDark);
     retryBtn.beginFill(THEME.primary);
     retryBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
     retryBtn.endFill();
     retryBtn.x = popupWidth / 2;
-    retryBtn.y = popupHeight / 2 - 20;
+    retryBtn.y = buttonLayout.startY;
     retryBtn.interactive = true;
     retryBtn.buttonMode = true;
     retryBtn.on('pointerdown', () => {
@@ -2593,7 +2694,7 @@ function showLosePopup(currentLevelIndex) {
     popup.addChild(retryBtn);
 
     const retryText = new PIXI.Text('ПОПРОБОВАТЬ\nЕЩЕ РАЗ', {
-        fontSize: 32,
+        fontSize: btnFontSize,
         fill: THEME.white,
         fontWeight: 'bold',
         fontFamily: 'Arial',
@@ -2611,7 +2712,7 @@ function showLosePopup(currentLevelIndex) {
     menuBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
     menuBtn.endFill();
     menuBtn.x = popupWidth / 2;
-    menuBtn.y = popupHeight / 2 + btnH + 18;
+    menuBtn.y = buttonLayout.startY + btnH + buttonLayout.gap;
     menuBtn.interactive = true;
     menuBtn.buttonMode = true;
     menuBtn.on('pointerdown', () => {
@@ -2625,7 +2726,7 @@ function showLosePopup(currentLevelIndex) {
     popup.addChild(menuBtn);
 
     const menuText = new PIXI.Text('МЕНЮ', {
-        fontSize: 32,
+        fontSize: btnFontSize,
         fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial',
@@ -2676,15 +2777,20 @@ function showPausePopup() {
     gameContainer.addChild(overlay);
 
     // Create popup container
-    const popupWidth = Math.min(app.screen.width * 0.8, 480);
-    const popupHeight = Math.min(app.screen.height * 0.7, 420);
-    const popupX = (app.screen.width - popupWidth) / 2;
-    const popupY = (app.screen.height - popupHeight) / 2;
+    const popupBounds = getCenteredPopupBounds({
+        widthRatio: 0.82,
+        maxWidth: 480,
+        heightRatio: 0.82,
+        maxHeight: 520,
+        minHeight: 300
+    });
+    const popupWidth = popupBounds.width;
+    const popupHeight = popupBounds.height;
 
     const popup = new PIXI.Container();
     popup.name = 'pausePopup';
-    popup.x = popupX;
-    popup.y = popupY;
+    popup.x = popupBounds.x;
+    popup.y = popupBounds.y;
 
     // Background
     const bg = new PIXI.Graphics();
@@ -2701,7 +2807,7 @@ function showPausePopup() {
 
     // Title
     const title = new PIXI.Text('ПАУЗА', {
-        fontSize: 52,
+        fontSize: Math.max(28, Math.min(48, Math.round(Math.min(popupWidth * 0.1, popupHeight * 0.12)))),
         fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial',
@@ -2709,18 +2815,18 @@ function showPausePopup() {
     });
     title.anchor.set(0.5, 0);
     title.x = popupWidth / 2;
-    title.y = 32;
+    title.y = Math.max(18, Math.round(popupHeight * 0.07));
     popup.addChild(title);
 
     // Размер иконок и кнопок
-    const iconBtnSize = 70;
-    const iconFontSize = 44;
-    const iconSpacing = 32;
+    const iconBtnSize = Math.max(50, Math.min(70, Math.round(popupHeight * 0.13)));
+    const iconFontSize = Math.max(28, Math.min(44, Math.round(iconBtnSize * 0.62)));
+    const iconSpacing = Math.max(18, Math.min(32, Math.round(popupWidth * 0.07)));
 
     // Контейнер для иконок
     const iconsRow = new PIXI.Container();
     iconsRow.x = popupWidth / 2;
-    iconsRow.y = title.y + title.height + 40;
+    iconsRow.y = title.y + title.height + Math.max(14, Math.round(popupHeight * 0.06));
 
     // Load sound states from localStorage
     const isSoundEnabled = localStorage.getItem('soundEnabled') !== 'false';
@@ -2773,13 +2879,24 @@ function showPausePopup() {
     popup.addChild(iconsRow);
 
     const btnW = popupWidth * 0.8;
-    const btnH = 70;
-    const btnSpacing = 20;
+    const buttonLayout = getVerticalStackLayout({
+        popupHeight,
+        topY: iconsRow.y + iconBtnSize / 2 + Math.max(16, Math.round(popupHeight * 0.06)),
+        itemCount: 3,
+        bottomPadding: Math.max(18, Math.round(popupHeight * 0.07)),
+        preferredHeight: 70,
+        preferredGap: 20,
+        minHeight: 44,
+        minGap: 10
+    });
+    const btnH = buttonLayout.itemHeight;
+    const btnSpacing = buttonLayout.gap;
+    const btnFontSize = Math.max(20, Math.min(30, Math.round(btnH * 0.42)));
 
     // Game buttons container
     const buttonsContainer = new PIXI.Container();
     buttonsContainer.x = popupWidth / 2;
-    buttonsContainer.y = iconsRow.y + iconBtnSize + 40;
+    buttonsContainer.y = buttonLayout.startY;
 
     // Helper function to clean up pause state
     const cleanupPauseState = () => {
@@ -2798,7 +2915,7 @@ function showPausePopup() {
     const continueBtn = createButton(btnW, btnH, 'ПРОДОЛЖИТЬ', () => {
         cleanupPauseState();
         resumeGame();
-    }, 'pause');
+    }, 'pause', btnFontSize);
     continueBtn.y = 0;
     buttonsContainer.addChild(continueBtn);
 
@@ -2806,7 +2923,7 @@ function showPausePopup() {
     const retryBtn = createButton(btnW, btnH, 'ЗАНОВО', () => {
         cleanupPauseState();
         startLevel(levelData.id - 1);
-    }, 'primary');
+    }, 'primary', btnFontSize);
     retryBtn.y = btnH + btnSpacing;
     buttonsContainer.addChild(retryBtn);
 
@@ -2818,7 +2935,7 @@ function showPausePopup() {
         }
         gameContainer.removeChildren();
         showLevelSelect();
-    }, 'secondary');
+    }, 'secondary', btnFontSize);
     menuBtn.y = (btnH + btnSpacing) * 2;
     buttonsContainer.addChild(menuBtn);
 
@@ -2826,7 +2943,7 @@ function showPausePopup() {
     gameContainer.addChild(popup);
 }
 
-function createButton(width, height, text, onClick, variant = 'primary') {
+function createButton(width, height, text, onClick, variant = 'primary', fontSize = 32) {
     const styles = {
         primary: { fill: THEME.primary, border: THEME.borderDark, text: THEME.white },
         secondary: { fill: THEME.secondary, border: 0xB56A2D, text: THEME.textDark },
@@ -2845,7 +2962,7 @@ function createButton(width, height, text, onClick, variant = 'primary') {
     btn.on('pointerdown', onClick);
 
     const btnText = new PIXI.Text(text, {
-        fontSize: 32,
+        fontSize,
         fill: style.text,
         fontWeight: 'bold',
         fontFamily: 'Arial',
