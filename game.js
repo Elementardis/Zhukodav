@@ -249,6 +249,11 @@ function getUsedLevelColors(level = levelData) {
         .filter((color) => usedColors.has(color));
 }
 
+function getButtonTextureName(color) {
+    if (color === 'blue') return 'button_purple';
+    return `button_${color}`;
+}
+
 function splitColorsForMobileColumns(colors) {
     const leftCount = Math.ceil(colors.length / 2);
     return {
@@ -641,6 +646,11 @@ const COLOR_BUTTON_SLOTS = [
     { color: 'green', key: 'e' },
     { color: 'yellow', key: 'r' },
 ];
+
+const MOBILE_FIXED_BUTTON_COLUMNS = {
+    left: ['red', 'blue'],
+    right: ['green', 'yellow']
+};
 
 let dynamicColorKeyMap = {};
 
@@ -1497,11 +1507,10 @@ function buildMobileLevelHeader(layout, level) {
 
 function buildSideColorColumns(coloredTypes, layout) {
     colorButtonsContainer = rootUI;
-    const colors = getUsedLevelColors();
-    const columns = splitColorsForMobileColumns(colors);
+    const availableColors = new Set(getUsedLevelColors());
     dynamicColorKeyMap = {};
 
-    const buildColumn = (columnLayout, colorList, name) => {
+    const buildColumn = (columnLayout, slotColors, name) => {
         const column = createRoundedPanel(
             columnLayout.width,
             columnLayout.height,
@@ -1515,17 +1524,34 @@ function buildSideColorColumns(coloredTypes, layout) {
         column.y = columnLayout.y;
 
         const verticalGap = Math.max(10, layout.buttons.gap);
-        const totalHeight = colorList.length * layout.buttons.size + Math.max(0, colorList.length - 1) * verticalGap;
+        const totalHeight = slotColors.length * layout.buttons.size + Math.max(0, slotColors.length - 1) * verticalGap;
         const startY = (columnLayout.height - totalHeight) / 2;
 
-        colorList.forEach((color, index) => {
+        slotColors.forEach((color, index) => {
+            const slotBlock = createRoundedPanel(
+                layout.buttons.size,
+                layout.buttons.size,
+                Math.max(18, layout.buttons.size * 0.22),
+                0xFFF8EC,
+                0xE5AA54,
+                3
+            );
+            slotBlock.x = (columnLayout.width - layout.buttons.size) / 2;
+            slotBlock.y = startY + index * (layout.buttons.size + verticalGap);
+            column.addChild(slotBlock);
+
+            if (!availableColors.has(color)) {
+                slotBlock.alpha = 0.35;
+                return;
+            }
+
             const key = COLOR_BUTTON_SLOTS.find((slot) => slot.color === color)?.key || '';
             if (key) {
                 dynamicColorKeyMap[key] = color;
             }
             const button = createColorButton(color, layout.buttons.size, key, false, 'mobile');
-            button.x = (columnLayout.width - layout.buttons.size) / 2;
-            button.y = startY + index * (layout.buttons.size + verticalGap);
+            button.x = slotBlock.x;
+            button.y = slotBlock.y;
             column.addChild(button);
             colorButtonsMap[color] = button;
         });
@@ -1533,8 +1559,8 @@ function buildSideColorColumns(coloredTypes, layout) {
         rootUI.addChild(column);
     };
 
-    buildColumn(layout.leftColumn, columns.left, 'leftColorColumn');
-    buildColumn(layout.rightColumn, columns.right, 'rightColorColumn');
+    buildColumn(layout.leftColumn, MOBILE_FIXED_BUTTON_COLUMNS.left, 'leftColorColumn');
+    buildColumn(layout.rightColumn, MOBILE_FIXED_BUTTON_COLUMNS.right, 'rightColorColumn');
 }
 
 function buildMobilePauseButton(layout) {
@@ -3151,59 +3177,33 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
     button.interactive = true;
     button.buttonMode = true;
 
-    let activeIndicator;
+    const iconSize = variant === 'mobile' ? size * 0.82 : size * 0.9;
+    const shadow = new PIXI.Graphics();
+    shadow.beginFill(THEME.shadow, 0.18);
+    shadow.drawEllipse(size / 2, size * 0.78, size * 0.28, size * 0.14);
+    shadow.endFill();
+    button.addChild(shadow);
 
-    if (variant === 'mobile' && TEXTURES[`button_${color}`]) {
-        const shadow = new PIXI.Graphics();
-        shadow.beginFill(THEME.shadow, 0.18);
-        shadow.drawRoundedRect(0, 4, size, size, Math.max(18, size * 0.24));
-        shadow.endFill();
-        button.addChild(shadow);
-
-        const panel = new PIXI.Graphics();
-        panel.beginFill(0xFFF7E8);
-        panel.drawRoundedRect(0, 0, size, size, Math.max(18, size * 0.24));
-        panel.endFill();
-        button.addChild(panel);
-
-        const sprite = new PIXI.Sprite(TEXTURES[`button_${color}`]);
-        sprite.width = size;
-        sprite.height = size;
+    const textureName = getButtonTextureName(color);
+    if (TEXTURES[textureName]) {
+        const sprite = new PIXI.Sprite(TEXTURES[textureName]);
+        sprite.x = (size - iconSize) / 2;
+        sprite.y = (size - iconSize) / 2;
+        sprite.width = iconSize;
+        sprite.height = iconSize;
         button.addChild(sprite);
-
-        const border = new PIXI.Graphics();
-        border.lineStyle(4, 0xD48730, 0.9);
-        border.drawRoundedRect(0, 0, size, size, Math.max(18, size * 0.24));
-        button.addChild(border);
-
-        activeIndicator = new PIXI.Graphics();
-        activeIndicator.beginFill(0xFFFBEF, 0.28);
-        activeIndicator.drawRoundedRect(2, 2, size - 4, size - 4, Math.max(16, size * 0.22));
-        activeIndicator.endFill();
     } else {
-        const bg = new PIXI.Graphics();
-        bg.beginFill(COLORS[color]);
-        bg.drawCircle(size / 2, size / 2, size / 2);
-        bg.endFill();
-
-        const highlight = new PIXI.Graphics();
-        highlight.beginFill(0xFFFFFF, 0.24);
-        highlight.drawCircle(size / 2, size / 3, size / 4);
-        highlight.endFill();
-
-        const border = new PIXI.Graphics();
-        border.lineStyle(3, THEME.borderDark, 0.35);
-        border.drawCircle(size / 2, size / 2, size / 2);
-
-        activeIndicator = new PIXI.Graphics();
-        activeIndicator.beginFill(0xFFF7E8, 0.55);
-        activeIndicator.drawCircle(size / 2, size / 2, size / 2);
-        activeIndicator.endFill();
-
-        button.addChild(bg);
-        button.addChild(highlight);
-        button.addChild(border);
+        const fallback = new PIXI.Graphics();
+        fallback.beginFill(COLORS[color] || THEME.primary);
+        fallback.drawCircle(size / 2, size / 2, iconSize / 2);
+        fallback.endFill();
+        button.addChild(fallback);
     }
+
+    const activeIndicator = new PIXI.Graphics();
+    activeIndicator.beginFill(0xFFF7E8, variant === 'mobile' ? 0.26 : 0.3);
+    activeIndicator.drawCircle(size / 2, size / 2, iconSize * 0.52);
+    activeIndicator.endFill();
 
     activeIndicator.name = 'activeIndicator';
     activeIndicator.visible = false;
@@ -3211,15 +3211,16 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
 
     if (showKey) {
         const label = new PIXI.Text(key.toUpperCase(), {
-            fontSize: size * (variant === 'mobile' ? 0.24 : 0.35),
-            fill: 0xffffff,
+            fontSize: size * 0.22,
+            fill: THEME.white,
             fontWeight: '700',
             fontFamily: 'Arial',
             stroke: THEME.borderDark,
-            strokeThickness: variant === 'mobile' ? 2 : 3
+            strokeThickness: 3
         });
         label.anchor.set(0.5);
-        label.position.set(size / 2);
+        label.x = size / 2;
+        label.y = size * 0.84;
         button.addChild(label);
     }
 
