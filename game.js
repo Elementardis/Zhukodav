@@ -1,6 +1,19 @@
 import levels from './levels.js';
 import { getBugBaseBalance } from './bug-config.js';
 import { initBackend, fetchRemoteLevel, saveProgress, trackEvent, recalcLeaderboard, rcNumber } from './firebase.js';
+import {
+    isMobileDevice as isMobileDeviceUI,
+    getViewportMode as getViewportModeUI,
+    getUsedLevelColors as getUsedLevelColorsUI,
+    getButtonTextureName as getButtonTextureNameUI,
+    getGameLayout as getGameLayoutUI,
+    createRoundedPanel as createRoundedPanelUI,
+    createLabelSprite as createLabelSpriteUI,
+    syncMobilePortraitOverlay,
+    buildDesktopLevelHeader as buildDesktopLevelHeaderUI,
+    buildMobileLevelHeader as buildMobileLevelHeaderUI,
+    updateLevelHeaderUI
+} from './js/game-ui.js';
 const MOBILE_MAX_VIEWPORT = 1366;
 const MOBILE_LANDSCAPE_MIN_RATIO = 1.15;
 const MOBILE_OVERLAY_ID = 'mobile-orientation-overlay';
@@ -188,8 +201,8 @@ const SPRITE_PATHS = [
     { name: 'frozen', path: 'images/ui/frozen.png' },
     { name: 'heart', path: 'images/ui/heart.png' },
     { name: 'gear', path: 'images/ui/gear.png' },
-    { name: 'level_label', path: 'images/ui/level_label.png' },
-    { name: 'goals_label', path: 'images/ui/goals_label.png' }
+    { name: 'level_panel', path: 'images/ui/level.png' },
+    { name: 'goal_panel', path: 'images/ui/goal.png' }
 ];
 
 // Store loaded textures
@@ -219,254 +232,44 @@ const THEME = {
 };
 
 function isMobileDevice() {
-    const ua = navigator.userAgent || '';
-    const mobileUa = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(ua);
-    const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
-    return mobileUa || (coarsePointer && Math.max(window.innerWidth, window.innerHeight) <= MOBILE_MAX_VIEWPORT);
+    return isMobileDeviceUI(MOBILE_MAX_VIEWPORT);
 }
 
 function getViewportMode() {
-    const mobile = isMobileDevice();
-    const isLandscape = window.innerWidth >= window.innerHeight * MOBILE_LANDSCAPE_MIN_RATIO;
-
-    if (!mobile) return 'desktop';
-    return isLandscape ? 'mobile-landscape' : 'mobile-portrait';
+    return getViewportModeUI({
+        maxViewport: MOBILE_MAX_VIEWPORT,
+        minLandscapeRatio: MOBILE_LANDSCAPE_MIN_RATIO
+    });
 }
 
 function getUsedLevelColors(level = levelData) {
-    const spawnWeights = level?.params?.spawnWeights || {};
-    const usedColors = new Set();
-
-    Object.keys(spawnWeights).forEach((type) => {
-        if (type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_')) {
-            const color = type.split('_')[1];
-            if (color) usedColors.add(color);
-        }
-    });
-
-    return COLOR_BUTTON_SLOTS
-        .map((slot) => slot.color)
-        .filter((color) => usedColors.has(color));
+    return getUsedLevelColorsUI(level, COLOR_BUTTON_SLOTS);
 }
 
 function getButtonTextureName(color) {
-    if (color === 'blue') return 'button_purple';
-    return `button_${color}`;
-}
-
-function splitColorsForMobileColumns(colors) {
-    const leftCount = Math.ceil(colors.length / 2);
-    return {
-        left: colors.slice(0, leftCount),
-        right: colors.slice(leftCount)
-    };
+    return getButtonTextureNameUI(color);
 }
 
 function getGameLayout() {
-    const mode = getViewportMode();
-    const screenWidth = app?.screen?.width ?? window.innerWidth;
-    const screenHeight = app?.screen?.height ?? window.innerHeight;
-
-    if (mode !== 'mobile-landscape') {
-        const barH = Math.max(screenHeight * BAR_H_PRC, MIN_BAR_H);
-        const topMargin = 20;
-        const size = Math.min(
-            screenWidth - 40,
-            screenHeight - barH - topMargin - GAP_HORZ
-        );
-
-        return {
-            mode: 'desktop',
-            screenWidth,
-            screenHeight,
-            header: { height: Math.floor(size * HEADER_H_PRC) },
-            fieldWrapper: {
-                x: (screenWidth - size) / 2,
-                y: topMargin,
-                width: size,
-                height: size
-            },
-            playField: {
-                x: 0,
-                y: Math.floor(size * HEADER_H_PRC),
-                width: size,
-                height: size - Math.floor(size * HEADER_H_PRC),
-                radius: BORDER_RADIUS
-            },
-            bottomBar: {
-                x: 20,
-                y: screenHeight - barH,
-                width: screenWidth - 40,
-                height: barH
-            }
-        };
-    }
-
-    const outerPad = Math.max(12, Math.min(screenWidth, screenHeight) * 0.022);
-    const topInset = outerPad;
-    const sideInset = outerPad + (screenWidth < 740 ? 4 : 10);
-    const bottomInset = outerPad;
-    const headerHeight = Math.max(68, Math.min(110, screenHeight * 0.16));
-    const gap = Math.max(10, Math.min(22, screenWidth * 0.016));
-    const pauseButtonSize = Math.max(58, Math.min(92, screenHeight * 0.14));
-    const rightSideHeight = screenHeight - topInset - bottomInset - headerHeight - gap;
-    const buttonCount = Math.max(1, getUsedLevelColors().length);
-    const rows = Math.max(2, Math.ceil(buttonCount / 2));
-    const maxButtonByHeight = (rightSideHeight - pauseButtonSize - gap * (rows + 1)) / rows;
-    const maxButtonByWidth = Math.min(screenWidth * 0.12, 92);
-    const buttonSize = Math.max(56, Math.min(maxButtonByHeight, maxButtonByWidth));
-    const columnWidth = buttonSize + gap * 2;
-    const fieldHeight = Math.max(220, screenHeight - topInset - bottomInset - headerHeight - gap);
-    const fieldWidth = Math.max(
-        300,
-        screenWidth - sideInset * 2 - columnWidth * 2 - gap * 2
-    );
-    const fieldX = sideInset + columnWidth + gap;
-    const fieldY = topInset + headerHeight + gap;
-    const panelRadius = Math.max(24, Math.min(36, fieldHeight * 0.08));
-    const fieldPadding = Math.max(12, Math.min(20, fieldHeight * 0.05));
-
-    return {
-        mode: 'mobile-landscape',
-        screenWidth,
-        screenHeight,
-        gap,
-        sideInset,
-        topInset,
-        bottomInset,
-        header: {
-            x: sideInset,
-            y: topInset,
-            width: screenWidth - sideInset * 2,
-            height: headerHeight
-        },
-        fieldShell: {
-            x: fieldX,
-            y: fieldY,
-            width: fieldWidth,
-            height: fieldHeight,
-            radius: panelRadius,
-            padding: fieldPadding
-        },
-        playField: {
-            x: fieldX + fieldPadding,
-            y: fieldY + fieldPadding,
-            width: fieldWidth - fieldPadding * 2,
-            height: fieldHeight - fieldPadding * 2,
-            radius: Math.max(18, panelRadius - 8)
-        },
-        leftColumn: {
-            x: sideInset,
-            y: fieldY,
-            width: columnWidth,
-            height: fieldHeight
-        },
-        rightColumn: {
-            x: fieldX + fieldWidth + gap,
-            y: fieldY,
-            width: columnWidth,
-            height: fieldHeight - pauseButtonSize - gap
-        },
-        pauseButton: {
-            x: fieldX + fieldWidth + gap + (columnWidth - pauseButtonSize) / 2,
-            y: fieldY + fieldHeight - pauseButtonSize,
-            size: pauseButtonSize
-        },
-        buttons: {
-            size: buttonSize,
-            gap,
-            rows
-        }
-    };
+    return getGameLayoutUI({
+        mode: getViewportMode(),
+        screenWidth: app?.screen?.width ?? window.innerWidth,
+        screenHeight: app?.screen?.height ?? window.innerHeight,
+        barHeightRatio: BAR_H_PRC,
+        minBarHeight: MIN_BAR_H,
+        gapHorizontal: GAP_HORZ,
+        headerHeightRatio: HEADER_H_PRC,
+        borderRadius: BORDER_RADIUS,
+        colorButtonSlots: COLOR_BUTTON_SLOTS
+    });
 }
 
 function createRoundedPanel(width, height, radius, fill = THEME.cardBg, borderColor = THEME.border, borderWidth = 4) {
-    const panel = new PIXI.Container();
-
-    const shadow = new PIXI.Graphics();
-    shadow.beginFill(THEME.shadow, 0.18);
-    shadow.drawRoundedRect(0, 4, width, height, radius);
-    shadow.endFill();
-
-    const bg = new PIXI.Graphics();
-    bg.beginFill(fill);
-    bg.drawRoundedRect(0, 0, width, height, radius);
-    bg.endFill();
-
-    const border = new PIXI.Graphics();
-    border.lineStyle(borderWidth, borderColor, 1);
-    border.drawRoundedRect(0, 0, width, height, radius);
-
-    panel.addChild(shadow);
-    panel.addChild(bg);
-    panel.addChild(border);
-    return panel;
+    return createRoundedPanelUI({ width, height, radius, fill, borderColor, borderWidth, theme: THEME });
 }
 
 function createLabelSprite(textureName, maxWidth, maxHeight) {
-    const texture = TEXTURES[textureName];
-    if (!texture) return null;
-
-    const sprite = new PIXI.Sprite(texture);
-    sprite.anchor.set(0.5, 0);
-    const scale = Math.min(maxWidth / texture.width, maxHeight / texture.height);
-    sprite.scale.set(scale);
-    return sprite;
-}
-
-function ensureMobilePortraitOverlay() {
-    let overlay = document.getElementById(MOBILE_OVERLAY_ID);
-    if (overlay) return overlay;
-
-    overlay = document.createElement('div');
-    overlay.id = MOBILE_OVERLAY_ID;
-    overlay.style.position = 'fixed';
-    overlay.style.inset = '0';
-    overlay.style.display = 'none';
-    overlay.style.alignItems = 'center';
-    overlay.style.justifyContent = 'center';
-    overlay.style.flexDirection = 'column';
-    overlay.style.gap = '14px';
-    overlay.style.padding = '24px';
-    overlay.style.background = 'rgba(48, 28, 10, 0.72)';
-    overlay.style.backdropFilter = 'blur(6px)';
-    overlay.style.zIndex = '10000';
-    overlay.style.color = '#FFF7E8';
-    overlay.style.fontFamily = 'Arial, sans-serif';
-    overlay.style.textAlign = 'center';
-    overlay.style.pointerEvents = 'auto';
-
-    const phone = document.createElement('div');
-    phone.style.width = '78px';
-    phone.style.height = '54px';
-    phone.style.border = '4px solid #FFF3D9';
-    phone.style.borderRadius = '14px';
-    phone.style.transform = 'rotate(90deg)';
-    phone.style.boxSizing = 'border-box';
-    phone.style.position = 'relative';
-
-    const notch = document.createElement('div');
-    notch.style.position = 'absolute';
-    notch.style.top = '50%';
-    notch.style.right = '-8px';
-    notch.style.width = '6px';
-    notch.style.height = '18px';
-    notch.style.transform = 'translateY(-50%)';
-    notch.style.borderRadius = '3px';
-    notch.style.background = '#FFF3D9';
-    phone.appendChild(notch);
-
-    const text = document.createElement('div');
-    text.textContent = 'Поверни телефон горизонтально, чтобы играть';
-    text.style.fontSize = 'clamp(22px, 3vw, 30px)';
-    text.style.fontWeight = '700';
-    text.style.lineHeight = '1.2';
-    text.style.maxWidth = '420px';
-
-    overlay.appendChild(phone);
-    overlay.appendChild(text);
-    document.body.appendChild(overlay);
-    return overlay;
+    return createLabelSpriteUI({ textureName, maxWidth, maxHeight, textures: TEXTURES });
 }
 
 function pauseGameplayForOverlay() {
@@ -498,21 +301,18 @@ function resumeGameplayFromOverlay() {
 }
 
 function updateMobilePortraitOverlay() {
-    const overlay = ensureMobilePortraitOverlay();
     const isGameScreen = app?.stage?.children?.includes(gameContainer);
     const shouldShow = isGameScreen && getViewportMode() === 'mobile-portrait';
-
-    overlay.style.display = shouldShow ? 'flex' : 'none';
-
-    if (isGameScreen) {
-        rootUI.visible = !shouldShow;
-    }
-
-    if (shouldShow) {
-        pauseGameplayForOverlay();
-    } else {
-        resumeGameplayFromOverlay();
-    }
+    syncMobilePortraitOverlay({
+        overlayId: MOBILE_OVERLAY_ID,
+        shouldShow,
+        message: 'Поверни телефон горизонтально, чтобы играть',
+        setGameVisible: (visible) => {
+            if (isGameScreen) rootUI.visible = visible;
+        },
+        onPause: pauseGameplayForOverlay,
+        onResume: resumeGameplayFromOverlay
+    });
 }
 
 function showPreloader() {
@@ -668,50 +468,52 @@ const KEY_LAYOUT_MAP = {
 
 // Add helper function for button state updates
 function updateButtonState(color, isActive) {
-    const button = colorButtonsMap[color] || colorButtonsContainer?.getChildByName(`colorButton_${color}`);
-    if (!button) return;
+    const mapped = colorButtonsMap[color];
+    const buttons = Array.isArray(mapped) ? mapped : (mapped ? [mapped] : []);
 
-    const activeIndicator = button.getChildByName('activeIndicator');
-    if (activeIndicator) {
-        activeIndicator.visible = isActive;
+    if (!buttons.length) {
+        const fallback = colorButtonsContainer?.getChildByName(`colorButton_${color}`);
+        if (fallback) buttons.push(fallback);
     }
+    if (!buttons.length) return;
 
-    
+    buttons.forEach((button) => {
+        const activeIndicator = button.getChildByName('activeIndicator');
+        if (activeIndicator) {
+            activeIndicator.visible = isActive;
+        }
 
-    // Останавливаем предыдущую удерживающую анимацию, если была
-    if (button._holdAnim) {
-        button._holdAnim.kill();
-        button._holdAnim = null;
-    }
+        if (button._holdAnim) {
+            button._holdAnim.kill();
+            button._holdAnim = null;
+        }
 
-    if (isActive) {
-        // Быстрый «вдавленный» клик: сквиш вниз и чуть шире
-        gsap.to(button.scale, {
-            x: button.originalScale * 1.06,
-            y: button.originalScale * 0.88,
-            duration: 0.06,
-            ease: "power2.inOut",
-            onComplete: () => {
-                // Переходим в мягкий пульс, пока кнопка удерживается
-                button._holdAnim = gsap.to(button.scale, {
-                    x: button.originalScale * 1.03,
-                    y: button.originalScale * 0.94,
-                    duration: 0.28,
-                    yoyo: true,
-                    repeat: -1,
-                    ease: "sine.inOut"
-                });
-            }
-        });
-    } else {
-        // Возврат к исходному масштабу с лёгкой пружиной
-        gsap.to(button.scale, {
-            x: button.originalScale,
-            y: button.originalScale,
-            duration: 0.18,
-            ease: "elastic.out(1, 0.5)"
-        });
-    }
+        if (isActive) {
+            gsap.to(button.scale, {
+                x: button.originalScale * 1.06,
+                y: button.originalScale * 0.88,
+                duration: 0.06,
+                ease: "power2.inOut",
+                onComplete: () => {
+                    button._holdAnim = gsap.to(button.scale, {
+                        x: button.originalScale * 1.03,
+                        y: button.originalScale * 0.94,
+                        duration: 0.28,
+                        yoyo: true,
+                        repeat: -1,
+                        ease: "sine.inOut"
+                    });
+                }
+            });
+        } else {
+            gsap.to(button.scale, {
+                x: button.originalScale,
+                y: button.originalScale,
+                duration: 0.18,
+                ease: "elastic.out(1, 0.5)"
+            });
+        }
+    });
 }
 
 function removeExpiredObject(obj) {
@@ -1331,177 +1133,28 @@ function setupMobileLandscapePlayArea(layout, coloredTypes) {
 }
 
 function buildDesktopLevelHeader(wrapper, level, layout) {
-    const headerH = Math.floor(layout.header.height);
-    const header = new PIXI.Container();
-    header.name = 'levelHeader';
-    wrapper.addChild(header);
-
-    const bar = new PIXI.Graphics();
-    bar.beginFill(THEME.headerBg)
-       .drawRoundedRect(0, 0, wrapper.width, headerH, 14)
-       .endFill();
-    header.addChild(bar);
-
-    const lvlText = new PIXI.Text(`Уровень ${level.id}`, {
-        fontSize: headerH * 0.35,
-        fill: THEME.textDark,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
+    const { header, ui } = buildDesktopLevelHeaderUI({
+        wrapper,
+        level,
+        layout,
+        theme: THEME,
+        heartSizeRatio: HEART_SIZE_PRC,
+        heartGap: HEART_GAP
     });
-    lvlText.y = headerH * 0.15;
-    lvlText.x = 18;
-    header.addChild(lvlText);
-
-    const progText = new PIXI.Text(`0/${level.goalBugCount}`, {
-        fontSize: headerH * 0.35,
-        fill: THEME.textDark,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
-        align: 'right',
-    });
-    progText.anchor.set(1, 0);
-    progText.x = wrapper.width - 18;
-    progText.y = headerH * 0.15;
-    progText.name = 'progText';
-    header.addChild(progText);
-
-    const heartSz = Math.floor(headerH * HEART_SIZE_PRC);
-    const hearts = new PIXI.Container();
-    hearts.name = 'heartsRow';
-    header.addChild(hearts);
-
-    const heartStyle = {
-        fontSize: heartSz,
-        fill: THEME.fail,
-        fontFamily: 'Arial',
-    };
-
-    const heartRefs = [];
-    for (let i = 0; i < level.lifeCount; i++) {
-        const h = new PIXI.Text('❤', heartStyle);
-        h.x = i * (heartSz + HEART_GAP);
-        hearts.addChild(h);
-        heartRefs.push(h);
-    }
-
-    hearts.x = (wrapper.width - hearts.width) / 2;
-    hearts.y = headerH - heartSz - HEART_GAP;
-
-    currentGameUI = {
-        mode: 'desktop',
-        header,
-        progText,
-        hearts: heartRefs
-    };
-
+    currentGameUI = ui;
     return header;
 }
 
 function buildMobileLevelHeader(layout, level) {
-    const header = createRoundedPanel(
-        layout.header.width,
-        layout.header.height,
-        Math.max(22, Math.floor(layout.header.height * 0.34)),
-        THEME.headerBg,
-        THEME.border,
-        5
-    );
-    header.name = 'levelHeader';
-    header.x = layout.header.x;
-    header.y = layout.header.y;
-
-    const sectionGap = Math.max(8, layout.gap);
-    const leftWidth = Math.max(120, layout.header.width * 0.23);
-    const rightWidth = Math.max(150, layout.header.width * 0.25);
-    const centerWidth = layout.header.width - leftWidth - rightWidth - sectionGap * 2;
-    const badgeY = Math.max(8, layout.header.height * 0.14);
-    const badgeHeight = layout.header.height - badgeY * 2;
-
-    const levelBadge = createRoundedPanel(leftWidth, badgeHeight, 24, THEME.cardBg, 0xE5AA54, 4);
-    levelBadge.x = sectionGap;
-    levelBadge.y = badgeY;
-    header.addChild(levelBadge);
-
-    const levelLabel = createLabelSprite('level_label', leftWidth * 0.62, badgeHeight * 0.35);
-    if (levelLabel) {
-        levelLabel.x = leftWidth / 2;
-        levelLabel.y = 8;
-        levelBadge.addChild(levelLabel);
-    }
-
-    const levelText = new PIXI.Text(`LEVEL ${level.id}`, {
-        fontSize: Math.min(28, badgeHeight * 0.32),
-        fill: THEME.textDark,
-        fontWeight: '800',
-        fontFamily: 'Arial'
+    const { header, ui } = buildMobileLevelHeaderUI({
+        layout,
+        level,
+        theme: THEME,
+        textures: TEXTURES,
+        score
     });
-    levelText.anchor.set(0.5, 1);
-    levelText.x = leftWidth / 2;
-    levelText.y = badgeHeight - 10;
-    levelBadge.addChild(levelText);
-
-    const heartsBadge = createRoundedPanel(centerWidth, badgeHeight, 24, 0xFFF8EC, 0xE5AA54, 4);
-    heartsBadge.x = leftWidth + sectionGap;
-    heartsBadge.y = badgeY;
-    header.addChild(heartsBadge);
-
-    const heartSize = Math.max(26, Math.min(38, badgeHeight * 0.5));
-    const heartsRow = new PIXI.Container();
-    const heartRefs = [];
-    for (let i = 0; i < level.lifeCount; i++) {
-        let heart;
-        if (TEXTURES.heart) {
-            heart = new PIXI.Sprite(TEXTURES.heart);
-            heart.width = heartSize;
-            heart.height = heartSize;
-        } else {
-            heart = new PIXI.Text('❤', {
-                fontSize: heartSize,
-                fill: THEME.fail,
-                fontWeight: '700',
-                fontFamily: 'Arial'
-            });
-        }
-        heart.x = i * (heartSize + 8);
-        heartRefs.push(heart);
-        heartsRow.addChild(heart);
-    }
-    heartsRow.x = (centerWidth - heartsRow.width) / 2;
-    heartsRow.y = (badgeHeight - heartSize) / 2;
-    heartsBadge.addChild(heartsRow);
-
-    const goalBadge = createRoundedPanel(rightWidth, badgeHeight, 24, THEME.cardBg, 0xE5AA54, 4);
-    goalBadge.x = layout.header.width - rightWidth - sectionGap;
-    goalBadge.y = badgeY;
-    header.addChild(goalBadge);
-
-    const goalLabel = createLabelSprite('goals_label', rightWidth * 0.62, badgeHeight * 0.35);
-    if (goalLabel) {
-        goalLabel.x = rightWidth / 2;
-        goalLabel.y = 8;
-        goalBadge.addChild(goalLabel);
-    }
-
-    const progText = new PIXI.Text(`ЦЕЛЬ: 0/${level.goalBugCount}`, {
-        fontSize: Math.min(24, badgeHeight * 0.28),
-        fill: THEME.textDark,
-        fontWeight: '800',
-        fontFamily: 'Arial',
-        align: 'center'
-    });
-    progText.anchor.set(0.5, 1);
-    progText.x = rightWidth / 2;
-    progText.y = badgeHeight - 10;
-    progText.name = 'progText';
-    goalBadge.addChild(progText);
-
-    currentGameUI = {
-        mode: 'mobile-landscape',
-        header,
-        progText,
-        hearts: heartRefs
-    };
-
+    currentGameUI = ui;
+    updateLevelHeader(score, life);
     return header;
 }
 
@@ -1509,16 +1162,10 @@ function buildSideColorColumns(coloredTypes, layout) {
     colorButtonsContainer = rootUI;
     const availableColors = new Set(getUsedLevelColors());
     dynamicColorKeyMap = {};
+    colorButtonsMap = {};
 
     const buildColumn = (columnLayout, slotColors, name) => {
-        const column = createRoundedPanel(
-            columnLayout.width,
-            columnLayout.height,
-            28,
-            THEME.cardBg,
-            THEME.border,
-            5
-        );
+        const column = new PIXI.Container();
         column.name = name;
         column.x = columnLayout.x;
         column.y = columnLayout.y;
@@ -1533,8 +1180,8 @@ function buildSideColorColumns(coloredTypes, layout) {
                 layout.buttons.size,
                 Math.max(18, layout.buttons.size * 0.22),
                 0xFFF8EC,
-                0xE5AA54,
-                3
+                0xFFF8EC,
+                0
             );
             slotBlock.x = (columnLayout.width - layout.buttons.size) / 2;
             slotBlock.y = startY + index * (layout.buttons.size + verticalGap);
@@ -1553,14 +1200,18 @@ function buildSideColorColumns(coloredTypes, layout) {
             button.x = slotBlock.x;
             button.y = slotBlock.y;
             column.addChild(button);
-            colorButtonsMap[color] = button;
+            if (!colorButtonsMap[color]) {
+                colorButtonsMap[color] = [];
+            }
+            colorButtonsMap[color].push(button);
         });
 
         rootUI.addChild(column);
     };
 
-    buildColumn(layout.leftColumn, MOBILE_FIXED_BUTTON_COLUMNS.left, 'leftColorColumn');
-    buildColumn(layout.rightColumn, MOBILE_FIXED_BUTTON_COLUMNS.right, 'rightColorColumn');
+    const mirroredColors = COLOR_BUTTON_SLOTS.map((slot) => slot.color);
+    buildColumn(layout.leftColumn, mirroredColors, 'leftColorColumn');
+    buildColumn(layout.rightColumn, mirroredColors, 'rightColorColumn');
 }
 
 function buildMobilePauseButton(layout) {
@@ -1601,24 +1252,7 @@ function buildMobilePauseButton(layout) {
 }
 
 function updateLevelHeader(score, life) {
-    if (!currentGameUI) return;
-
-    if (currentGameUI.progText) {
-        currentGameUI.progText.text = currentGameUI.mode === 'mobile-landscape'
-            ? `ЦЕЛЬ: ${score}/${levelData.goalBugCount}`
-            : `${score}/${levelData.goalBugCount}`;
-    }
-
-    currentGameUI.hearts.forEach((heart, index) => {
-        const isAlive = index < life;
-        if (heart instanceof PIXI.Sprite) {
-            heart.alpha = isAlive ? 1 : 0.24;
-            heart.tint = isAlive ? 0xFFFFFF : 0xC78B65;
-        } else {
-            heart.text = isAlive ? '❤' : '♡';
-            heart.style.fill = isAlive ? THEME.fail : THEME.headerBg;
-        }
-    });
+    updateLevelHeaderUI({ currentGameUI, score, life, levelData, textures: TEXTURES, theme: THEME });
 }
 
 // Функция для взвешенного случайного выбора
@@ -3136,7 +2770,7 @@ function buildBottomBar(coloredTypes) {
         btn.x = startX + index * (btnSz + gap);
         btn.y = y;
         bottomBar.addChild(btn);
-        colorButtonsMap[slot.color] = btn;
+        colorButtonsMap[slot.color] = [btn];
     });
 
     let pauseButton = bottomBar.getChildByName('pauseButton');
