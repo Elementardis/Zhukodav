@@ -58,6 +58,28 @@ let frozenEffectTimer = null;
 let gameLayout = null;
 let currentGameUI = { hearts: [] };
 let colorButtonsMap = {};
+const DEBUG_SPAWN = true;
+
+function debugSpawn(message, extra = undefined) {
+    if (!DEBUG_SPAWN) return;
+
+    const snapshot = {
+        levelId: levelData?.id ?? null,
+        queue: objectQueue.length,
+        active: activeObjects.length,
+        isPaused,
+        introActive,
+        levelEnded,
+        orientationPauseActive
+    };
+
+    if (extra !== undefined) {
+        console.log(`[spawn-debug] ${message}`, snapshot, extra);
+        return;
+    }
+
+    console.log(`[spawn-debug] ${message}`, snapshot);
+}
 // состояние уровня
 let levelEnded = false; // true — как только показан попап победы
 
@@ -114,10 +136,17 @@ function clearSpawnTimer() {
 function scheduleNextSpawn(delay) {
     clearSpawnTimer();
 
-    if (isPaused || introActive || levelEnded) return;
-    if (objectQueue.length === 0) return;
+    if (isPaused || introActive || levelEnded) {
+        debugSpawn('scheduleNextSpawn skipped by state', { delay });
+        return;
+    }
+    if (objectQueue.length === 0) {
+        debugSpawn('scheduleNextSpawn skipped because queue is empty', { delay });
+        return;
+    }
 
     const nextDelay = Math.max(50, Math.round(delay ?? objectQueue[0].spawnInterval ?? 450));
+    debugSpawn('scheduleNextSpawn armed', { delay, nextDelay, nextType: objectQueue[0]?.type ?? null });
     spawnTimer = setTimeout(spawnObject, nextDelay);
 }
 
@@ -553,11 +582,35 @@ function startLifetimeCheck(obj) {
         clearTimeout(obj.lifetimeCheckTimeout);
     }
 
+    debugSpawn('startLifetimeCheck armed', {
+        type: obj.type,
+        remainingLifetimeMs: obj.remainingLifetimeMs,
+        hasParent: !!obj.parent
+    });
+
     const checkLifetime = () => {
-        if (!playArea.children.includes(obj) || isPaused) return;
+        if (!activeObjects.includes(obj)) {
+            debugSpawn('lifetimeCheck stopped because object is no longer active', { type: obj.type });
+            obj.lifetimeCheckTimeout = null;
+            return;
+        }
+
+        // During rebuilds, overlays, or short-lived mobile viewport changes the object can be
+        // temporarily detached or paused. Keep the lifetime loop alive and retry shortly.
+        if (isPaused || orientationPauseActive || !obj.parent || obj.parent !== playArea) {
+            debugSpawn('lifetimeCheck postponed', {
+                type: obj.type,
+                hasParent: !!obj.parent,
+                parentMatchesPlayArea: obj.parent === playArea
+            });
+            obj.lifetimeCheckTimeout = setTimeout(checkLifetime, 100);
+            return;
+        }
 
         const remainingTime = syncObjectLifetime(obj);
+        debugSpawn('lifetimeCheck tick', { type: obj.type, remainingTime });
         if (remainingTime <= 0) {
+            debugSpawn('lifetimeCheck expired object', { type: obj.type });
             removeExpiredObject(obj);
             return;
         }
@@ -1587,22 +1640,35 @@ function clampToSafeArea(obj) {
 // генерация объекта
 function spawnObject() {
     // Runtime spawn uses the queued bug config instead of hardcoded level spawn values.
-    if (introActive || levelEnded) return;
+    if (introActive || levelEnded) {
+        debugSpawn('spawnObject aborted by state');
+        return;
+    }
 
     if (activeObjects.length >= levelData.params.maxObjects) {
+        debugSpawn('spawnObject deferred because maxObjects reached', { maxObjects: levelData.params.maxObjects });
         scheduleNextSpawn(100);
         return;
     }
-    if (objectQueue.length === 0) return;
+    if (objectQueue.length === 0) {
+        debugSpawn('spawnObject aborted because queue is empty');
+        return;
+    }
 
     const data = objectQueue.shift();
     const type = data.type;
+    debugSpawn('spawnObject picked object', {
+        type,
+        lifetime: data.lifetime,
+        spawnInterval: data.spawnInterval
+    });
     
     // Calculate actual size based on bug type
     const isFat = type === 'fat' || type.startsWith('fatColoredBug_');
+    const playAreaBaseSize = Math.min(playArea.width, playArea.height);
     const baseSize = Math.min(
         Math.max(
-            Math.floor(playArea.width * BUG_SIZE_PRC),
+            Math.floor(playAreaBaseSize * BUG_SIZE_PRC),
             MIN_BUG_SIZE
         ),
         MAX_BUG_SIZE
@@ -1626,6 +1692,7 @@ const container = new PIXI.Container();
 
     // Если безопасная область не вмещает объект — отложим спавн
     if (minX > maxX || minY > maxY) {
+        debugSpawn('spawnObject deferred because safe bounds are invalid', { type, minX, maxX, minY, maxY });
         objectQueue.unshift(data);
         scheduleNextSpawn(100);
         return;
@@ -1659,6 +1726,7 @@ const container = new PIXI.Container();
 
     // Если не найдена позиция, возвращаем объект в очередь
     if (!positionFound) {
+        debugSpawn('spawnObject deferred because no free position was found', { type, attempts: maxAttempts });
         objectQueue.unshift(data);
         scheduleNextSpawn(100);
         return;
@@ -1882,14 +1950,21 @@ const container = new PIXI.Container();
     container.animations.push(fadeAnim);
     applyObjectAnimationTimeScale(container);
 
+    playArea.addChild(container);
+    activeObjects.push(container);
+    debugSpawn('spawnObject committed object', {
+        type,
+        x: container.x,
+        y: container.y,
+        playAreaWidth: playArea.width,
+        playAreaHeight: playArea.height
+    });
+
     // Spawned bugs start their lifetime checks from remaining lifetime state.
     startLifetimeCheck(container);
 
     // Schedule the next spawn using this bug type's resolved spawn interval.
     scheduleNextSpawn(data.spawnInterval);
-
-    playArea.addChild(container);
-    activeObjects.push(container);
 }
 
 // взрыв
@@ -1932,6 +2007,7 @@ function endGame(won) {
     clearSpawnTimer();
     finishFrozenEffect();
     levelEnded = true;
+    debugSpawn('endGame called', { won, score, life });
     freezeActiveObjects();
 
     // Remove remaining objects without penalties
