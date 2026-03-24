@@ -1,6 +1,9 @@
 import levels from './levels.js';
 import { getBugBaseBalance } from './bug-config.js';
 import { initBackend, fetchRemoteLevel, saveProgress, trackEvent, recalcLeaderboard, rcNumber } from './firebase.js';
+const MOBILE_MAX_VIEWPORT = 1366;
+const MOBILE_LANDSCAPE_MIN_RATIO = 1.15;
+const MOBILE_OVERLAY_ID = 'mobile-orientation-overlay';
 
 // ==== Global Constants ====
 const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -35,9 +38,13 @@ let isPaused = false;
 let spawnTimer = null;
 let score = 0;
 let life = 0;
+let orientationPauseActive = false;
 let frozenEffectStartedAt = 0;
 let frozenEffectEndsAt = 0;
 let frozenEffectTimer = null;
+let gameLayout = null;
+let currentGameUI = { hearts: [] };
+let colorButtonsMap = {};
 // состояние уровня
 let levelEnded = false; // true — как только показан попап победы
 
@@ -178,7 +185,11 @@ const SPRITE_PATHS = [
     { name: 'button_purple', path: 'images/ui/button_purple.png' },
     { name: 'button_red',    path: 'images/ui/button_red.png' },
     { name: 'button_yellow', path: 'images/ui/button_yellow.png' },
-    { name: 'frozen', path: 'images/ui/frozen.png' }
+    { name: 'frozen', path: 'images/ui/frozen.png' },
+    { name: 'heart', path: 'images/ui/heart.png' },
+    { name: 'gear', path: 'images/ui/gear.png' },
+    { name: 'level_label', path: 'images/ui/level_label.png' },
+    { name: 'goals_label', path: 'images/ui/goals_label.png' }
 ];
 
 // Store loaded textures
@@ -206,6 +217,298 @@ const THEME = {
     white: 0xFFFFFF,
     overlay: 0x000000
 };
+
+function isMobileDevice() {
+    const ua = navigator.userAgent || '';
+    const mobileUa = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(ua);
+    const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+    return mobileUa || (coarsePointer && Math.max(window.innerWidth, window.innerHeight) <= MOBILE_MAX_VIEWPORT);
+}
+
+function getViewportMode() {
+    const mobile = isMobileDevice();
+    const isLandscape = window.innerWidth >= window.innerHeight * MOBILE_LANDSCAPE_MIN_RATIO;
+
+    if (!mobile) return 'desktop';
+    return isLandscape ? 'mobile-landscape' : 'mobile-portrait';
+}
+
+function getUsedLevelColors(level = levelData) {
+    const spawnWeights = level?.params?.spawnWeights || {};
+    const usedColors = new Set();
+
+    Object.keys(spawnWeights).forEach((type) => {
+        if (type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_')) {
+            const color = type.split('_')[1];
+            if (color) usedColors.add(color);
+        }
+    });
+
+    return COLOR_BUTTON_SLOTS
+        .map((slot) => slot.color)
+        .filter((color) => usedColors.has(color));
+}
+
+function splitColorsForMobileColumns(colors) {
+    const leftCount = Math.ceil(colors.length / 2);
+    return {
+        left: colors.slice(0, leftCount),
+        right: colors.slice(leftCount)
+    };
+}
+
+function getGameLayout() {
+    const mode = getViewportMode();
+    const screenWidth = app?.screen?.width ?? window.innerWidth;
+    const screenHeight = app?.screen?.height ?? window.innerHeight;
+
+    if (mode !== 'mobile-landscape') {
+        const barH = Math.max(screenHeight * BAR_H_PRC, MIN_BAR_H);
+        const topMargin = 20;
+        const size = Math.min(
+            screenWidth - 40,
+            screenHeight - barH - topMargin - GAP_HORZ
+        );
+
+        return {
+            mode: 'desktop',
+            screenWidth,
+            screenHeight,
+            header: { height: Math.floor(size * HEADER_H_PRC) },
+            fieldWrapper: {
+                x: (screenWidth - size) / 2,
+                y: topMargin,
+                width: size,
+                height: size
+            },
+            playField: {
+                x: 0,
+                y: Math.floor(size * HEADER_H_PRC),
+                width: size,
+                height: size - Math.floor(size * HEADER_H_PRC),
+                radius: BORDER_RADIUS
+            },
+            bottomBar: {
+                x: 20,
+                y: screenHeight - barH,
+                width: screenWidth - 40,
+                height: barH
+            }
+        };
+    }
+
+    const outerPad = Math.max(12, Math.min(screenWidth, screenHeight) * 0.022);
+    const topInset = outerPad;
+    const sideInset = outerPad + (screenWidth < 740 ? 4 : 10);
+    const bottomInset = outerPad;
+    const headerHeight = Math.max(68, Math.min(110, screenHeight * 0.16));
+    const gap = Math.max(10, Math.min(22, screenWidth * 0.016));
+    const pauseButtonSize = Math.max(58, Math.min(92, screenHeight * 0.14));
+    const rightSideHeight = screenHeight - topInset - bottomInset - headerHeight - gap;
+    const buttonCount = Math.max(1, getUsedLevelColors().length);
+    const rows = Math.max(2, Math.ceil(buttonCount / 2));
+    const maxButtonByHeight = (rightSideHeight - pauseButtonSize - gap * (rows + 1)) / rows;
+    const maxButtonByWidth = Math.min(screenWidth * 0.12, 92);
+    const buttonSize = Math.max(56, Math.min(maxButtonByHeight, maxButtonByWidth));
+    const columnWidth = buttonSize + gap * 2;
+    const fieldHeight = Math.max(220, screenHeight - topInset - bottomInset - headerHeight - gap);
+    const fieldWidth = Math.max(
+        300,
+        screenWidth - sideInset * 2 - columnWidth * 2 - gap * 2
+    );
+    const fieldX = sideInset + columnWidth + gap;
+    const fieldY = topInset + headerHeight + gap;
+    const panelRadius = Math.max(24, Math.min(36, fieldHeight * 0.08));
+    const fieldPadding = Math.max(12, Math.min(20, fieldHeight * 0.05));
+
+    return {
+        mode: 'mobile-landscape',
+        screenWidth,
+        screenHeight,
+        gap,
+        sideInset,
+        topInset,
+        bottomInset,
+        header: {
+            x: sideInset,
+            y: topInset,
+            width: screenWidth - sideInset * 2,
+            height: headerHeight
+        },
+        fieldShell: {
+            x: fieldX,
+            y: fieldY,
+            width: fieldWidth,
+            height: fieldHeight,
+            radius: panelRadius,
+            padding: fieldPadding
+        },
+        playField: {
+            x: fieldX + fieldPadding,
+            y: fieldY + fieldPadding,
+            width: fieldWidth - fieldPadding * 2,
+            height: fieldHeight - fieldPadding * 2,
+            radius: Math.max(18, panelRadius - 8)
+        },
+        leftColumn: {
+            x: sideInset,
+            y: fieldY,
+            width: columnWidth,
+            height: fieldHeight
+        },
+        rightColumn: {
+            x: fieldX + fieldWidth + gap,
+            y: fieldY,
+            width: columnWidth,
+            height: fieldHeight - pauseButtonSize - gap
+        },
+        pauseButton: {
+            x: fieldX + fieldWidth + gap + (columnWidth - pauseButtonSize) / 2,
+            y: fieldY + fieldHeight - pauseButtonSize,
+            size: pauseButtonSize
+        },
+        buttons: {
+            size: buttonSize,
+            gap,
+            rows
+        }
+    };
+}
+
+function createRoundedPanel(width, height, radius, fill = THEME.cardBg, borderColor = THEME.border, borderWidth = 4) {
+    const panel = new PIXI.Container();
+
+    const shadow = new PIXI.Graphics();
+    shadow.beginFill(THEME.shadow, 0.18);
+    shadow.drawRoundedRect(0, 4, width, height, radius);
+    shadow.endFill();
+
+    const bg = new PIXI.Graphics();
+    bg.beginFill(fill);
+    bg.drawRoundedRect(0, 0, width, height, radius);
+    bg.endFill();
+
+    const border = new PIXI.Graphics();
+    border.lineStyle(borderWidth, borderColor, 1);
+    border.drawRoundedRect(0, 0, width, height, radius);
+
+    panel.addChild(shadow);
+    panel.addChild(bg);
+    panel.addChild(border);
+    return panel;
+}
+
+function createLabelSprite(textureName, maxWidth, maxHeight) {
+    const texture = TEXTURES[textureName];
+    if (!texture) return null;
+
+    const sprite = new PIXI.Sprite(texture);
+    sprite.anchor.set(0.5, 0);
+    const scale = Math.min(maxWidth / texture.width, maxHeight / texture.height);
+    sprite.scale.set(scale);
+    return sprite;
+}
+
+function ensureMobilePortraitOverlay() {
+    let overlay = document.getElementById(MOBILE_OVERLAY_ID);
+    if (overlay) return overlay;
+
+    overlay = document.createElement('div');
+    overlay.id = MOBILE_OVERLAY_ID;
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.display = 'none';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.flexDirection = 'column';
+    overlay.style.gap = '14px';
+    overlay.style.padding = '24px';
+    overlay.style.background = 'rgba(48, 28, 10, 0.72)';
+    overlay.style.backdropFilter = 'blur(6px)';
+    overlay.style.zIndex = '10000';
+    overlay.style.color = '#FFF7E8';
+    overlay.style.fontFamily = 'Arial, sans-serif';
+    overlay.style.textAlign = 'center';
+    overlay.style.pointerEvents = 'auto';
+
+    const phone = document.createElement('div');
+    phone.style.width = '78px';
+    phone.style.height = '54px';
+    phone.style.border = '4px solid #FFF3D9';
+    phone.style.borderRadius = '14px';
+    phone.style.transform = 'rotate(90deg)';
+    phone.style.boxSizing = 'border-box';
+    phone.style.position = 'relative';
+
+    const notch = document.createElement('div');
+    notch.style.position = 'absolute';
+    notch.style.top = '50%';
+    notch.style.right = '-8px';
+    notch.style.width = '6px';
+    notch.style.height = '18px';
+    notch.style.transform = 'translateY(-50%)';
+    notch.style.borderRadius = '3px';
+    notch.style.background = '#FFF3D9';
+    phone.appendChild(notch);
+
+    const text = document.createElement('div');
+    text.textContent = 'Поверни телефон горизонтально, чтобы играть';
+    text.style.fontSize = 'clamp(22px, 3vw, 30px)';
+    text.style.fontWeight = '700';
+    text.style.lineHeight = '1.2';
+    text.style.maxWidth = '420px';
+
+    overlay.appendChild(phone);
+    overlay.appendChild(text);
+    document.body.appendChild(overlay);
+    return overlay;
+}
+
+function pauseGameplayForOverlay() {
+    if (orientationPauseActive || isPaused || introActive || levelEnded) return;
+
+    orientationPauseActive = true;
+    clearSpawnTimer();
+
+    activeObjects.forEach(obj => {
+        obj.pausedLifetime = syncObjectLifetime(obj);
+
+        if (obj.lifetimeCheckTimeout) {
+            clearTimeout(obj.lifetimeCheckTimeout);
+        }
+
+        if (obj.animations) {
+            obj.animations.forEach(anim => anim.pause());
+        }
+
+        obj.interactive = false;
+        obj.buttonMode = false;
+    });
+}
+
+function resumeGameplayFromOverlay() {
+    if (!orientationPauseActive || isPaused || introActive || levelEnded) return;
+    orientationPauseActive = false;
+    resumeGame();
+}
+
+function updateMobilePortraitOverlay() {
+    const overlay = ensureMobilePortraitOverlay();
+    const isGameScreen = app?.stage?.children?.includes(gameContainer);
+    const shouldShow = isGameScreen && getViewportMode() === 'mobile-portrait';
+
+    overlay.style.display = shouldShow ? 'flex' : 'none';
+
+    if (isGameScreen) {
+        rootUI.visible = !shouldShow;
+    }
+
+    if (shouldShow) {
+        pauseGameplayForOverlay();
+    } else {
+        resumeGameplayFromOverlay();
+    }
+}
 
 function showPreloader() {
     const preloader = document.createElement('div');
@@ -355,11 +658,13 @@ const KEY_LAYOUT_MAP = {
 
 // Add helper function for button state updates
 function updateButtonState(color, isActive) {
-    const button = colorButtonsContainer?.getChildByName(`colorButton_${color}`);
+    const button = colorButtonsMap[color] || colorButtonsContainer?.getChildByName(`colorButton_${color}`);
     if (!button) return;
 
-    const activeIndicator = button.getChildAt(3); // полупрозрачный круг-оверлей
-    activeIndicator.visible = isActive;
+    const activeIndicator = button.getChildByName('activeIndicator');
+    if (activeIndicator) {
+        activeIndicator.visible = isActive;
+    }
 
     
 
@@ -892,6 +1197,7 @@ function startLevel(index) {
   gameContainer.addChild(rootUI);
   levelData = levels[index];
   levelEnded = false;
+  orientationPauseActive = false;
 
   maxSimultaneousObjects = levelData.params.maxObjects;
 
@@ -900,6 +1206,7 @@ function startLevel(index) {
 
   const { fieldWrapper, playField } = setupPlayArea();
   playArea = playField;
+  updateMobilePortraitOverlay();
 
     // реальный старт спавна
   const startSpawning = () => {
@@ -923,76 +1230,108 @@ function startLevel(index) {
 
 // игровое поле
 function setupPlayArea() {
-    const barH = Math.max(window.innerHeight * BAR_H_PRC, MIN_BAR_H);
-    const topMargin = 20;
+    gameLayout = getGameLayout();
+    rootUI.removeChildren();
+    currentGameUI = { hearts: [] };
+    colorButtonsMap = {};
 
-    // Calculate play area size
-    const size = Math.min(
-        window.innerWidth - 40,
-        window.innerHeight - barH - topMargin - GAP_HORZ
+    const coloredTypes = Object.keys(levelData.params.spawnWeights || {}).filter(type =>
+        type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_')
     );
 
-    // Create field wrapper container
+    if (gameLayout.mode === 'mobile-landscape') {
+        return setupMobileLandscapePlayArea(gameLayout, coloredTypes);
+    }
+
+    return setupDesktopPlayArea(gameLayout, coloredTypes);
+}
+
+function setupDesktopPlayArea(layout, coloredTypes) {
     const fieldWrapper = new PIXI.Container();
-    fieldWrapper.x = (window.innerWidth - size) / 2;
-    fieldWrapper.y = topMargin;
-    fieldWrapper.width = size;
-    fieldWrapper.height = size;
+    fieldWrapper.x = layout.fieldWrapper.x;
+    fieldWrapper.y = layout.fieldWrapper.y;
+    fieldWrapper.width = layout.fieldWrapper.width;
+    fieldWrapper.height = layout.fieldWrapper.height;
 
-    // Create play field container
     const playField = new PIXI.Container();
-    const headerH = Math.floor(size * HEADER_H_PRC);
-    playField.width = size;
-    playField.height = size - headerH;
-    playField.y = headerH;  // Shift play field down by header height
+    playField.width = layout.playField.width;
+    playField.height = layout.playField.height;
+    playField.y = layout.playField.y;
 
-    // Background and border
     const background = new PIXI.Graphics();
-    background.beginFill(THEME.fieldBg); // внутренний цвет
-    background.drawRoundedRect(0, 0, size, size, BORDER_RADIUS);
+    background.beginFill(THEME.fieldBg);
+    background.drawRoundedRect(0, 0, layout.fieldWrapper.width, layout.fieldWrapper.height, BORDER_RADIUS);
     background.endFill();
 
     const border = new PIXI.Graphics();
     border.lineStyle(4, THEME.border, 1);
-    border.drawRoundedRect(0, 0, size, size, BORDER_RADIUS);   
+    border.drawRoundedRect(0, 0, layout.fieldWrapper.width, layout.fieldWrapper.height, BORDER_RADIUS);
 
     playField.addChild(background);
     playField.addChild(border);
     fieldWrapper.addChild(playField);
-
-    // Очищаем rootUI перед добавлением нового fieldWrapper (удаляем старый уровень)
-    rootUI.removeChildren();
-    
-    // Add field wrapper to rootUI
     rootUI.addChild(fieldWrapper);
 
-    // Build level header
-    const header = buildLevelHeader(fieldWrapper, levelData);
-
-    // Setup bottom bar with colored types
-    const coloredTypes = Object.keys(levelData.params.spawnWeights || {}).filter(type => 
-        type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_')
-    );
+    buildDesktopLevelHeader(fieldWrapper, levelData, layout);
     buildBottomBar(coloredTypes);
 
     return { fieldWrapper, playField };
 }
 
-function buildLevelHeader(wrapper, level) {
-    // --- контейнер шапки ---
-    const headerH = Math.floor(wrapper.height * HEADER_H_PRC);
+function setupMobileLandscapePlayArea(layout, coloredTypes) {
+    const header = buildMobileLevelHeader(layout, levelData);
+    rootUI.addChild(header);
+
+    const fieldShell = createRoundedPanel(
+        layout.fieldShell.width,
+        layout.fieldShell.height,
+        layout.fieldShell.radius,
+        THEME.cardBg,
+        THEME.border,
+        6
+    );
+    fieldShell.x = layout.fieldShell.x;
+    fieldShell.y = layout.fieldShell.y;
+    fieldShell.name = 'fieldShell';
+
+    const playField = new PIXI.Container();
+    playField.x = layout.fieldShell.padding;
+    playField.y = layout.fieldShell.padding;
+    playField.width = layout.playField.width;
+    playField.height = layout.playField.height;
+
+    const fieldBg = new PIXI.Graphics();
+    fieldBg.beginFill(THEME.fieldBg);
+    fieldBg.drawRoundedRect(0, 0, layout.playField.width, layout.playField.height, layout.playField.radius);
+    fieldBg.endFill();
+
+    const fieldBorder = new PIXI.Graphics();
+    fieldBorder.lineStyle(4, 0xE6B05A, 0.85);
+    fieldBorder.drawRoundedRect(0, 0, layout.playField.width, layout.playField.height, layout.playField.radius);
+
+    playField.addChild(fieldBg);
+    playField.addChild(fieldBorder);
+    fieldShell.addChild(playField);
+    rootUI.addChild(fieldShell);
+
+    buildSideColorColumns(coloredTypes, layout);
+    buildMobilePauseButton(layout);
+
+    return { fieldWrapper: fieldShell, playField };
+}
+
+function buildDesktopLevelHeader(wrapper, level, layout) {
+    const headerH = Math.floor(layout.header.height);
     const header = new PIXI.Container();
     header.name = 'levelHeader';
     wrapper.addChild(header);
 
-    // --- фон полосы ---
     const bar = new PIXI.Graphics();
     bar.beginFill(THEME.headerBg)
        .drawRoundedRect(0, 0, wrapper.width, headerH, 14)
        .endFill();
     header.addChild(bar);
 
-    // --- текст "Уровень N" (слева) ---
     const lvlText = new PIXI.Text(`Уровень ${level.id}`, {
         fontSize: headerH * 0.35,
         fill: THEME.textDark,
@@ -1003,7 +1342,6 @@ function buildLevelHeader(wrapper, level) {
     lvlText.x = 18;
     header.addChild(lvlText);
 
-    // --- текст прогресса (справа) ---
     const progText = new PIXI.Text(`0/${level.goalBugCount}`, {
         fontSize: headerH * 0.35,
         fill: THEME.textDark,
@@ -1017,54 +1355,244 @@ function buildLevelHeader(wrapper, level) {
     progText.name = 'progText';
     header.addChild(progText);
 
-    // --- строка сердечек ---
     const heartSz = Math.floor(headerH * HEART_SIZE_PRC);
     const hearts = new PIXI.Container();
     hearts.name = 'heartsRow';
     header.addChild(hearts);
 
-    // иконка-текстура (можно заменить на спрайт из атласа)
     const heartStyle = {
         fontSize: heartSz,
         fill: THEME.fail,
         fontFamily: 'Arial',
     };
 
-    // Рисуем сердечки по количеству жизней
+    const heartRefs = [];
     for (let i = 0; i < level.lifeCount; i++) {
         const h = new PIXI.Text('❤', heartStyle);
         h.x = i * (heartSz + HEART_GAP);
         hearts.addChild(h);
+        heartRefs.push(h);
     }
 
-    // центрируем строку по ширине полосы
     hearts.x = (wrapper.width - hearts.width) / 2;
     hearts.y = headerH - heartSz - HEART_GAP;
+
+    currentGameUI = {
+        mode: 'desktop',
+        header,
+        progText,
+        hearts: heartRefs
+    };
 
     return header;
 }
 
-function updateLevelHeader(score, life) {
-    const header = playArea.parent.getChildByName('levelHeader');
-    if (!header) return;
+function buildMobileLevelHeader(layout, level) {
+    const header = createRoundedPanel(
+        layout.header.width,
+        layout.header.height,
+        Math.max(22, Math.floor(layout.header.height * 0.34)),
+        THEME.headerBg,
+        THEME.border,
+        5
+    );
+    header.name = 'levelHeader';
+    header.x = layout.header.x;
+    header.y = layout.header.y;
 
-    // счётчик X/Y
-    const progText = header.getChildByName('progText');
-    progText.text = `${score}/${levelData.goalBugCount}`;
+    const sectionGap = Math.max(8, layout.gap);
+    const leftWidth = Math.max(120, layout.header.width * 0.23);
+    const rightWidth = Math.max(150, layout.header.width * 0.25);
+    const centerWidth = layout.header.width - leftWidth - rightWidth - sectionGap * 2;
+    const badgeY = Math.max(8, layout.header.height * 0.14);
+    const badgeHeight = layout.header.height - badgeY * 2;
 
-    // явная смена символа (надёжно видна)
-    const hearts = header.getChildByName('heartsRow');
-    for (let i = 0; i < hearts.children.length; i++) {
-        const h = hearts.children[i];
-        if (i < life) {
-            h.text = '❤';        // осталось
-            h.style.fill = THEME.fail;
+    const levelBadge = createRoundedPanel(leftWidth, badgeHeight, 24, THEME.cardBg, 0xE5AA54, 4);
+    levelBadge.x = sectionGap;
+    levelBadge.y = badgeY;
+    header.addChild(levelBadge);
+
+    const levelLabel = createLabelSprite('level_label', leftWidth * 0.62, badgeHeight * 0.35);
+    if (levelLabel) {
+        levelLabel.x = leftWidth / 2;
+        levelLabel.y = 8;
+        levelBadge.addChild(levelLabel);
+    }
+
+    const levelText = new PIXI.Text(`LEVEL ${level.id}`, {
+        fontSize: Math.min(28, badgeHeight * 0.32),
+        fill: THEME.textDark,
+        fontWeight: '800',
+        fontFamily: 'Arial'
+    });
+    levelText.anchor.set(0.5, 1);
+    levelText.x = leftWidth / 2;
+    levelText.y = badgeHeight - 10;
+    levelBadge.addChild(levelText);
+
+    const heartsBadge = createRoundedPanel(centerWidth, badgeHeight, 24, 0xFFF8EC, 0xE5AA54, 4);
+    heartsBadge.x = leftWidth + sectionGap;
+    heartsBadge.y = badgeY;
+    header.addChild(heartsBadge);
+
+    const heartSize = Math.max(26, Math.min(38, badgeHeight * 0.5));
+    const heartsRow = new PIXI.Container();
+    const heartRefs = [];
+    for (let i = 0; i < level.lifeCount; i++) {
+        let heart;
+        if (TEXTURES.heart) {
+            heart = new PIXI.Sprite(TEXTURES.heart);
+            heart.width = heartSize;
+            heart.height = heartSize;
         } else {
-            h.text = '♡';        // потрачено
-            h.style.fill = THEME.headerBg;
+            heart = new PIXI.Text('❤', {
+                fontSize: heartSize,
+                fill: THEME.fail,
+                fontWeight: '700',
+                fontFamily: 'Arial'
+            });
         }
-    }       
+        heart.x = i * (heartSize + 8);
+        heartRefs.push(heart);
+        heartsRow.addChild(heart);
+    }
+    heartsRow.x = (centerWidth - heartsRow.width) / 2;
+    heartsRow.y = (badgeHeight - heartSize) / 2;
+    heartsBadge.addChild(heartsRow);
 
+    const goalBadge = createRoundedPanel(rightWidth, badgeHeight, 24, THEME.cardBg, 0xE5AA54, 4);
+    goalBadge.x = layout.header.width - rightWidth - sectionGap;
+    goalBadge.y = badgeY;
+    header.addChild(goalBadge);
+
+    const goalLabel = createLabelSprite('goals_label', rightWidth * 0.62, badgeHeight * 0.35);
+    if (goalLabel) {
+        goalLabel.x = rightWidth / 2;
+        goalLabel.y = 8;
+        goalBadge.addChild(goalLabel);
+    }
+
+    const progText = new PIXI.Text(`ЦЕЛЬ: 0/${level.goalBugCount}`, {
+        fontSize: Math.min(24, badgeHeight * 0.28),
+        fill: THEME.textDark,
+        fontWeight: '800',
+        fontFamily: 'Arial',
+        align: 'center'
+    });
+    progText.anchor.set(0.5, 1);
+    progText.x = rightWidth / 2;
+    progText.y = badgeHeight - 10;
+    progText.name = 'progText';
+    goalBadge.addChild(progText);
+
+    currentGameUI = {
+        mode: 'mobile-landscape',
+        header,
+        progText,
+        hearts: heartRefs
+    };
+
+    return header;
+}
+
+function buildSideColorColumns(coloredTypes, layout) {
+    colorButtonsContainer = rootUI;
+    const colors = getUsedLevelColors();
+    const columns = splitColorsForMobileColumns(colors);
+    dynamicColorKeyMap = {};
+
+    const buildColumn = (columnLayout, colorList, name) => {
+        const column = createRoundedPanel(
+            columnLayout.width,
+            columnLayout.height,
+            28,
+            THEME.cardBg,
+            THEME.border,
+            5
+        );
+        column.name = name;
+        column.x = columnLayout.x;
+        column.y = columnLayout.y;
+
+        const verticalGap = Math.max(10, layout.buttons.gap);
+        const totalHeight = colorList.length * layout.buttons.size + Math.max(0, colorList.length - 1) * verticalGap;
+        const startY = (columnLayout.height - totalHeight) / 2;
+
+        colorList.forEach((color, index) => {
+            const key = COLOR_BUTTON_SLOTS.find((slot) => slot.color === color)?.key || '';
+            if (key) {
+                dynamicColorKeyMap[key] = color;
+            }
+            const button = createColorButton(color, layout.buttons.size, key, false, 'mobile');
+            button.x = (columnLayout.width - layout.buttons.size) / 2;
+            button.y = startY + index * (layout.buttons.size + verticalGap);
+            column.addChild(button);
+            colorButtonsMap[color] = button;
+        });
+
+        rootUI.addChild(column);
+    };
+
+    buildColumn(layout.leftColumn, columns.left, 'leftColorColumn');
+    buildColumn(layout.rightColumn, columns.right, 'rightColorColumn');
+}
+
+function buildMobilePauseButton(layout) {
+    const size = layout.pauseButton.size;
+    const button = new PIXI.Container();
+    button.name = 'pauseButton';
+    button.x = layout.pauseButton.x;
+    button.y = layout.pauseButton.y;
+    button.interactive = true;
+    button.buttonMode = true;
+    button.on('pointerdown', showPausePopup);
+
+    const panel = createRoundedPanel(size, size, 22, 0xFFE9C2, 0xD98B32, 5);
+    button.addChild(panel);
+
+    if (TEXTURES.gear) {
+        const gear = new PIXI.Sprite(TEXTURES.gear);
+        gear.anchor.set(0.5);
+        const scale = Math.min((size * 0.54) / gear.texture.width, (size * 0.54) / gear.texture.height);
+        gear.scale.set(scale);
+        gear.x = size / 2;
+        gear.y = size / 2;
+        button.addChild(gear);
+    } else {
+        const icon = new PIXI.Text('⚙', {
+            fontSize: Math.floor(size * 0.42),
+            fill: THEME.textDark,
+            fontWeight: '800',
+            fontFamily: 'Arial',
+        });
+        icon.anchor.set(0.5);
+        icon.x = size / 2;
+        icon.y = size / 2;
+        button.addChild(icon);
+    }
+
+    rootUI.addChild(button);
+}
+
+function updateLevelHeader(score, life) {
+    if (!currentGameUI) return;
+
+    if (currentGameUI.progText) {
+        currentGameUI.progText.text = currentGameUI.mode === 'mobile-landscape'
+            ? `ЦЕЛЬ: ${score}/${levelData.goalBugCount}`
+            : `${score}/${levelData.goalBugCount}`;
+    }
+
+    currentGameUI.hearts.forEach((heart, index) => {
+        const isAlive = index < life;
+        if (heart instanceof PIXI.Sprite) {
+            heart.alpha = isAlive ? 1 : 0.24;
+            heart.tint = isAlive ? 0xFFFFFF : 0xC78B65;
+        } else {
+            heart.text = isAlive ? '❤' : '♡';
+            heart.style.fill = isAlive ? THEME.fail : THEME.headerBg;
+        }
+    });
 }
 
 // Функция для взвешенного случайного выбора
@@ -1664,10 +2192,12 @@ function markLevelCompleted(index) {
 }
 
 function rebuildUI() {
+    if (!levelData) return;
+
     // Save state
     const prevScore = score;
     const prevLife = life;
-    const prevLevel = levelData.id;
+    const prevLevelIndex = levelData.id - 1;
     const prevObjectQueue = [...objectQueue];
     const prevActiveObjects = [...activeObjects];
     const prevActiveColor = activeColor;
@@ -1678,11 +2208,12 @@ function rebuildUI() {
 
     // Rebuild UI
     const { fieldWrapper, playField } = setupPlayArea();
+    playArea = playField;
     
     // Restore state
     score = prevScore;
     life = prevLife;
-    levelData = levels[prevLevel];
+    levelData = levels[prevLevelIndex];
     activeColor = prevActiveColor;
     colorPressStart = prevColorPressStart;
     updateUI();
@@ -1695,9 +2226,11 @@ function rebuildUI() {
 
     objectQueue = prevObjectQueue;
     activeObjects = prevActiveObjects;
+    updateMobilePortraitOverlay();
 }
 
 window.addEventListener('resize', resizeGame);
+window.addEventListener('orientationchange', resizeGame);
 
 function resizeGame() {
     app.renderer.resize(window.innerWidth, window.innerHeight);
@@ -1717,7 +2250,13 @@ function resizeGame() {
 
     // Игровой экран
     if (app.stage.children.includes(gameContainer)) {
-        rebuildUI();
+        if (getViewportMode() === 'mobile-portrait') {
+            rootUI.visible = false;
+            updateMobilePortraitOverlay();
+        } else {
+            rootUI.visible = true;
+            rebuildUI();
+        }
     }
 
     // Handle pause popup if it exists
@@ -1745,6 +2284,8 @@ function resizeGame() {
     const o = gameContainer.getChildByName(n);
     if (o) { o.width = app.screen.width; o.height = app.screen.height; }
     });
+
+    updateMobilePortraitOverlay();
 
 }
 
@@ -2512,41 +3053,37 @@ function resumeGame() {
 
 function buildBottomBar(coloredTypes) {
     const barH = Math.max(app.screen.height * BAR_H_PRC, MIN_BAR_H);
-    const btnSz = Math.floor(barH * 0.72); // кнопки чуть меньше высоты блока
+    const btnSz = Math.floor(barH * 0.72);
     const gap = GAP_HORZ;
     const fieldWrapper = playArea?.parent;
     const barWidth = fieldWrapper?.width ?? app.screen.width;
     const barX = fieldWrapper?.x ?? 0;
 
-    // гарантируем, что bottomBar существует и добавлен в rootUI ПОСЛЕ поля (поверх/впереди)
     if (!bottomBar) bottomBar = new PIXI.Container();
     if (!bottomBar.parent) rootUI.addChild(bottomBar);
     rootUI.setChildIndex(bottomBar, rootUI.children.length - 1);
 
     bottomBar.removeChildren();
+    colorButtonsMap = {};
 
-    // позиционируем блок строго внизу
     bottomBar.x = barX;
     bottomBar.y = app.screen.height - barH;
 
-    // фон блока (визуально выделенный)
     const bg = new PIXI.Graphics();
     bg.beginFill(THEME.cardBg);
     bg.drawRoundedRect(0, 0, barWidth, barH, 24);
-    bg.endFill();   
+    bg.endFill();
 
     const border = new PIXI.Graphics();
     border.lineStyle(4, THEME.border, 1);
     border.drawRoundedRect(0, 0, barWidth, barH, 24);
 
-    // делаем фон "съедающим" клики, чтобы поле под ним не ловило тапы
     bg.interactive = true;
     bg.hitArea = new PIXI.Rectangle(0, 0, barWidth, barH);
 
     bottomBar.addChild(bg);
     bottomBar.addChild(border);
 
-    // --- кнопки ---
     dynamicColorKeyMap = {};
     colorButtonsContainer = bottomBar;
 
@@ -2557,7 +3094,6 @@ function buildBottomBar(coloredTypes) {
     const pauseX = barWidth - gap - btnSz;
     const y = (barH - btnSz) / 2;
 
-    // Fixed slots: red, purple(blue internal key), green, yellow.
     const slotCount = COLOR_BUTTON_SLOTS.length;
     const colorGroupW = slotCount * btnSz + (slotCount - 1) * gap;
     const maxRight = pauseX - gap;
@@ -2570,10 +3106,11 @@ function buildBottomBar(coloredTypes) {
         if (!usedColors.has(slot.color)) return;
         dynamicColorKeyMap[slot.key] = slot.color;
 
-        const btn = createColorButton(slot.color, btnSz, slot.key, !IS_TOUCH);
+        const btn = createColorButton(slot.color, btnSz, slot.key, !IS_TOUCH, 'desktop');
         btn.x = startX + index * (btnSz + gap);
         btn.y = y;
         bottomBar.addChild(btn);
+        colorButtonsMap[slot.color] = btn;
     });
 
     let pauseButton = bottomBar.getChildByName('pauseButton');
@@ -2605,51 +3142,81 @@ function buildBottomBar(coloredTypes) {
 
     pauseButton.x = pauseX;
     pauseButton.y = y;
-
-    // важно: добавляем после фона/рамки
     bottomBar.addChild(pauseButton);
 }
 
-
-function createColorButton(color, size, key, showKey = true) {
+function createColorButton(color, size, key, showKey = true, variant = 'desktop') {
     const button = new PIXI.Container();
     button.name = `colorButton_${color}`;
     button.interactive = true;
     button.buttonMode = true;
 
-    const bg = new PIXI.Graphics();
-    bg.beginFill(COLORS[color]);
-    bg.drawCircle(size / 2, size / 2, size / 2);
-    bg.endFill();
+    let activeIndicator;
 
-    const highlight = new PIXI.Graphics();
-    highlight.beginFill(0xFFFFFF, 0.24);
-    highlight.drawCircle(size / 2, size / 3, size / 4);
-    highlight.endFill();
+    if (variant === 'mobile' && TEXTURES[`button_${color}`]) {
+        const shadow = new PIXI.Graphics();
+        shadow.beginFill(THEME.shadow, 0.18);
+        shadow.drawRoundedRect(0, 4, size, size, Math.max(18, size * 0.24));
+        shadow.endFill();
+        button.addChild(shadow);
 
-    const border = new PIXI.Graphics();
-    border.lineStyle(3, THEME.borderDark, 0.35);
-    border.drawCircle(size / 2, size / 2, size / 2);
+        const panel = new PIXI.Graphics();
+        panel.beginFill(0xFFF7E8);
+        panel.drawRoundedRect(0, 0, size, size, Math.max(18, size * 0.24));
+        panel.endFill();
+        button.addChild(panel);
 
-    const activeIndicator = new PIXI.Graphics();
-    activeIndicator.beginFill(0xFFF7E8, 0.55);
-    activeIndicator.drawCircle(size / 2, size / 2, size / 2);
-    activeIndicator.endFill();
+        const sprite = new PIXI.Sprite(TEXTURES[`button_${color}`]);
+        sprite.width = size;
+        sprite.height = size;
+        button.addChild(sprite);
+
+        const border = new PIXI.Graphics();
+        border.lineStyle(4, 0xD48730, 0.9);
+        border.drawRoundedRect(0, 0, size, size, Math.max(18, size * 0.24));
+        button.addChild(border);
+
+        activeIndicator = new PIXI.Graphics();
+        activeIndicator.beginFill(0xFFFBEF, 0.28);
+        activeIndicator.drawRoundedRect(2, 2, size - 4, size - 4, Math.max(16, size * 0.22));
+        activeIndicator.endFill();
+    } else {
+        const bg = new PIXI.Graphics();
+        bg.beginFill(COLORS[color]);
+        bg.drawCircle(size / 2, size / 2, size / 2);
+        bg.endFill();
+
+        const highlight = new PIXI.Graphics();
+        highlight.beginFill(0xFFFFFF, 0.24);
+        highlight.drawCircle(size / 2, size / 3, size / 4);
+        highlight.endFill();
+
+        const border = new PIXI.Graphics();
+        border.lineStyle(3, THEME.borderDark, 0.35);
+        border.drawCircle(size / 2, size / 2, size / 2);
+
+        activeIndicator = new PIXI.Graphics();
+        activeIndicator.beginFill(0xFFF7E8, 0.55);
+        activeIndicator.drawCircle(size / 2, size / 2, size / 2);
+        activeIndicator.endFill();
+
+        button.addChild(bg);
+        button.addChild(highlight);
+        button.addChild(border);
+    }
+
+    activeIndicator.name = 'activeIndicator';
     activeIndicator.visible = false;
-
-    button.addChild(bg);
-    button.addChild(highlight);
-    button.addChild(border);
     button.addChild(activeIndicator);
 
     if (showKey) {
         const label = new PIXI.Text(key.toUpperCase(), {
-            fontSize: size * 0.35,
+            fontSize: size * (variant === 'mobile' ? 0.24 : 0.35),
             fill: 0xffffff,
             fontWeight: '700',
             fontFamily: 'Arial',
             stroke: THEME.borderDark,
-            strokeThickness: 3
+            strokeThickness: variant === 'mobile' ? 2 : 3
         });
         label.anchor.set(0.5);
         label.position.set(size / 2);
@@ -2676,7 +3243,6 @@ function createColorButton(color, size, key, showKey = true) {
     const release = (event) => {
         const pointerId = getPointerId(event);
 
-        // Сбрасываем только тот цвет, который удерживал именно этот палец
         if (activeColor === color) {
             if (activeColorPointerId === null || pointerId === null || activeColorPointerId === pointerId) {
                 activeColor = null;
@@ -2718,7 +3284,6 @@ function createColorButton(color, size, key, showKey = true) {
 
     return button;
 }
-
-
 export default levels;
+
 
