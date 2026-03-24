@@ -121,6 +121,12 @@ function scheduleNextSpawn(delay) {
     spawnTimer = setTimeout(spawnObject, nextDelay);
 }
 
+function ensureSpawnTimerAfterUiChange() {
+    if (spawnTimer || orientationPauseActive || isPaused || introActive || levelEnded) return;
+    if (objectQueue.length === 0) return;
+    scheduleNextSpawn(0);
+}
+
 function isFrozenEffectActive(now = Date.now()) {
     return frozenEffectEndsAt > now;
 }
@@ -181,6 +187,7 @@ let colorButtonsContainer = null;
 // ==== UI Containers ====
 const startContainer = new PIXI.Container();
 const levelSelectContainer = new PIXI.Container();
+let selectedLevelIndex = null;
 
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
 
@@ -298,6 +305,7 @@ function resumeGameplayFromOverlay() {
     if (!orientationPauseActive || isPaused || introActive || levelEnded) return;
     orientationPauseActive = false;
     resumeGame();
+    ensureSpawnTimerAfterUiChange();
 }
 
 function updateMobilePortraitOverlay() {
@@ -859,7 +867,7 @@ function showLevelSelect() {
         button.interactive = true;
         button.buttonMode = true;
         button.on('pointerdown', () => {
-            startLevel(i);
+            showLevelEntryPopup(i);
         });
 
         button.addChild(shadow); // тень ДО фона
@@ -927,16 +935,16 @@ function showLevelSelect() {
     scrollContainer.on('pointerup', () => {
         dragging = false;
         // Добавляем инерцию после отпускания
-        if (Math.abs(velocity) > 0.5) {
+        if (Math.abs(velocity) > 0.35) {
             const animateScroll = () => {
-                if (Math.abs(velocity) < 0.5) return;
+                if (Math.abs(velocity) < 0.35) return;
                 
                 let newY = scrollContainer.y - velocity;
                 newY = Math.min(120, newY);
                 newY = Math.max(120 - (contentHeight - visibleHeight), newY);
                 scrollContainer.y = newY;
                 
-                velocity *= 0.95; // Замедление
+                velocity *= 0.97; // Более мягкое замедление
                 requestAnimationFrame(animateScroll);
             };
             requestAnimationFrame(animateScroll);
@@ -955,7 +963,7 @@ function showLevelSelect() {
         const currentY = e.data.global.y;
         
         // Вычисляем скорость скролла
-        velocity = (lastY - currentY) / deltaTime * 16; // Нормализуем скорость
+        velocity = (lastY - currentY) / Math.max(1, deltaTime) * 22; // Чуть более отзывчивый drag
         
         let newY = startScrollY + (currentY - startY);
         // Ограничения прокрутки
@@ -971,7 +979,7 @@ function showLevelSelect() {
     const wheelHandler = (e) => {
         e.preventDefault();
         const delta = e.deltaY || e.detail || e.wheelDelta;
-        const scrollSpeed = 0.5; // Настройка скорости скролла
+        const scrollSpeed = 0.8; // Более лёгкий и быстрый скролл
         
         let newY = scrollContainer.y - delta * scrollSpeed;
         newY = Math.min(120, newY);
@@ -980,7 +988,7 @@ function showLevelSelect() {
         // Плавная анимация скролла
         gsap.to(scrollContainer, {
             y: newY,
-            duration: 0.3,
+            duration: 0.38,
             ease: "power2.out"
         });
     };
@@ -991,6 +999,102 @@ function showLevelSelect() {
 
     // Сброс позиции скролла при открытии
     scrollContainer.y = 120;
+}
+
+function closeLevelEntryPopup() {
+    const popup = levelSelectContainer.getChildByName('levelEntryPopup');
+    if (popup) {
+        levelSelectContainer.removeChild(popup);
+    }
+
+    const overlay = levelSelectContainer.getChildByName('levelEntryOverlay');
+    if (overlay) {
+        levelSelectContainer.removeChild(overlay);
+    }
+
+    selectedLevelIndex = null;
+}
+
+function showLevelEntryPopup(levelIndex) {
+    closeLevelEntryPopup();
+    selectedLevelIndex = levelIndex;
+
+    const overlay = new PIXI.Graphics();
+    overlay.beginFill(THEME.overlay, 0.34);
+    overlay.drawRect(0, 0, app.screen.width, app.screen.height);
+    overlay.endFill();
+    overlay.name = 'levelEntryOverlay';
+    overlay.interactive = true;
+    overlay.buttonMode = true;
+    overlay.on('pointerdown', closeLevelEntryPopup);
+    levelSelectContainer.addChild(overlay);
+
+    const popupWidth = Math.min(app.screen.width * 0.78, 420);
+    const popupHeight = Math.min(app.screen.height * 0.46, 260);
+    const popup = new PIXI.Container();
+    popup.name = 'levelEntryPopup';
+    popup.x = (app.screen.width - popupWidth) / 2;
+    popup.y = (app.screen.height - popupHeight) / 2;
+
+    const bg = new PIXI.Graphics();
+    bg.beginFill(THEME.cardBg);
+    bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 30);
+    bg.endFill();
+
+    const border = new PIXI.Graphics();
+    border.lineStyle(6, THEME.border, 1);
+    border.drawRoundedRect(0, 0, popupWidth, popupHeight, 30);
+
+    popup.addChild(bg);
+    popup.addChild(border);
+
+    const title = new PIXI.Text(`Уровень ${levelIndex + 1}`, {
+        fontSize: Math.max(30, Math.min(46, popupWidth * 0.1)),
+        fill: THEME.textDark,
+        fontWeight: 'bold',
+        fontFamily: 'Arial',
+        align: 'center',
+    });
+    title.anchor.set(0.5, 0);
+    title.x = popupWidth / 2;
+    title.y = 34;
+    popup.addChild(title);
+
+    const subtitle = new PIXI.Text('Готов начать уровень?', {
+        fontSize: Math.max(20, Math.min(28, popupWidth * 0.06)),
+        fill: THEME.textDark,
+        fontFamily: 'Arial',
+        align: 'center',
+    });
+    subtitle.anchor.set(0.5, 0);
+    subtitle.x = popupWidth / 2;
+    subtitle.y = title.y + title.height + 14;
+    popup.addChild(subtitle);
+
+    const btnWidth = Math.min(260, popupWidth * 0.68);
+    const btnHeight = 58;
+    const btnGap = 18;
+    const buttonsY = popupHeight - 78;
+
+    const playBtn = createButton(btnWidth, btnHeight, 'ИГРАТЬ', () => {
+        const index = selectedLevelIndex;
+        closeLevelEntryPopup();
+        if (index !== null) {
+            startLevel(index);
+        }
+    }, 'primary');
+    playBtn.x = popupWidth / 2;
+    playBtn.y = buttonsY - btnHeight / 2 - btnGap;
+    popup.addChild(playBtn);
+
+    const backBtn = createButton(btnWidth, btnHeight, 'НАЗАД', () => {
+        closeLevelEntryPopup();
+    }, 'secondary');
+    backBtn.x = popupWidth / 2;
+    backBtn.y = buttonsY + btnHeight / 2;
+    popup.addChild(backBtn);
+
+    levelSelectContainer.addChild(popup);
 }
 
 // запускаем уровень
@@ -1887,6 +1991,7 @@ function rebuildUI() {
     objectQueue = prevObjectQueue;
     activeObjects = prevActiveObjects;
     updateMobilePortraitOverlay();
+    ensureSpawnTimerAfterUiChange();
 }
 
 window.addEventListener('resize', resizeGame);
@@ -1916,6 +2021,7 @@ function resizeGame() {
         } else {
             rootUI.visible = true;
             rebuildUI();
+            ensureSpawnTimerAfterUiChange();
         }
     }
 
@@ -1946,6 +2052,7 @@ function resizeGame() {
     });
 
     updateMobilePortraitOverlay();
+    ensureSpawnTimerAfterUiChange();
 
 }
 
