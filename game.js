@@ -534,6 +534,7 @@ function removeExpiredObject(obj) {
             if (playArea.children.includes(obj)) {
                 playArea.removeChild(obj);
                 activeObjects = activeObjects.filter(o => o !== obj);
+                ensureSpawnTimerAfterUiChange();
 
                 if (!levelEnded && obj.type !== 'bomb') {
                     life--;
@@ -2787,6 +2788,7 @@ function animateRemoveObject(container, onAfterRemove) {
                 onComplete: () => {
                     if (container.parent) container.parent.removeChild(container);
                     activeObjects = activeObjects.filter(o => o !== container);
+                    ensureSpawnTimerAfterUiChange();
                     if (onAfterRemove) onAfterRemove();
                 }
             });
