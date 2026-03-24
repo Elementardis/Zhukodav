@@ -212,9 +212,7 @@ const SPRITE_PATHS = [
     { name: 'button_yellow', path: 'images/ui/button_yellow.png' },
     { name: 'frozen', path: 'images/ui/frozen.png' },
     { name: 'heart', path: 'images/ui/heart.png' },
-    { name: 'gear', path: 'images/ui/gear.png' },
-    { name: 'level_panel', path: 'images/ui/level.png' },
-    { name: 'goal_panel', path: 'images/ui/goal.png' }
+    { name: 'gear', path: 'images/ui/gear.png' }
 ];
 
 // Store loaded textures
@@ -807,6 +805,15 @@ playButton.addChild(playText);
 
 // ==== Экран выбора уровня ====
 function showLevelSelect() {
+    clearSpawnTimer();
+    finishFrozenEffect();
+    isPaused = false;
+    introActive = false;
+    levelEnded = false;
+    orientationPauseActive = false;
+    clearActiveColor();
+    objectQueue = [];
+
     app.stage.removeChild(startContainer);
     app.stage.addChild(levelSelectContainer);
 
@@ -1107,6 +1114,13 @@ function startLevel(index) {
   // Очищаем предыдущий уровень: останавливаем интервалы и таймеры
   clearSpawnTimer();
   finishFrozenEffect();
+  isPaused = false;
+  introActive = false;
+  levelEnded = false;
+  orientationPauseActive = false;
+  clearActiveColor();
+  objectQueue = [];
+  rootUI.visible = true;
   
   // Мгновенно удаляем все активные объекты предыдущего уровня
   if (activeObjects.length > 0) {
@@ -1117,8 +1131,6 @@ function startLevel(index) {
   app.stage.addChild(gameContainer);
   gameContainer.addChild(rootUI);
   levelData = levels[index];
-  levelEnded = false;
-  orientationPauseActive = false;
 
   maxSimultaneousObjects = levelData.params.maxObjects;
 
@@ -1847,15 +1859,16 @@ const container = new PIXI.Container();
         }
     });
 
-    // Spawn animation with safe boundaries
-    const spawnY = Math.min(container.y + 80, playArea.height - size / 2);
-    container.y = spawnY - 80;
+    // Animate from a short offset above the validated spawn point without changing it.
+    const targetY = container.y;
+    const spawnStartY = Math.max(minY, targetY - 80);
+    container.y = spawnStartY;
 
     // Update spawn animation
     container.alpha = 0.4;
     container.scale.set(1);
     const spawnAnim = gsap.to(container, {
-        y: container.y + 80,
+        y: targetY,
         ease: "bounce.out",
         duration: 0.6,
     });
