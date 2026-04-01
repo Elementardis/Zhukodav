@@ -38,6 +38,8 @@ const FROZEN_LIFETIME_RATE = 1 / FROZEN_LIFETIME_MULTIPLIER;
 const FROZEN_ANIMATION_TIME_SCALE = 0.5;
 const FROZEN_WAVE_COLOR = 0x8FE8FF;     // максимальный размер жука
 
+const DEBUG_SHOW_SPAWN_ZONES = false;
+
 // ==== Global Variables ====
 let activeObjects = [];
 let maxSimultaneousObjects = 4;
@@ -58,7 +60,73 @@ let frozenEffectTimer = null;
 let gameLayout = null;
 let currentGameUI = { hearts: [] };
 let colorButtonsMap = {};
+let levelsSinceLastAd = 0;
+let lastAdTime = 0;
 const DEBUG_SPAWN = true;
+
+function isYandexGames() {
+    return typeof window !== 'undefined' && !!window.ysdk;
+}
+
+function shouldShowRewarded() {
+    return isYandexGames() && !!window.ysdk?.adv?.showRewardedVideo;
+}
+
+function initYandexSDK() {
+    if (typeof YaGames === 'undefined') return;
+
+    YaGames.init().then((ysdk) => {
+        window.ysdk = ysdk;
+        console.log('Yandex SDK initialized');
+    }).catch((err) => {
+        console.log('Yandex SDK init error', err);
+    });
+}
+
+function canShowAd() {
+    return true;
+}
+
+function showInterstitialAd() {
+    if (!isYandexGames()) return;
+    if (!canShowAd()) return;
+    if (!window.ysdk?.adv?.showFullscreenAdv) return;
+
+    window.ysdk.adv.showFullscreenAdv({
+        callbacks: {
+            onOpen: () => {},
+            onClose: () => {
+                lastAdTime = Date.now();
+            },
+            onError: () => {}
+        }
+    });
+}
+
+function giveExtraLives(amount) {
+    const maxLives = levelData?.lifeCount ?? life;
+    life = Math.min(life + amount, maxLives);
+    levelEnded = false;
+    clearAllPopups();
+    updateUI();
+    resumeGame();
+}
+
+function showRewardedAd() {
+    if (!isYandexGames()) return;
+    if (!window.ysdk?.adv?.showRewardedVideo) return;
+
+    window.ysdk.adv.showRewardedVideo({
+        callbacks: {
+            onOpen: () => {},
+            onRewarded: () => {
+                giveExtraLives(3);
+            },
+            onClose: () => {},
+            onError: () => {}
+        }
+    });
+}
 
 function debugSpawn(message, extra = undefined) {
     if (!DEBUG_SPAWN) return;
@@ -423,6 +491,7 @@ const app = new PIXI.Application({
 // Add app view to DOM
 document.body.appendChild(app.view);
 document.body.style.backgroundColor = THEME.appBgCss;
+initYandexSDK();
 
 // === Backend init (Firebase) ===
 initBackend()
@@ -1319,6 +1388,7 @@ function setupDesktopPlayArea(layout, coloredTypes) {
 
     playField.addChild(background);
     playField.addChild(border);
+    addSpawnZoneDebugOverlay(playField);
     fieldWrapper.addChild(playField);
     rootUI.addChild(fieldWrapper);
 
@@ -1361,6 +1431,7 @@ function setupMobileLandscapePlayArea(layout, coloredTypes) {
 
     playField.addChild(fieldBg);
     playField.addChild(fieldBorder);
+    addSpawnZoneDebugOverlay(playField);
     fieldShell.addChild(playField);
     rootUI.addChild(fieldShell);
 
@@ -1694,9 +1765,77 @@ function getSafeSpawnBounds(objSize) {
 }
 
 // Подтягивает объект внутрь безопасной зоны (при ресайзе/перестроении UI)
+function getSpawnRange(spawnZone, playArea) {
+  const fieldLeft = 0;
+  const fieldRight = playArea.width;
+  const fieldWidth = playArea.width;
+  const third = fieldWidth / 3;
+
+  const leftZone = {
+    min: fieldLeft,
+    max: fieldLeft + third
+  };
+  const centerZone = {
+    min: fieldLeft + third,
+    max: fieldLeft + third * 2
+  };
+  const rightZone = {
+    min: fieldLeft + third * 2,
+    max: fieldRight
+  };
+
+  switch (spawnZone) {
+    case 'left':
+      return { minX: leftZone.min, maxX: centerZone.max };
+    case 'right':
+      return { minX: centerZone.min, maxX: rightZone.max };
+    case 'full':
+    default:
+      return { minX: fieldLeft, maxX: fieldRight };
+  }
+}
+
+function getConstrainedSpawnBounds(spawnZone, playArea, objSize) {
+  const safeBounds = getSafeSpawnBounds(objSize);
+  const zoneBounds = getSpawnRange(spawnZone, playArea);
+
+  return {
+    minX: Math.max(safeBounds.minX, zoneBounds.minX + objSize / 2),
+    maxX: Math.min(safeBounds.maxX, zoneBounds.maxX - objSize / 2),
+    minY: safeBounds.minY,
+    maxY: safeBounds.maxY
+  };
+}
+
+function addSpawnZoneDebugOverlay(playField) {
+  if (!DEBUG_SHOW_SPAWN_ZONES) return;
+
+  const overlay = new PIXI.Container();
+  overlay.name = 'spawnZoneDebugOverlay';
+  overlay.eventMode = 'none';
+
+  const third = playField.width / 3;
+  const zones = [
+    { x: 0, width: third, color: 0x4D96FF },
+    { x: third, width: third, color: 0x7BC67B },
+    { x: third * 2, width: playField.width - third * 2, color: 0xFF9F43 }
+  ];
+
+  zones.forEach((zone) => {
+    const rect = new PIXI.Graphics();
+    rect.beginFill(zone.color, 0.15);
+    rect.drawRect(zone.x, 0, zone.width, playField.height);
+    rect.endFill();
+    overlay.addChild(rect);
+  });
+
+  playField.addChild(overlay);
+}
+
 function clampToSafeArea(obj) {
   const size = obj._footprint || Math.max(obj.width, obj.height);
-  const { minX, maxX, minY, maxY } = getSafeSpawnBounds(size);
+  const spawnZone = levelData?.spawnZone ?? 'full';
+  const { minX, maxX, minY, maxY } = getConstrainedSpawnBounds(spawnZone, playArea, size);
   if (minX <= maxX) obj.x = Math.min(Math.max(obj.x, minX), maxX);
   if (minY <= maxY) obj.y = Math.min(Math.max(obj.y, minY), maxY);
 }
@@ -1752,7 +1891,8 @@ const container = new PIXI.Container();
     container.type = type; // ✅ важно для корректной логики в resumeGame()
 
     // Calculate safe spawn boundaries (accounting for border and animations)
-    const { minX, maxX, minY, maxY } = getSafeSpawnBounds(footprint);
+    const spawnZone = levelData?.spawnZone ?? 'full';
+    const { minX, maxX, minY, maxY } = getConstrainedSpawnBounds(spawnZone, playArea, footprint);
 
     // Если безопасная область не вмещает объект — отложим спавн
     if (minX > maxX || minY > maxY) {
@@ -2088,9 +2228,16 @@ function endGame(won) {
 
     const idx = levelData.id - 1;
     if (won) {
+        levelsSinceLastAd++;
+        if (levelsSinceLastAd >= 2) {
+            showInterstitialAd();
+            levelsSinceLastAd = 0;
+        }
         markLevelCompleted(idx);
         showWinOverlayThenPopup(idx);
     } else {
+        showInterstitialAd();
+        levelsSinceLastAd = 0;
         showLoseOverlayThenPopup(idx);
     }
 
@@ -2620,6 +2767,7 @@ function showWinPopup(currentLevelIndex) {
 }
 
 function showLosePopup(currentLevelIndex) {
+    const showRewardedContinue = shouldShowRewarded();
     // Очищаем все существующие попапы
     clearAllPopups();
 
@@ -2669,7 +2817,7 @@ function showLosePopup(currentLevelIndex) {
     const buttonLayout = getVerticalStackLayout({
         popupHeight,
         topY: title.y + title.height + Math.max(18, Math.round(popupHeight * 0.09)),
-        itemCount: 2,
+        itemCount: showRewardedContinue ? 3 : 2,
         bottomPadding: Math.max(20, Math.round(popupHeight * 0.1)),
         preferredHeight: 70,
         preferredGap: 18,
@@ -2678,13 +2826,23 @@ function showLosePopup(currentLevelIndex) {
     });
     const btnH = buttonLayout.itemHeight;
     const btnFontSize = Math.max(20, Math.min(32, Math.round(btnH * 0.42)));
+    let buttonIndex = 0;
+    if (showRewardedContinue) {
+        const continueBtn = createButton(btnW, btnH, 'РџР РћР”РћР›Р–РРўР¬\n+3 Р–РР—РќР', () => {
+            showRewardedAd();
+        }, 'success', btnFontSize);
+        continueBtn.x = popupWidth / 2;
+        continueBtn.y = buttonLayout.startY;
+        popup.addChild(continueBtn);
+        buttonIndex++;
+    }
     const retryBtn = new PIXI.Graphics();
     retryBtn.lineStyle(4, THEME.borderDark);
     retryBtn.beginFill(THEME.primary);
     retryBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
     retryBtn.endFill();
     retryBtn.x = popupWidth / 2;
-    retryBtn.y = buttonLayout.startY;
+    retryBtn.y = buttonLayout.startY + (btnH + buttonLayout.gap) * buttonIndex;
     retryBtn.interactive = true;
     retryBtn.buttonMode = true;
     retryBtn.on('pointerdown', () => {
@@ -2704,6 +2862,7 @@ function showLosePopup(currentLevelIndex) {
     retryText.x = 0;
     retryText.y = 0;
     retryBtn.addChild(retryText);
+    buttonIndex++;
 
     // Кнопка "Меню"
     const menuBtn = new PIXI.Graphics();
@@ -2712,7 +2871,7 @@ function showLosePopup(currentLevelIndex) {
     menuBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
     menuBtn.endFill();
     menuBtn.x = popupWidth / 2;
-    menuBtn.y = buttonLayout.startY + btnH + buttonLayout.gap;
+    menuBtn.y = buttonLayout.startY + (btnH + buttonLayout.gap) * buttonIndex;
     menuBtn.interactive = true;
     menuBtn.buttonMode = true;
     menuBtn.on('pointerdown', () => {

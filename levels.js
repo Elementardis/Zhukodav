@@ -1,4 +1,5 @@
 const levels = [
+  // Optional per-level field: spawnZone: 'left' | 'right' | 'full'
   {
     id: 1,
     goalBugCount: 10,
