@@ -87,21 +87,24 @@ export function getGameLayout({
     const headerHeight = Math.max(68, Math.min(110, screenHeight * 0.16));
     const gap = Math.max(10, Math.min(22, screenWidth * 0.016));
     const pauseButtonSize = Math.max(58, Math.min(92, screenHeight * 0.14));
-    const rightSideHeight = screenHeight - topInset - bottomInset - headerHeight - gap;
-    const rows = colorButtonSlots.length;
-    const maxButtonByHeight = (rightSideHeight - pauseButtonSize - gap * (rows + 1)) / rows;
-    const maxButtonByWidth = Math.min(screenWidth * 0.16, 118);
-    const buttonSize = Math.max(56, Math.min(maxButtonByHeight, maxButtonByWidth));
-    const columnWidth = buttonSize + gap * 0.5;
     const fieldHeight = Math.max(220, screenHeight - topInset - bottomInset - headerHeight - gap);
-    const fieldWidth = Math.max(
-        300,
-        screenWidth - sideInset * 2 - columnWidth * 2 - gap * 2
-    );
-    const fieldX = sideInset + columnWidth + gap;
-    const fieldY = topInset + headerHeight + gap;
     const panelRadius = Math.max(24, Math.min(36, fieldHeight * 0.08));
     const fieldPadding = Math.max(12, Math.min(20, fieldHeight * 0.05));
+    const playFieldHeight = fieldHeight - fieldPadding * 2;
+    const sideButtonGap = Math.max(8, Math.min(16, gap * 0.8));
+    const stackedButtonGap = Math.max(8, Math.min(18, playFieldHeight * 0.045));
+    const buttonHeight = Math.max(76, (playFieldHeight - stackedButtonGap) / 2);
+    const desiredButtonWidth = buttonHeight / 1.8;
+    const buttonWidth = Math.max(44, Math.min(desiredButtonWidth, screenWidth * 0.13, 92));
+    const columnWidth = buttonWidth;
+    const fieldWidth = Math.max(
+        300,
+        screenWidth - sideInset * 2 - columnWidth * 2 - sideButtonGap * 2
+    );
+    const fieldX = sideInset + columnWidth + sideButtonGap;
+    const fieldY = topInset + headerHeight + gap;
+    const playFieldX = fieldX + fieldPadding;
+    const playFieldY = fieldY + fieldPadding;
 
     return {
         mode: 'mobile-landscape',
@@ -126,33 +129,33 @@ export function getGameLayout({
             padding: fieldPadding
         },
         playField: {
-            x: fieldX + fieldPadding,
-            y: fieldY + fieldPadding,
+            x: playFieldX,
+            y: playFieldY,
             width: fieldWidth - fieldPadding * 2,
-            height: fieldHeight - fieldPadding * 2,
+            height: playFieldHeight,
             radius: Math.max(18, panelRadius - 8)
         },
-        leftColumn: {
-            x: sideInset,
-            y: fieldY,
+        leftButtons: {
+            x: playFieldX - sideButtonGap - columnWidth,
+            y: playFieldY,
             width: columnWidth,
-            height: fieldHeight
+            height: playFieldHeight
         },
-        rightColumn: {
-            x: fieldX + fieldWidth + gap,
-            y: fieldY,
+        rightButtons: {
+            x: playFieldX + (fieldWidth - fieldPadding * 2) + sideButtonGap,
+            y: playFieldY,
             width: columnWidth,
-            height: fieldHeight - pauseButtonSize - gap
+            height: playFieldHeight
         },
         pauseButton: {
-            x: fieldX + fieldWidth + gap + (columnWidth - pauseButtonSize) / 2,
-            y: fieldY + fieldHeight - pauseButtonSize,
+            x: screenWidth - sideInset - pauseButtonSize,
+            y: topInset + Math.max(0, (headerHeight - pauseButtonSize) / 2),
             size: pauseButtonSize
         },
         buttons: {
-            size: buttonSize,
-            gap,
-            rows
+            width: buttonWidth,
+            height: buttonHeight,
+            gap: stackedButtonGap
         }
     };
 }

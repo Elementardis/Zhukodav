@@ -1,5 +1,5 @@
 import levels from './levels.js';
-import { getBugBaseBalance } from './bug-config.js';
+import { getBugBaseBalance, getBugSpawnZone } from './bug-config.js';
 import { initBackend, fetchRemoteLevel, saveProgress, trackEvent, recalcLeaderboard, rcNumber } from './firebase.js';
 import {
     isMobileDevice as isMobileDeviceUI,
@@ -191,6 +191,7 @@ function getRuntimeBugBalance(type) {
         lifetime: baseBalance.lifetime * lifetimeMultiplier * frozenLifetimeMultiplier,
         spawnInterval: baseBalance.spawnInterval / spawnIntervalMultiplier,
         clicks: baseBalance.clicks,
+        spawnZone: getBugSpawnZone(type),
     };
 }
 
@@ -1479,25 +1480,13 @@ function buildSideColorColumns(coloredTypes, layout) {
         column.x = columnLayout.x;
         column.y = columnLayout.y;
 
-        const verticalGap = Math.max(10, layout.buttons.gap);
-        const totalHeight = slotColors.length * layout.buttons.size + Math.max(0, slotColors.length - 1) * verticalGap;
-        const startY = (columnLayout.height - totalHeight) / 2;
+        const buttonWidth = layout.buttons.width;
+        const buttonHeight = layout.buttons.height;
+        const verticalGap = layout.buttons.gap;
+        let visibleIndex = 0;
 
         slotColors.forEach((color, index) => {
-            const slotBlock = createRoundedPanel(
-                layout.buttons.size,
-                layout.buttons.size,
-                Math.max(18, layout.buttons.size * 0.22),
-                0xFFF8EC,
-                0xFFF8EC,
-                0
-            );
-            slotBlock.x = (columnLayout.width - layout.buttons.size) / 2;
-            slotBlock.y = startY + index * (layout.buttons.size + verticalGap);
-            column.addChild(slotBlock);
-
             if (!availableColors.has(color)) {
-                slotBlock.alpha = 0.35;
                 return;
             }
 
@@ -1505,22 +1494,23 @@ function buildSideColorColumns(coloredTypes, layout) {
             if (key) {
                 dynamicColorKeyMap[key] = color;
             }
-            const button = createColorButton(color, layout.buttons.size, key, false, 'mobile');
-            button.x = slotBlock.x;
-            button.y = slotBlock.y;
+            const button = createColorButton(color, buttonWidth, key, false, 'mobile-tall', buttonHeight);
+            button.x = (columnLayout.width - buttonWidth) / 2;
+            button.y = visibleIndex * (buttonHeight + verticalGap);
             column.addChild(button);
+
             if (!colorButtonsMap[color]) {
                 colorButtonsMap[color] = [];
             }
             colorButtonsMap[color].push(button);
+            visibleIndex++;
         });
 
         rootUI.addChild(column);
     };
 
-    const mirroredColors = COLOR_BUTTON_SLOTS.map((slot) => slot.color);
-    buildColumn(layout.leftColumn, mirroredColors, 'leftColorColumn');
-    buildColumn(layout.rightColumn, mirroredColors, 'rightColorColumn');
+    buildColumn(layout.leftButtons, ['red', 'green'], 'leftColorColumn');
+    buildColumn(layout.rightButtons, ['blue', 'yellow'], 'rightColorColumn');
 }
 
 function buildMobilePauseButton(layout) {
@@ -1625,6 +1615,7 @@ function prepareObjectQueue() {
             type,
             lifetime: runtimeBalance.lifetime,
             spawnInterval: runtimeBalance.spawnInterval,
+            spawnZone: runtimeBalance.spawnZone,
         };
 
         if (type === 'fat' || type.startsWith('fatColoredBug_')) {
@@ -1648,6 +1639,7 @@ function prepareObjectQueue() {
             type,
             lifetime: runtimeBalance.lifetime,
             spawnInterval: runtimeBalance.spawnInterval,
+            spawnZone: runtimeBalance.spawnZone,
         });
     }
 
@@ -1834,7 +1826,7 @@ function addSpawnZoneDebugOverlay(playField) {
 
 function clampToSafeArea(obj) {
   const size = obj._footprint || Math.max(obj.width, obj.height);
-  const spawnZone = levelData?.spawnZone ?? 'full';
+  const spawnZone = obj.spawnZone ?? getBugSpawnZone(obj.type);
   const { minX, maxX, minY, maxY } = getConstrainedSpawnBounds(spawnZone, playArea, size);
   if (minX <= maxX) obj.x = Math.min(Math.max(obj.x, minX), maxX);
   if (minY <= maxY) obj.y = Math.min(Math.max(obj.y, minY), maxY);
@@ -1888,10 +1880,11 @@ const container = new PIXI.Container();
     container.interactive = true;
     container.buttonMode = true;
     container.animations = [];
+    container.spawnZone = data.spawnZone ?? getBugSpawnZone(type);
     container.type = type; // ✅ важно для корректной логики в resumeGame()
 
     // Calculate safe spawn boundaries (accounting for border and animations)
-    const spawnZone = levelData?.spawnZone ?? 'full';
+    const spawnZone = data.spawnZone ?? getBugSpawnZone(type);
     const { minX, maxX, minY, maxY } = getConstrainedSpawnBounds(spawnZone, playArea, footprint);
 
     // Если безопасная область не вмещает объект — отложим спавн
@@ -3282,38 +3275,59 @@ function buildBottomBar(coloredTypes) {
     bottomBar.addChild(pauseButton);
 }
 
-function createColorButton(color, size, key, showKey = true, variant = 'desktop') {
+function createColorButton(color, size, key, showKey = true, variant = 'desktop', height = size) {
     const button = new PIXI.Container();
     button.name = `colorButton_${color}`;
     button.interactive = true;
     button.buttonMode = true;
 
-    const iconSize = variant === 'mobile' ? size * 0.82 : size * 0.9;
-    const shadow = new PIXI.Graphics();
-    shadow.beginFill(THEME.shadow, 0.18);
-    shadow.drawEllipse(size / 2, size * 0.78, size * 0.28, size * 0.14);
-    shadow.endFill();
-    button.addChild(shadow);
+    const width = size;
+    const buttonHeight = height;
+    const minDimension = Math.min(width, buttonHeight);
+    const isTallMobile = variant === 'mobile-tall';
+    const iconSize = variant === 'mobile'
+        ? width * 0.82
+        : isTallMobile
+            ? minDimension * 0.78
+            : width * 0.9;
+
+    if (isTallMobile) {
+        const shell = createRoundedPanel(
+            width,
+            buttonHeight,
+            Math.max(18, Math.min(width, buttonHeight) * 0.22),
+            0xFFF8EC,
+            0xE6B05A,
+            4
+        );
+        button.addChild(shell);
+    } else {
+        const shadow = new PIXI.Graphics();
+        shadow.beginFill(THEME.shadow, 0.18);
+        shadow.drawEllipse(width / 2, width * 0.78, width * 0.28, width * 0.14);
+        shadow.endFill();
+        button.addChild(shadow);
+    }
 
     const textureName = getButtonTextureName(color);
     if (TEXTURES[textureName]) {
         const sprite = new PIXI.Sprite(TEXTURES[textureName]);
-        sprite.x = (size - iconSize) / 2;
-        sprite.y = (size - iconSize) / 2;
+        sprite.x = (width - iconSize) / 2;
+        sprite.y = isTallMobile ? (buttonHeight - iconSize) / 2 : (width - iconSize) / 2;
         sprite.width = iconSize;
         sprite.height = iconSize;
         button.addChild(sprite);
     } else {
         const fallback = new PIXI.Graphics();
         fallback.beginFill(COLORS[color] || THEME.primary);
-        fallback.drawCircle(size / 2, size / 2, iconSize / 2);
+        fallback.drawCircle(width / 2, isTallMobile ? buttonHeight / 2 : width / 2, iconSize / 2);
         fallback.endFill();
         button.addChild(fallback);
     }
 
     const activeIndicator = new PIXI.Graphics();
-    activeIndicator.beginFill(0xFFF7E8, variant === 'mobile' ? 0.26 : 0.3);
-    activeIndicator.drawCircle(size / 2, size / 2, iconSize * 0.52);
+    activeIndicator.beginFill(0xFFF7E8, variant === 'mobile' || isTallMobile ? 0.26 : 0.3);
+    activeIndicator.drawCircle(width / 2, isTallMobile ? buttonHeight / 2 : width / 2, iconSize * 0.52);
     activeIndicator.endFill();
 
     activeIndicator.name = 'activeIndicator';
@@ -3322,7 +3336,7 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
 
     if (showKey) {
         const label = new PIXI.Text(key.toUpperCase(), {
-            fontSize: size * 0.22,
+            fontSize: width * 0.22,
             fill: THEME.white,
             fontWeight: '700',
             fontFamily: 'Arial',
@@ -3330,8 +3344,8 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
             strokeThickness: 3
         });
         label.anchor.set(0.5);
-        label.x = size / 2;
-        label.y = size * 0.84;
+        label.x = width / 2;
+        label.y = isTallMobile ? buttonHeight * 0.84 : width * 0.84;
         button.addChild(label);
     }
 
