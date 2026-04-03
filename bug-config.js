@@ -73,6 +73,18 @@ export const BUG_BALANCE = {
     spawnInterval: 450,
     clicks: 1,
     spawnZone: 'full',
+  },
+  "chameleon": {
+    lifetime: 2000,
+    spawnInterval: 450,
+    clicks: 1,
+    spawnZone: 'full',
+  },
+  "neat": {
+    lifetime: 2000,
+    spawnInterval: 450,
+    clicks: 2,
+    spawnZone: 'full',
   }
 };
 

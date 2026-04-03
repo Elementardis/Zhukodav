@@ -38,6 +38,10 @@ const FROZEN_LIFETIME_RATE = 1 / FROZEN_LIFETIME_MULTIPLIER;
 const FROZEN_ANIMATION_TIME_SCALE = 0.5;
 const FROZEN_WAVE_COLOR = 0x8FE8FF;     // максимальный размер жука
 
+const NEAT_SPAWN_DELAY_MS = 1500;
+const NEAT_WAVE_COLORS = [0xFDFDFD, 0xEAEAEA, 0xD8DDE3, 0xC8D0D8];
+const CHAMELEON_EFFECT_DURATION_MS = 5000;
+const CHAMELEON_WAVE_COLORS = [0xFFB7C5, 0xFFD7A8, 0xFFF0A6, 0xBAF2BB, 0xB8E7FF, 0xD8C4FF];
 const DEBUG_SHOW_SPAWN_ZONES = false;
 
 // ==== Global Variables ====
@@ -54,9 +58,15 @@ let spawnTimer = null;
 let score = 0;
 let life = 0;
 let orientationPauseActive = false;
+let spawnResumeDelayBlocked = false;
+let spawnResumeDelayTimer = null;
 let frozenEffectStartedAt = 0;
 let frozenEffectEndsAt = 0;
 let frozenEffectTimer = null;
+let chameleonEffectStartedAt = 0;
+let chameleonEffectEndsAt = 0;
+let chameleonEffectTimer = null;
+let chameleonFieldOverlay = null;
 let gameLayout = null;
 let currentGameUI = { hearts: [] };
 let colorButtonsMap = {};
@@ -202,6 +212,24 @@ function clearSpawnTimer() {
     }
 }
 
+function clearSpawnResumeDelay() {
+    spawnResumeDelayBlocked = false;
+    if (spawnResumeDelayTimer) {
+        clearTimeout(spawnResumeDelayTimer);
+        spawnResumeDelayTimer = null;
+    }
+}
+
+function startSpawnResumeDelay(delay = NEAT_SPAWN_DELAY_MS) {
+    clearSpawnResumeDelay();
+    spawnResumeDelayBlocked = true;
+    spawnResumeDelayTimer = setTimeout(() => {
+        spawnResumeDelayBlocked = false;
+        spawnResumeDelayTimer = null;
+        ensureSpawnTimerAfterUiChange();
+    }, delay);
+}
+
 function scheduleNextSpawn(delay) {
     clearSpawnTimer();
 
@@ -220,7 +248,7 @@ function scheduleNextSpawn(delay) {
 }
 
 function ensureSpawnTimerAfterUiChange() {
-    if (spawnTimer || orientationPauseActive || isPaused || introActive || levelEnded) return;
+    if (spawnTimer || spawnResumeDelayBlocked || orientationPauseActive || isPaused || introActive || levelEnded) return;
     if (objectQueue.length === 0) return;
     scheduleNextSpawn(0);
 }
@@ -232,6 +260,10 @@ function removeObjectFromActiveList(target) {
 
 function isFrozenEffectActive(now = Date.now()) {
     return frozenEffectEndsAt > now;
+}
+
+function isChameleonEffectActive(now = Date.now()) {
+    return chameleonEffectEndsAt > now;
 }
 
 function getLifetimeDecayMs(startTime, endTime) {
@@ -309,6 +341,8 @@ const SPRITE_PATHS = [
     { name: 'button_red',    path: 'images/ui/button_red.png' },
     { name: 'button_yellow', path: 'images/ui/button_yellow.png' },
     { name: 'frozen', path: 'images/ui/frozen.png' },
+    { name: 'chameleon', path: 'images/chameleon.png' },
+    { name: 'neat', path: 'images/neat.png' },
     { name: 'heart', path: 'images/ui/heart.png' },
     { name: 'gear', path: 'images/ui/gear.png' }
 ];
@@ -718,6 +752,246 @@ function showFrozenWave(x, y) {
     });
 }
 
+function showChameleonWave(x, y) {
+    const effectLayer = playArea?.parent ?? playArea;
+    const waveContainer = new PIXI.Container();
+    waveContainer.x = (playArea?.x ?? 0) + x;
+    waveContainer.y = (playArea?.y ?? 0) + y;
+    effectLayer.addChild(waveContainer);
+
+    const animations = [];
+    CHAMELEON_WAVE_COLORS.forEach((color, index) => {
+        const ring = new PIXI.Graphics();
+        ring.lineStyle(8, color, 0.72);
+        ring.drawCircle(0, 0, 30 + index * 4);
+        ring.alpha = 0.85;
+        ring.scale.set(0.16);
+        waveContainer.addChild(ring);
+
+        animations.push(
+            gsap.to(ring.scale, {
+                x: 7.2,
+                y: 7.2,
+                duration: 0.7,
+                delay: index * 0.03,
+                ease: "power2.out"
+            }),
+            gsap.to(ring, {
+                alpha: 0,
+                duration: 0.7,
+                delay: index * 0.03,
+                ease: "power1.out"
+            })
+        );
+    });
+
+    gsap.delayedCall(0.9, () => {
+        animations.forEach(anim => anim.kill());
+        if (waveContainer.parent) waveContainer.parent.removeChild(waveContainer);
+        waveContainer.destroy({ children: true });
+    });
+}
+
+function showNeatWave(x, y) {
+    const effectLayer = playArea?.parent ?? playArea;
+    const waveContainer = new PIXI.Container();
+    waveContainer.x = (playArea?.x ?? 0) + x;
+    waveContainer.y = (playArea?.y ?? 0) + y;
+    effectLayer.addChild(waveContainer);
+
+    const animations = [];
+    NEAT_WAVE_COLORS.forEach((color, index) => {
+        const ring = new PIXI.Graphics();
+        ring.lineStyle(10 - index, color, 0.82 - index * 0.12);
+        ring.drawCircle(0, 0, 28 + index * 8);
+        ring.scale.set(0.12);
+        waveContainer.addChild(ring);
+
+        animations.push(
+            gsap.to(ring.scale, {
+                x: 10.5,
+                y: 10.5,
+                duration: 0.65,
+                delay: index * 0.04,
+                ease: "power2.out"
+            }),
+            gsap.to(ring, {
+                alpha: 0,
+                duration: 0.65,
+                delay: index * 0.04,
+                ease: "power1.out"
+            })
+        );
+    });
+
+    gsap.delayedCall(0.85, () => {
+        animations.forEach(anim => anim.kill());
+        if (waveContainer.parent) waveContainer.parent.removeChild(waveContainer);
+        waveContainer.destroy({ children: true });
+    });
+}
+
+function animateNeatSweepRemove(obj, delay = 0, onComplete) {
+    if (obj.lifetimeCheckTimeout) {
+        clearTimeout(obj.lifetimeCheckTimeout);
+        obj.lifetimeCheckTimeout = null;
+    }
+
+    if (obj.animations) {
+        obj.animations.forEach(anim => {
+            if (typeof anim.pause === 'function') anim.pause();
+            if (typeof anim.kill === 'function') anim.kill();
+        });
+    }
+
+    obj.interactive = false;
+    obj.buttonMode = false;
+
+    gsap.to(obj, {
+        alpha: 0,
+        duration: 0.28,
+        delay,
+        ease: "power1.inOut"
+    });
+    gsap.to(obj.scale, {
+        x: 0.82,
+        y: 0.82,
+        duration: 0.28,
+        delay,
+        ease: "power2.in",
+        onComplete: () => {
+            if (obj.parent) obj.parent.removeChild(obj);
+            removeObjectFromActiveList(obj);
+            if (onComplete) onComplete();
+        }
+    });
+}
+
+function clearFieldWithNeat(triggerContainer) {
+    clearSpawnTimer();
+    startSpawnResumeDelay(NEAT_SPAWN_DELAY_MS);
+
+    const targets = [...activeObjects];
+    if (!targets.length) return;
+
+    const clearedTargets = targets.filter(obj => obj !== triggerContainer);
+    if (clearedTargets.length) {
+        score += clearedTargets.length;
+    }
+
+    targets.forEach((obj, index) => {
+        const delay = obj === triggerContainer ? 0.12 : Math.min(0.16, 0.03 + index * 0.01);
+        animateNeatSweepRemove(obj, delay);
+    });
+}
+
+function buildChameleonFieldOverlay(width, height, radius) {
+    const overlay = new PIXI.Container();
+    overlay.name = 'chameleonFieldOverlay';
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(2, Math.round(width));
+    canvas.height = Math.max(2, Math.round(height));
+    const ctx = canvas.getContext('2d');
+
+    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    gradient.addColorStop(0, '#ffd6e3');
+    gradient.addColorStop(0.18, '#ffe2c2');
+    gradient.addColorStop(0.36, '#fff1c4');
+    gradient.addColorStop(0.54, '#d7f5d1');
+    gradient.addColorStop(0.72, '#d7efff');
+    gradient.addColorStop(1, '#eadcff');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    for (let i = 0; i < 6; i++) {
+        ctx.beginPath();
+        ctx.ellipse(
+            canvas.width * (0.12 + i * 0.16),
+            canvas.height * (0.2 + (i % 2) * 0.28),
+            canvas.width * 0.18,
+            canvas.height * 0.26,
+            Math.PI / 6,
+            0,
+            Math.PI * 2
+        );
+        ctx.fill();
+    }
+
+    const texture = PIXI.Texture.from(canvas);
+    const sprite = new PIXI.Sprite(texture);
+    sprite.width = width;
+    sprite.height = height;
+    sprite.alpha = 0.55;
+    overlay.addChild(sprite);
+
+    const mask = new PIXI.Graphics();
+    mask.beginFill(0xFFFFFF);
+    mask.drawRoundedRect(0, 0, width, height, radius);
+    mask.endFill();
+    overlay.addChild(mask);
+    overlay.mask = mask;
+
+    overlay._dynamicTexture = texture;
+    overlay._anims = [
+        gsap.to(sprite, {
+            alpha: 0.68,
+            duration: 1.2,
+            repeat: -1,
+            yoyo: true,
+            ease: "sine.inOut"
+        }),
+        gsap.to(sprite, {
+            x: -18,
+            duration: 2.6,
+            repeat: -1,
+            yoyo: true,
+            ease: "sine.inOut"
+        })
+    ];
+
+    return overlay;
+}
+
+function clearChameleonFieldOverlay() {
+    if (!chameleonFieldOverlay) return;
+
+    chameleonFieldOverlay._anims?.forEach(anim => anim.kill());
+    if (chameleonFieldOverlay.parent) {
+        chameleonFieldOverlay.parent.removeChild(chameleonFieldOverlay);
+    }
+    chameleonFieldOverlay._dynamicTexture?.destroy(true);
+    chameleonFieldOverlay.destroy({ children: true });
+    chameleonFieldOverlay = null;
+}
+
+function syncChameleonFieldOverlay() {
+    if (!playArea) return;
+
+    if (!isChameleonEffectActive()) {
+        clearChameleonFieldOverlay();
+        return;
+    }
+
+    const radius = playArea._fieldRadius ?? BORDER_RADIUS;
+    const needsRebuild =
+        !chameleonFieldOverlay ||
+        chameleonFieldOverlay.parent !== playArea ||
+        Math.round(chameleonFieldOverlay.width) !== Math.round(playArea._fieldWidth ?? playArea.width) ||
+        Math.round(chameleonFieldOverlay.height) !== Math.round(playArea._fieldHeight ?? playArea.height);
+
+    if (needsRebuild) {
+        clearChameleonFieldOverlay();
+        chameleonFieldOverlay = buildChameleonFieldOverlay(
+            playArea._fieldWidth ?? playArea.width,
+            playArea._fieldHeight ?? playArea.height,
+            radius
+        );
+        playArea.addChildAt(chameleonFieldOverlay, Math.min(1, playArea.children.length));
+    }
+}
+
 function finishFrozenEffect() {
     const now = Date.now();
 
@@ -754,6 +1028,33 @@ function activateFrozenEffect() {
 
     frozenEffectTimer = setTimeout(finishFrozenEffect, FROZEN_EFFECT_DURATION_MS);
     activeObjects.forEach(obj => applyObjectAnimationTimeScale(obj, now));
+}
+
+function finishChameleonEffect() {
+    chameleonEffectStartedAt = 0;
+    chameleonEffectEndsAt = 0;
+
+    if (chameleonEffectTimer) {
+        clearTimeout(chameleonEffectTimer);
+        chameleonEffectTimer = null;
+    }
+
+    clearChameleonFieldOverlay();
+}
+
+function activateChameleonEffect() {
+    const now = Date.now();
+
+    chameleonEffectStartedAt = now;
+    chameleonEffectEndsAt = now + CHAMELEON_EFFECT_DURATION_MS;
+    clearActiveColor();
+    syncChameleonFieldOverlay();
+
+    if (chameleonEffectTimer) {
+        clearTimeout(chameleonEffectTimer);
+    }
+
+    chameleonEffectTimer = setTimeout(finishChameleonEffect, CHAMELEON_EFFECT_DURATION_MS);
 }
 
 
@@ -1300,7 +1601,9 @@ function showLevelEntryPopup(levelIndex) {
 function startLevel(index) {
   // Очищаем предыдущий уровень: останавливаем интервалы и таймеры
   clearSpawnTimer();
+  clearSpawnResumeDelay();
   finishFrozenEffect();
+  finishChameleonEffect();
   isPaused = false;
   introActive = false;
   levelEnded = false;
@@ -1326,6 +1629,7 @@ function startLevel(index) {
 
   const { fieldWrapper, playField } = setupPlayArea();
   playArea = playField;
+  syncChameleonFieldOverlay();
   updateMobilePortraitOverlay();
 
     // реальный старт спавна
@@ -1376,6 +1680,8 @@ function setupDesktopPlayArea(layout, coloredTypes) {
     const playField = new PIXI.Container();
     playField.width = layout.playField.width;
     playField.height = layout.playField.height;
+    playField._fieldWidth = layout.playField.width;
+    playField._fieldHeight = layout.playField.height;
     playField.y = layout.playField.y;
 
     const background = new PIXI.Graphics();
@@ -1389,6 +1695,7 @@ function setupDesktopPlayArea(layout, coloredTypes) {
 
     playField.addChild(background);
     playField.addChild(border);
+    playField._fieldRadius = BORDER_RADIUS;
     addSpawnZoneDebugOverlay(playField);
     fieldWrapper.addChild(playField);
     rootUI.addChild(fieldWrapper);
@@ -1420,6 +1727,8 @@ function setupMobileLandscapePlayArea(layout, coloredTypes) {
     playField.y = layout.fieldShell.padding;
     playField.width = layout.playField.width;
     playField.height = layout.playField.height;
+    playField._fieldWidth = layout.playField.width;
+    playField._fieldHeight = layout.playField.height;
 
     const fieldBg = new PIXI.Graphics();
     fieldBg.beginFill(THEME.fieldBg);
@@ -1432,6 +1741,7 @@ function setupMobileLandscapePlayArea(layout, coloredTypes) {
 
     playField.addChild(fieldBg);
     playField.addChild(fieldBorder);
+    playField._fieldRadius = layout.playField.radius;
     addSpawnZoneDebugOverlay(playField);
     fieldShell.addChild(playField);
     rootUI.addChild(fieldShell);
@@ -1585,6 +1895,8 @@ function prepareObjectQueue() {
         type !== 'bomb' &&
         (type === 'bug' ||
          type === 'frozen' ||
+         type === 'chameleon' ||
+         type === 'neat' ||
          type === 'fat' ||
          type.startsWith('coloredBug_') ||
          type.startsWith('fatColoredBug_'))
@@ -1983,6 +2295,18 @@ const container = new PIXI.Container();
         visual.width = size;
         visual.height = size;
         container.addChild(visual);
+    } else if (type === 'chameleon') {
+        visual = new PIXI.Sprite(TEXTURES['chameleon'] || TEXTURES['bug']);
+        visual.anchor.set(0.5);
+        visual.width = size;
+        visual.height = size;
+        container.addChild(visual);
+    } else if (type === 'neat') {
+        visual = new PIXI.Sprite(TEXTURES['neat'] || TEXTURES['bug']);
+        visual.anchor.set(0.5);
+        visual.width = size;
+        visual.height = size;
+        container.addChild(visual);
     } else {
         visual = new PIXI.Sprite(TEXTURES[type]);
         visual.anchor.set(0.5);
@@ -2005,7 +2329,7 @@ const container = new PIXI.Container();
         if (isPaused || levelEnded) return; // Don't handle clicks while paused
 
         // If any color is active, only colored bugs and bombs can be clicked
-        if (activeColor !== null && !type.startsWith('coloredBug_') && !type.startsWith('fatColoredBug_') && type !== 'bomb') {
+        if (activeColor !== null && !isChameleonEffectActive() && !type.startsWith('coloredBug_') && !type.startsWith('fatColoredBug_') && type !== 'bomb') {
             if (type === 'fat') {
                 animateFatBugSquish(container);
             } else {
@@ -2016,7 +2340,7 @@ const container = new PIXI.Container();
 
         if (type.startsWith('fatColoredBug_')) {
             const color = type.split('_')[1];
-            if (activeColor === color) {
+            if (activeColor === color || isChameleonEffectActive()) {
                 data.clicks--;
                 const text = container.getChildByName('clickText');
                 if (text) text.text = data.clicks;
@@ -2042,7 +2366,7 @@ const container = new PIXI.Container();
             }
         } else if (type.startsWith('coloredBug_')) {
             const color = type.split('_')[1];
-            if (activeColor === color) {
+            if (activeColor === color || isChameleonEffectActive()) {
                 score++;
                 animateRemoveObject(container, () => {
                     updateUI();
@@ -2110,6 +2434,34 @@ const container = new PIXI.Container();
                     }
                 });
             });
+        } else if (type === 'chameleon') {
+            score++;
+            container.interactive = false;
+            container.buttonMode = false;
+            showChameleonWave(container.x, container.y);
+            activateChameleonEffect();
+            gsap.delayedCall(0.12, () => {
+                animateRemoveObject(container, () => {
+                    updateUI();
+                    if (score >= levelData.goalBugCount) {
+                        endGame(true);
+                    } else if (life <= 0) {
+                        endGame(false);
+                    }
+                });
+            });
+        } else if (type === 'neat') {
+            score++;
+            container.interactive = false;
+            container.buttonMode = false;
+            showNeatWave(container.x, container.y);
+            clearFieldWithNeat(container);
+            updateUI();
+            if (score >= levelData.goalBugCount) {
+                endGame(true);
+            } else if (life <= 0) {
+                endGame(false);
+            }
         } else {
             // Regular bug
             score++;
@@ -2202,7 +2554,9 @@ function updateUI() {
 // конец игры
 function endGame(won) {
     clearSpawnTimer();
+    clearSpawnResumeDelay();
     finishFrozenEffect();
+    finishChameleonEffect();
     levelEnded = true;
     debugSpawn('endGame called', { won, score, life });
     freezeActiveObjects();
@@ -2271,6 +2625,7 @@ function rebuildUI() {
     // Rebuild UI
     const { fieldWrapper, playField } = setupPlayArea();
     playArea = playField;
+    syncChameleonFieldOverlay();
     
     // Restore state
     score = prevScore;
@@ -2397,6 +2752,12 @@ function getTextureForType(t) {
   if (!t) return TEXTURES['bug'];
   if (t === 'frozen') {
     return TEXTURES['frozen'] || TEXTURES['bug'];
+  }
+  if (t === 'chameleon') {
+    return TEXTURES['chameleon'] || TEXTURES['bug'];
+  }
+  if (t === 'neat') {
+    return TEXTURES['neat'] || TEXTURES['bug'];
   }
   if (t.startsWith('fatColoredBug_')) {
     const color = t.split('_')[1];

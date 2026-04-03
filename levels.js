@@ -230,6 +230,7 @@ const levels = [
       spawnWeights: {
         bug: 1,
         coloredBug_red: 1,
+        chameleon: 2,
       },
     },
   },
@@ -238,12 +239,13 @@ const levels = [
     goalBugCount: 30,
     lifeCount: 7,
     params: {
-      maxObjects: 4,
-      lifetimeMultiplier: 1.1,
+      maxObjects: 10,
+      lifetimeMultiplier: 3,
       spawnMultiplier: 1.2,
       spawnWeights: {
         coloredBug_red: 1,
         bomb: 0.5,
+        neat: 1,
       },
     },
   },
@@ -321,7 +323,7 @@ const levels = [
     },
     introPopup: {
       type: "coloredBug_blue",
-      descryption: "НАЖМИ и Удерживай СИНЮЮ кнопку и нажми на СИНЕГО жука!",
+      descryption: "НАЖМИ и Удерживай ФИОЛЕТОВУЮ кнопку и нажми на ФИОЛЕТОВОГО жука!",
     },
   },
   {
