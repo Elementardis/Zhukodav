@@ -1930,7 +1930,7 @@ function prepareObjectQueue() {
             spawnZone: runtimeBalance.spawnZone,
         };
 
-        if (type === 'fat' || type.startsWith('fatColoredBug_')) {
+        if (runtimeBalance.clicks > 1) {
             objectData.clicks = runtimeBalance.clicks;
         }
         if (type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_')) {
@@ -2033,6 +2033,34 @@ function animateFatBugSquish(container) {
             duration: 0.1,
             ease: "elastic.out(1, 0.3)" // Add a slight bounce effect
         });
+}
+
+function addClicksCounter(container, clicks, {
+    fontSize = 28,
+    fontFamily = 'Arial',
+    strokeThickness = 4
+} = {}) {
+    const countText = new PIXI.Text(clicks, {
+        fontSize,
+        fill: 0xFFFFFF,
+        fontWeight: 'bold',
+        fontFamily,
+        stroke: 0x000000,
+        strokeThickness
+    });
+    countText.anchor.set(0.5);
+    countText.name = 'clickText';
+    container.addChild(countText);
+    return countText;
+}
+
+function decrementClickCounter(container, data) {
+    if (typeof data.clicks !== 'number') return true;
+
+    data.clicks--;
+    const text = container.getChildByName('clickText');
+    if (text) text.text = data.clicks;
+    return data.clicks <= 0;
 }
 
 function addFieldPulseAnimation(container, duration = DEFAULT_PULSE_DURATION) {
@@ -2252,17 +2280,11 @@ const container = new PIXI.Container();
         container.addChild(visual);
 
         // White text with remaining clicks
-        const countText = new PIXI.Text(data.clicks, {
+        addClicksCounter(container, data.clicks, {
             fontSize: 28,
-            fill: 0xFFFFFF,
-            fontWeight: 'bold',
             fontFamily: 'Roboto',
-            stroke: 0x000000,
             strokeThickness: 6
         });
-        countText.anchor.set(0.5);
-        countText.name = 'clickText';
-        container.addChild(countText);
     } else if (type.startsWith('coloredBug_')) {
         const color = type.split('_')[1];
         visual = new PIXI.Sprite(TEXTURES[`coloredBug_${color}`]);
@@ -2278,17 +2300,11 @@ const container = new PIXI.Container();
         container.addChild(visual);
     
         // Белый текст с оставшимися кликами
-        const countText = new PIXI.Text(data.clicks, {
+        addClicksCounter(container, data.clicks, {
             fontSize: 28,
-            fill: 0xFFFFFF,
-            fontWeight: 'bold',
             fontFamily: 'Arial',
-            stroke: 0x000000,
             strokeThickness: 4
         });
-        countText.anchor.set(0.5);
-        countText.name = 'clickText';
-        container.addChild(countText);
     } else if (type === 'frozen') {
         visual = new PIXI.Sprite(TEXTURES['frozen'] || TEXTURES['bug']);
         visual.anchor.set(0.5);
@@ -2313,6 +2329,10 @@ const container = new PIXI.Container();
         visual.width = size;
         visual.height = size;
         container.addChild(visual);
+    }
+
+    if (data.clicks > 1 && !container.getChildByName('clickText')) {
+        addClicksCounter(container, data.clicks);
     }
 
     // Lifetime is tracked as remaining time so temporary effects can scale it at runtime.
@@ -2341,11 +2361,7 @@ const container = new PIXI.Container();
         if (type.startsWith('fatColoredBug_')) {
             const color = type.split('_')[1];
             if (activeColor === color || isChameleonEffectActive()) {
-                data.clicks--;
-                const text = container.getChildByName('clickText');
-                if (text) text.text = data.clicks;
-
-                if (data.clicks <= 0) {
+                if (decrementClickCounter(container, data)) {
                     // Correct final click - remove
                     score++;
                     animateRemoveObject(container, () => {
@@ -2367,15 +2383,19 @@ const container = new PIXI.Container();
         } else if (type.startsWith('coloredBug_')) {
             const color = type.split('_')[1];
             if (activeColor === color || isChameleonEffectActive()) {
-                score++;
-                animateRemoveObject(container, () => {
-                    updateUI();
-                    if (score >= levelData.goalBugCount) {
-                        endGame(true);
-                    } else if (life <= 0) {
-                        endGame(false);
-                    }
-                });
+                if (decrementClickCounter(container, data)) {
+                    score++;
+                    animateRemoveObject(container, () => {
+                        updateUI();
+                        if (score >= levelData.goalBugCount) {
+                            endGame(true);
+                        } else if (life <= 0) {
+                            endGame(false);
+                        }
+                    });
+                } else {
+                    animateBugShake(container);
+                }
             } else {
                 // Shake animation for wrong color or no color
                 animateBugShake(container);
@@ -2399,11 +2419,7 @@ const container = new PIXI.Container();
             });
             
         } else if (type === 'fat') {
-            data.clicks--;
-            const text = container.getChildByName('clickText');
-            if (text) text.text = data.clicks;
-
-            if (data.clicks <= 0) {
+            if (decrementClickCounter(container, data)) {
                 // Correct final click - remove
                 score++;
                 animateRemoveObject(container, () => {
@@ -2419,6 +2435,10 @@ const container = new PIXI.Container();
                 animateFatBugSquish(container);
             }
         } else if (type === 'frozen') {
+            if (!decrementClickCounter(container, data)) {
+                animateBugShake(container);
+                return;
+            }
             score++;
             container.interactive = false;
             container.buttonMode = false;
@@ -2435,6 +2455,10 @@ const container = new PIXI.Container();
                 });
             });
         } else if (type === 'chameleon') {
+            if (!decrementClickCounter(container, data)) {
+                animateBugShake(container);
+                return;
+            }
             score++;
             container.interactive = false;
             container.buttonMode = false;
@@ -2451,6 +2475,10 @@ const container = new PIXI.Container();
                 });
             });
         } else if (type === 'neat') {
+            if (!decrementClickCounter(container, data)) {
+                animateBugShake(container);
+                return;
+            }
             score++;
             container.interactive = false;
             container.buttonMode = false;
@@ -2464,15 +2492,19 @@ const container = new PIXI.Container();
             }
         } else {
             // Regular bug
-            score++;
-            animateRemoveObject(container, () => {
-                updateUI();
-                if (score >= levelData.goalBugCount) {
-                    endGame(true);
-                } else if (life <= 0) {
-                    endGame(false);
-                }
-            });
+            if (decrementClickCounter(container, data)) {
+                score++;
+                animateRemoveObject(container, () => {
+                    updateUI();
+                    if (score >= levelData.goalBugCount) {
+                        endGame(true);
+                    } else if (life <= 0) {
+                        endGame(false);
+                    }
+                });
+            } else {
+                animateBugShake(container);
+            }
         }
     });
 
