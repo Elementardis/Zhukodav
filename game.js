@@ -69,6 +69,8 @@ let chameleonEffectTimer = null;
 let chameleonFieldOverlay = null;
 let gameLayout = null;
 let currentGameUI = { hearts: [] };
+let pendingResizeFrame = null;
+let pendingOrientationResizeTimeout = null;
 let colorButtonsMap = {};
 let levelsSinceLastAd = 0;
 let lastAdTime = 0;
@@ -233,7 +235,7 @@ function startSpawnResumeDelay(delay = NEAT_SPAWN_DELAY_MS) {
 function scheduleNextSpawn(delay) {
     clearSpawnTimer();
 
-    if (isPaused || introActive || levelEnded) {
+    if (orientationPauseActive || isPaused || introActive || levelEnded || getViewportMode() === 'mobile-portrait') {
         debugSpawn('scheduleNextSpawn skipped by state', { delay });
         return;
     }
@@ -312,10 +314,48 @@ function applyObjectAnimationTimeScale(obj, now = Date.now()) {
 
 
 // Color button state
-let activeColor = null;
-let activeColorPointerId = null;
+let activeKeyboardColor = null;
+let activePointerColors = new Map();
 let colorPressStart = 0;
 let colorButtonsContainer = null;
+const POINTER_COLOR_FALLBACK_KEY = '__pointer_fallback__';
+
+function getPointerId(event) {
+    return event?.data?.pointerId ??
+        event?.data?.originalEvent?.pointerId ??
+        null;
+}
+
+function getPointerColorKey(pointerId) {
+    return pointerId ?? POINTER_COLOR_FALLBACK_KEY;
+}
+
+function isColorHeld(color) {
+    if (!color) return false;
+    if (activeKeyboardColor === color) return true;
+
+    for (const heldColor of activePointerColors.values()) {
+        if (heldColor === color) return true;
+    }
+
+    return false;
+}
+
+function hasAnyActiveColor() {
+    return activeKeyboardColor !== null || activePointerColors.size > 0;
+}
+
+function syncAllColorButtonStates() {
+    const colors = new Set([
+        ...Object.keys(colorButtonsMap || {}),
+        'red',
+        'blue',
+        'green',
+        'yellow'
+    ]);
+
+    colors.forEach((color) => updateButtonState(color, isColorHeld(color)));
+}
 
 
 
@@ -526,6 +566,10 @@ const app = new PIXI.Application({
 // Add app view to DOM
 document.body.appendChild(app.view);
 document.body.style.backgroundColor = THEME.appBgCss;
+document.body.style.overscrollBehavior = 'none';
+document.body.style.touchAction = 'none';
+app.view.style.touchAction = 'none';
+app.view.style.webkitTouchCallout = 'none';
 initYandexSDK();
 
 // === Backend init (Firebase) ===
@@ -1141,12 +1185,9 @@ function freezeActiveObjects() {
 
 // Update keyboard handlers to support both layouts
 function clearActiveColor() {
-    activeColor = null;
-    activeColorPointerId = null;
-
-    if (colorButtonsContainer) {
-        ['red', 'blue', 'green', 'yellow'].forEach(color => updateButtonState(color, false));
-    }
+    activeKeyboardColor = null;
+    activePointerColors.clear();
+    syncAllColorButtonStates();
 }
 
 function getCenteredPopupBounds({
@@ -1205,10 +1246,10 @@ window.addEventListener('keydown', (e) => {
     const englishKey = KEY_LAYOUT_MAP[key] || key;
     const color = dynamicColorKeyMap[englishKey];
     
-    if (color && activeColor !== color) {
-        activeColor = color;
+    if (color && activeKeyboardColor !== color) {
+        activeKeyboardColor = color;
         colorPressStart = Date.now();
-        updateButtonState(color, true);
+        syncAllColorButtonStates();
     }
 });
 
@@ -1218,9 +1259,9 @@ window.addEventListener('keyup', (e) => {
     const englishKey = KEY_LAYOUT_MAP[key] || key;
     const color = dynamicColorKeyMap[englishKey];
     
-    if (color && activeColor === color) {
-        activeColor = null;
-        updateButtonState(color, false);
+    if (color && activeKeyboardColor === color) {
+        activeKeyboardColor = null;
+        syncAllColorButtonStates();
     }
 });
 
@@ -2086,6 +2127,48 @@ function getSpawnFootprintSize(type, baseSize) {
   return baseSize;
 }
 
+function getResolvedObjectSize(type) {
+  const isFat = type === 'fat' || type.startsWith('fatColoredBug_');
+  const playAreaBaseSize = Math.min(playArea.width, playArea.height);
+  const baseSize = Math.min(
+      Math.max(
+          Math.floor(playAreaBaseSize * BUG_SIZE_PRC),
+          MIN_BUG_SIZE
+      ),
+      MAX_BUG_SIZE
+  );
+  const size = isFat ? baseSize * 2 / 1.5 : baseSize;
+  const footprint = getSpawnFootprintSize(type, size);
+
+  return { size, footprint, isFat };
+}
+
+function applyResolvedObjectSize(container) {
+  if (!container?.type || !playArea) return;
+
+  const { size, footprint } = getResolvedObjectSize(container.type);
+  container.width = footprint;
+  container.height = footprint;
+  container.pivot.set(footprint / 2);
+  container._footprint = footprint;
+
+  const visual = container.getChildByName('bugVisual') ||
+    container.children.find((child) => child instanceof PIXI.Sprite);
+
+  if (visual) {
+    const isFatVisual = container.type === 'fat' || container.type.startsWith('fatColoredBug_');
+    const visualSize = isFatVisual ? size * 2 : size;
+    visual.width = visualSize;
+    visual.height = visualSize;
+  }
+
+  const clickText = container.getChildByName('clickText');
+  if (clickText) {
+    const textScale = Math.max(0.9, Math.min(1.45, footprint / 120));
+    clickText.scale.set(textScale);
+  }
+}
+
 function getSafeSpawnBounds(objSize) {
   // рамка + небольшой запас + 10% от размера под пульсации/сквиш
   const pad = FRAME_BORDER + SAFE_PADDING_EXTRA + Math.ceil(objSize * 0.1);
@@ -2199,20 +2282,8 @@ function spawnObject() {
     });
     
     // Calculate actual size based on bug type
-    const isFat = type === 'fat' || type.startsWith('fatColoredBug_');
-    const playAreaBaseSize = Math.min(playArea.width, playArea.height);
-    const baseSize = Math.min(
-        Math.max(
-            Math.floor(playAreaBaseSize * BUG_SIZE_PRC),
-            MIN_BUG_SIZE
-        ),
-        MAX_BUG_SIZE
-    );
-    const size = isFat ? baseSize * 2/1.5 : baseSize;
-
-    
-    const footprint = getSpawnFootprintSize(type, size);
-const container = new PIXI.Container();
+    const { size, footprint, isFat } = getResolvedObjectSize(type);
+    const container = new PIXI.Container();
     container.width = footprint;
     container.height = footprint;
     container.pivot.set(footprint / 2);
@@ -2274,6 +2345,7 @@ const container = new PIXI.Container();
     if (type.startsWith('fatColoredBug_')) {
         const color = type.split('_')[1];
         visual = new PIXI.Sprite(TEXTURES[`coloredBug_${color}`]);
+        visual.name = 'bugVisual';
         visual.anchor.set(0.5);
         visual.width = size * 2;
         visual.height = size * 2;
@@ -2288,12 +2360,14 @@ const container = new PIXI.Container();
     } else if (type.startsWith('coloredBug_')) {
         const color = type.split('_')[1];
         visual = new PIXI.Sprite(TEXTURES[`coloredBug_${color}`]);
+        visual.name = 'bugVisual';
         visual.anchor.set(0.5);
         visual.width = size;
         visual.height = size;
         container.addChild(visual);
     } else if (type === 'fat') {
         visual = new PIXI.Sprite(TEXTURES['bug']);
+        visual.name = 'bugVisual';
         visual.anchor.set(0.5);
         visual.width = size * 2;
         visual.height = size * 2;
@@ -2307,24 +2381,28 @@ const container = new PIXI.Container();
         });
     } else if (type === 'frozen') {
         visual = new PIXI.Sprite(TEXTURES['frozen'] || TEXTURES['bug']);
+        visual.name = 'bugVisual';
         visual.anchor.set(0.5);
         visual.width = size;
         visual.height = size;
         container.addChild(visual);
     } else if (type === 'chameleon') {
         visual = new PIXI.Sprite(TEXTURES['chameleon'] || TEXTURES['bug']);
+        visual.name = 'bugVisual';
         visual.anchor.set(0.5);
         visual.width = size;
         visual.height = size;
         container.addChild(visual);
     } else if (type === 'neat') {
         visual = new PIXI.Sprite(TEXTURES['neat'] || TEXTURES['bug']);
+        visual.name = 'bugVisual';
         visual.anchor.set(0.5);
         visual.width = size;
         visual.height = size;
         container.addChild(visual);
     } else {
         visual = new PIXI.Sprite(TEXTURES[type]);
+        visual.name = 'bugVisual';
         visual.anchor.set(0.5);
         visual.width = size;
         visual.height = size;
@@ -2349,7 +2427,7 @@ const container = new PIXI.Container();
         if (isPaused || levelEnded) return; // Don't handle clicks while paused
 
         // If any color is active, only colored bugs and bombs can be clicked
-        if (activeColor !== null && !isChameleonEffectActive() && !type.startsWith('coloredBug_') && !type.startsWith('fatColoredBug_') && type !== 'bomb') {
+        if (hasAnyActiveColor() && !isChameleonEffectActive() && !type.startsWith('coloredBug_') && !type.startsWith('fatColoredBug_') && type !== 'bomb') {
             if (type === 'fat') {
                 animateFatBugSquish(container);
             } else {
@@ -2360,7 +2438,7 @@ const container = new PIXI.Container();
 
         if (type.startsWith('fatColoredBug_')) {
             const color = type.split('_')[1];
-            if (activeColor === color || isChameleonEffectActive()) {
+            if (isColorHeld(color) || isChameleonEffectActive()) {
                 if (decrementClickCounter(container, data)) {
                     // Correct final click - remove
                     score++;
@@ -2382,7 +2460,7 @@ const container = new PIXI.Container();
             }
         } else if (type.startsWith('coloredBug_')) {
             const color = type.split('_')[1];
-            if (activeColor === color || isChameleonEffectActive()) {
+            if (isColorHeld(color) || isChameleonEffectActive()) {
                 if (decrementClickCounter(container, data)) {
                     score++;
                     animateRemoveObject(container, () => {
@@ -2641,6 +2719,8 @@ function markLevelCompleted(index) {
 
 function rebuildUI() {
     if (!levelData) return;
+    const prevPlayAreaWidth = playArea?.width ?? 0;
+    const prevPlayAreaHeight = playArea?.height ?? 0;
 
     // Save state
     const prevScore = score;
@@ -2648,7 +2728,8 @@ function rebuildUI() {
     const prevLevelIndex = levelData.id - 1;
     const prevObjectQueue = [...objectQueue];
     const prevActiveObjects = [...activeObjects];
-    const prevActiveColor = activeColor;
+    const prevActiveKeyboardColor = activeKeyboardColor;
+    const prevActivePointerColors = new Map(activePointerColors);
     const prevColorPressStart = colorPressStart;
 
     // Clear rootUI
@@ -2663,12 +2744,21 @@ function rebuildUI() {
     score = prevScore;
     life = prevLife;
     levelData = levels[prevLevelIndex];
-    activeColor = prevActiveColor;
+    activeKeyboardColor = prevActiveKeyboardColor;
+    activePointerColors = prevActivePointerColors;
     colorPressStart = prevColorPressStart;
+    syncAllColorButtonStates();
     updateUI();
 
     // Redraw all active objects
     prevActiveObjects.forEach(obj => {
+        if (prevPlayAreaWidth > 0) {
+            obj.x = (obj.x / prevPlayAreaWidth) * playField.width;
+        }
+        if (prevPlayAreaHeight > 0) {
+            obj.y = (obj.y / prevPlayAreaHeight) * playField.height;
+        }
+        applyResolvedObjectSize(obj);
         clampToSafeArea(obj);
         playField.addChild(obj);
     });
@@ -2679,11 +2769,35 @@ function rebuildUI() {
     ensureSpawnTimerAfterUiChange();
 }
 
-window.addEventListener('resize', resizeGame);
-window.addEventListener('orientationchange', resizeGame);
+function scheduleResponsiveResize() {
+    if (pendingResizeFrame !== null) {
+        cancelAnimationFrame(pendingResizeFrame);
+    }
+
+    pendingResizeFrame = requestAnimationFrame(() => {
+        pendingResizeFrame = null;
+        resizeGame();
+    });
+}
+
+window.addEventListener('resize', scheduleResponsiveResize);
+window.addEventListener('orientationchange', () => {
+    scheduleResponsiveResize();
+
+    if (pendingOrientationResizeTimeout !== null) {
+        clearTimeout(pendingOrientationResizeTimeout);
+    }
+
+    pendingOrientationResizeTimeout = setTimeout(() => {
+        pendingOrientationResizeTimeout = null;
+        scheduleResponsiveResize();
+    }, 180);
+});
 
 function resizeGame() {
     app.renderer.resize(window.innerWidth, window.innerHeight);
+    const viewportMode = getViewportMode();
+    const isGameScreen = app.stage.children.includes(gameContainer);
 
     // Стартовый экран
     if (app.stage.children.includes(startContainer)) {
@@ -2699,14 +2813,15 @@ function resizeGame() {
     }
 
     // Игровой экран
-    if (app.stage.children.includes(gameContainer)) {
-        if (getViewportMode() === 'mobile-portrait') {
+    if (isGameScreen) {
+        if (viewportMode === 'mobile-portrait') {
+            pauseGameplayForOverlay();
             rootUI.visible = false;
             updateMobilePortraitOverlay();
         } else {
             rootUI.visible = true;
             rebuildUI();
-            ensureSpawnTimerAfterUiChange();
+            updateMobilePortraitOverlay();
         }
     }
 
@@ -2742,8 +2857,6 @@ function resizeGame() {
     });
 
     updateMobilePortraitOverlay();
-    ensureSpawnTimerAfterUiChange();
-
 }
 
 // Вызвать resizeGame при загрузке, чтобы всё было адаптивно с самого начала
@@ -3744,30 +3857,22 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
 
     button.originalScale = 1;
 
-    const getPointerId = (event) =>
-        event?.data?.pointerId ??
-        event?.data?.originalEvent?.pointerId ??
-        null;
-
     button.on('pointerdown', (event) => {
         const pointerId = getPointerId(event);
+        const pointerKey = getPointerColorKey(pointerId);
 
-        activeColor = color;
-        activeColorPointerId = pointerId;
+        activePointerColors.set(pointerKey, color);
         colorPressStart = Date.now();
-
-        updateButtonState(color, true);
+        syncAllColorButtonStates();
     });
 
     const release = (event) => {
         const pointerId = getPointerId(event);
+        const pointerKey = getPointerColorKey(pointerId);
 
-        if (activeColor === color) {
-            if (activeColorPointerId === null || pointerId === null || activeColorPointerId === pointerId) {
-                activeColor = null;
-                activeColorPointerId = null;
-                updateButtonState(color, false);
-            }
+        if (activePointerColors.get(pointerKey) === color) {
+            activePointerColors.delete(pointerKey);
+            syncAllColorButtonStates();
         }
     };
 
@@ -3777,7 +3882,7 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
 
     button.on('pointerover', () => {
         if (IS_TOUCH) return;
-        if (activeColor !== color) {
+        if (!isColorHeld(color)) {
             gsap.to(button.scale, {
                 x: button.originalScale * 1.06,
                 y: button.originalScale * 1.06,
@@ -3788,7 +3893,7 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
 
     button.on('pointerout', () => {
         if (IS_TOUCH) return;
-        if (activeColor !== color) {
+        if (!isColorHeld(color)) {
             if (button._holdAnim) {
                 button._holdAnim.kill();
                 button._holdAnim = null;

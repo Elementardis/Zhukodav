@@ -1,7 +1,7 @@
 const levels = [
   {
     id: 1,
-    goalBugCount: 10,
+    goalBugCount: 15,
     lifeCount: 5,
     params: {
       maxObjects: 3,
@@ -10,6 +10,10 @@ const levels = [
       spawnWeights: {
         bug: 1,
       },
+    },
+    introPopup: {
+      type: "bug",
+      descryption: "Нажми на ВСЕХ жуков. Убежит - потеряешь жизнь!",
     },
   },
   {
