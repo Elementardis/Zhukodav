@@ -124,6 +124,14 @@ function giveExtraLives(amount) {
     resumeGame();
 }
 
+function healPlayer(amount) {
+    const healAmount = Math.max(0, Math.round(amount ?? 0));
+    if (!healAmount) return;
+
+    const maxLives = levelData?.lifeCount ?? life;
+    life = Math.min(life + healAmount, maxLives);
+}
+
 function showRewardedAd() {
     if (!isYandexGames()) return;
     if (!window.ysdk?.adv?.showRewardedVideo) return;
@@ -203,8 +211,109 @@ function getRuntimeBugBalance(type) {
         lifetime: baseBalance.lifetime * lifetimeMultiplier * frozenLifetimeMultiplier,
         spawnInterval: baseBalance.spawnInterval / spawnIntervalMultiplier,
         clicks: baseBalance.clicks,
+        scoreValue: baseBalance.scoreValue ?? 1,
+        healAmount: baseBalance.healAmount ?? 0,
         spawnZone: getBugSpawnZone(type),
     };
+}
+
+function getObjectScoreValue(dataOrObject) {
+    return Math.max(0, dataOrObject?.scoreValue ?? 1);
+}
+
+function getDisplayObjectCenterGlobal(displayObject) {
+    if (!displayObject) return null;
+    const bounds = displayObject.getBounds();
+    return new PIXI.Point(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+}
+
+function getHealTargetGlobalPosition(nextLifeValue) {
+    if (!currentGameUI) return null;
+
+    const nextLife = Math.max(1, nextLifeValue ?? life);
+
+    if (currentGameUI.mode === 'mobile-landscape' && currentGameUI.heartsContainer) {
+        const heartSize = currentGameUI.heartSize ?? 34;
+        const heartGap = currentGameUI.heartGap ?? 8;
+        const totalWidth = nextLife * heartSize + Math.max(0, nextLife - 1) * heartGap;
+        const startX = (currentGameUI.heartRightX ?? 0) - totalWidth;
+        const localPoint = new PIXI.Point(
+            startX + (nextLife - 1) * (heartSize + heartGap) + heartSize / 2,
+            currentGameUI.heartCenterY ?? heartSize / 2
+        );
+
+        return currentGameUI.heartsContainer.toGlobal(localPoint);
+    }
+
+    const heart = currentGameUI.hearts?.[nextLife - 1];
+    if (heart) {
+        return getDisplayObjectCenterGlobal(heart);
+    }
+
+    return null;
+}
+
+function animateHealingHeart(sourceObject, targetPoint, onComplete) {
+    const startPoint = getDisplayObjectCenterGlobal(sourceObject);
+    if (!startPoint || !targetPoint) {
+        onComplete?.();
+        return;
+    }
+
+    const texture = TEXTURES.life || TEXTURES.heart;
+    if (!texture) {
+        onComplete?.();
+        return;
+    }
+
+    const heart = new PIXI.Sprite(texture);
+    heart.anchor.set(0.5);
+    heart.x = startPoint.x;
+    heart.y = startPoint.y;
+    heart.width = 34;
+    heart.height = 34;
+    heart.zIndex = 9999;
+    app.stage.sortableChildren = true;
+    app.stage.addChild(heart);
+
+    const arcHeight = Math.max(36, Math.abs(targetPoint.y - startPoint.y) * 0.25 + 28);
+    const controlPoint = {
+        x: (startPoint.x + targetPoint.x) / 2,
+        y: Math.min(startPoint.y, targetPoint.y) - arcHeight
+    };
+    const flight = { t: 0 };
+
+    gsap.to(heart.scale, {
+        x: 1.2,
+        y: 1.2,
+        duration: 0.14,
+        yoyo: true,
+        repeat: 1,
+        ease: "sine.inOut"
+    });
+
+    gsap.to(flight, {
+        t: 1,
+        duration: 0.55,
+        ease: "power2.inOut",
+        onUpdate: () => {
+            const t = flight.t;
+            const inv = 1 - t;
+            heart.x = inv * inv * startPoint.x + 2 * inv * t * controlPoint.x + t * t * targetPoint.x;
+            heart.y = inv * inv * startPoint.y + 2 * inv * t * controlPoint.y + t * t * targetPoint.y;
+        },
+        onComplete: () => {
+            gsap.to(heart, {
+                alpha: 0,
+                duration: 0.12,
+                onComplete: () => {
+                    if (heart.parent) heart.parent.removeChild(heart);
+                    heart.destroy();
+                    onComplete?.();
+                }
+            });
+        }
+    });
 }
 
 function clearSpawnTimer() {
@@ -369,6 +478,7 @@ PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
 // ==== SPRITE PRELOADER (PIXI.Loader) ====
 const SPRITE_PATHS = [
     { name: 'bug', path: 'images/bug.png' },
+    { name: 'healer', path: 'images/healer.png' },
     { name: 'bomb', path: 'images/bomb.png' },
     { name: 'coloredBug_red', path: 'images/coloredBug_red.png' },
     { name: 'coloredBug_blue', path: 'images/coloredBug_blue.png' },
@@ -384,6 +494,7 @@ const SPRITE_PATHS = [
     { name: 'chameleon', path: 'images/chameleon.png' },
     { name: 'neat', path: 'images/neat.png' },
     { name: 'heart', path: 'images/ui/heart.png' },
+    { name: 'life', path: 'images/life.png' },
     { name: 'gear', path: 'images/ui/gear.png' }
 ];
 
@@ -920,7 +1031,7 @@ function clearFieldWithNeat(triggerContainer) {
 
     const clearedTargets = targets.filter(obj => obj !== triggerContainer);
     if (clearedTargets.length) {
-        score += clearedTargets.length;
+        score += clearedTargets.reduce((sum, obj) => sum + getObjectScoreValue(obj), 0);
     }
 
     targets.forEach((obj, index) => {
@@ -1935,6 +2046,7 @@ function prepareObjectQueue() {
     const killableTypes = Object.keys(spawnWeights).filter(type =>
         type !== 'bomb' &&
         (type === 'bug' ||
+         type === 'healer' ||
          type === 'frozen' ||
          type === 'chameleon' ||
          type === 'neat' ||
@@ -1968,6 +2080,8 @@ function prepareObjectQueue() {
             type,
             lifetime: runtimeBalance.lifetime,
             spawnInterval: runtimeBalance.spawnInterval,
+            scoreValue: runtimeBalance.scoreValue,
+            healAmount: runtimeBalance.healAmount,
             spawnZone: runtimeBalance.spawnZone,
         };
 
@@ -1992,6 +2106,8 @@ function prepareObjectQueue() {
             type,
             lifetime: runtimeBalance.lifetime,
             spawnInterval: runtimeBalance.spawnInterval,
+            scoreValue: runtimeBalance.scoreValue,
+            healAmount: runtimeBalance.healAmount,
             spawnZone: runtimeBalance.spawnZone,
         });
     }
@@ -2400,6 +2516,13 @@ function spawnObject() {
         visual.width = size;
         visual.height = size;
         container.addChild(visual);
+    } else if (type === 'healer') {
+        visual = new PIXI.Sprite(TEXTURES['healer'] || TEXTURES['bug']);
+        visual.name = 'bugVisual';
+        visual.anchor.set(0.5);
+        visual.width = size;
+        visual.height = size;
+        container.addChild(visual);
     } else {
         visual = new PIXI.Sprite(TEXTURES[type]);
         visual.name = 'bugVisual';
@@ -2441,7 +2564,7 @@ function spawnObject() {
             if (isColorHeld(color) || isChameleonEffectActive()) {
                 if (decrementClickCounter(container, data)) {
                     // Correct final click - remove
-                    score++;
+                    score += getObjectScoreValue(data);
                     animateRemoveObject(container, () => {
                         updateUI();
                         if (score >= levelData.goalBugCount) {
@@ -2462,7 +2585,7 @@ function spawnObject() {
             const color = type.split('_')[1];
             if (isColorHeld(color) || isChameleonEffectActive()) {
                 if (decrementClickCounter(container, data)) {
-                    score++;
+                    score += getObjectScoreValue(data);
                     animateRemoveObject(container, () => {
                         updateUI();
                         if (score >= levelData.goalBugCount) {
@@ -2499,7 +2622,7 @@ function spawnObject() {
         } else if (type === 'fat') {
             if (decrementClickCounter(container, data)) {
                 // Correct final click - remove
-                score++;
+                score += getObjectScoreValue(data);
                 animateRemoveObject(container, () => {
                     updateUI();
                     if (score >= levelData.goalBugCount) {
@@ -2517,7 +2640,7 @@ function spawnObject() {
                 animateBugShake(container);
                 return;
             }
-            score++;
+            score += getObjectScoreValue(data);
             container.interactive = false;
             container.buttonMode = false;
             showFrozenWave(container.x, container.y);
@@ -2537,7 +2660,7 @@ function spawnObject() {
                 animateBugShake(container);
                 return;
             }
-            score++;
+            score += getObjectScoreValue(data);
             container.interactive = false;
             container.buttonMode = false;
             showChameleonWave(container.x, container.y);
@@ -2557,7 +2680,7 @@ function spawnObject() {
                 animateBugShake(container);
                 return;
             }
-            score++;
+            score += getObjectScoreValue(data);
             container.interactive = false;
             container.buttonMode = false;
             showNeatWave(container.x, container.y);
@@ -2568,10 +2691,34 @@ function spawnObject() {
             } else if (life <= 0) {
                 endGame(false);
             }
+        } else if (type === 'healer') {
+            if (!decrementClickCounter(container, data)) {
+                animateBugShake(container);
+                return;
+            }
+            score += getObjectScoreValue(data);
+            container.interactive = false;
+            container.buttonMode = false;
+
+            const maxLives = levelData?.lifeCount ?? life;
+            const nextLife = Math.min(maxLives, life + Math.max(0, Math.round(data.healAmount ?? 0)));
+            const healTargetPoint = getHealTargetGlobalPosition(nextLife);
+
+            animateHealingHeart(container, healTargetPoint, () => {
+                healPlayer(data.healAmount);
+                updateUI();
+                if (score >= levelData.goalBugCount) {
+                    endGame(true);
+                } else if (life <= 0) {
+                    endGame(false);
+                }
+            });
+
+            animateRemoveObject(container);
         } else {
             // Regular bug
             if (decrementClickCounter(container, data)) {
-                score++;
+                score += getObjectScoreValue(data);
                 animateRemoveObject(container, () => {
                     updateUI();
                     if (score >= levelData.goalBugCount) {
@@ -2895,6 +3042,9 @@ function animateAppear(obj, duration = 500) {
 // Универсальная выдача текстуры по типу
 function getTextureForType(t) {
   if (!t) return TEXTURES['bug'];
+  if (t === 'healer') {
+    return TEXTURES['healer'] || TEXTURES['bug'];
+  }
   if (t === 'frozen') {
     return TEXTURES['frozen'] || TEXTURES['bug'];
   }

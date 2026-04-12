@@ -26,6 +26,7 @@ const levels = [
       spawnMultiplier: 1,
       spawnWeights: {
         bug: 1,
+        healer: 1,
       },
     },
   },
