@@ -43,6 +43,14 @@ const NEAT_WAVE_COLORS = [0xFDFDFD, 0xEAEAEA, 0xD8DDE3, 0xC8D0D8];
 const CHAMELEON_EFFECT_DURATION_MS = 5000;
 const CHAMELEON_WAVE_COLORS = [0xFFB7C5, 0xFFD7A8, 0xFFF0A6, 0xBAF2BB, 0xB8E7FF, 0xD8C4FF];
 const DEBUG_SHOW_SPAWN_ZONES = false;
+const CASUAL_UI = {
+    outerPadding: 10,
+    topHudHeightRatio: 0.18,
+    sidePanelWidthRatio: 0.12,
+    gapRatio: 0.018,
+    playfieldRadius: 32,
+    panelRadius: 26,
+};
 
 // ==== Global Variables ====
 let activeObjects = [];
@@ -50,7 +58,12 @@ let maxSimultaneousObjects = 4;
 let rootUI = new PIXI.Container();
 let gameContainer = new PIXI.Container();
 let bottomBar = null;
-let playArea, scoreText, lifeText;
+let playArea = null;
+let playAreaFrame = null;
+let hudContainer = null;
+let sidePanelsContainer = null;
+let colorButtonsContainer = null;
+let scoreText, lifeText;
 let levelData;
 let objectQueue = [];
 let isPaused = false;
@@ -426,7 +439,6 @@ function applyObjectAnimationTimeScale(obj, now = Date.now()) {
 let activeKeyboardColor = null;
 let activePointerColors = new Map();
 let colorPressStart = 0;
-let colorButtonsContainer = null;
 const POINTER_COLOR_FALLBACK_KEY = '__pointer_fallback__';
 
 function getPointerId(event) {
@@ -475,6 +487,60 @@ let selectedLevelIndex = null;
 
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
 
+// ==== UI ASSET SLOTS ====
+// Put custom PNGs into images/ui/custom/ with these exact names.
+// Missing custom files are ignored; the game falls back to drawn Pixi UI.
+const UI_ASSET_SLOTS = {
+    level_entry_icon: {
+        path: 'images/ui/custom/level_entry_icon.png',
+        width: 192,
+        height: 192,
+        description: 'Icon shown in the level entry popup.'
+    },
+    level_tile_completed: {
+        path: 'images/ui/custom/level_tile_completed.png',
+        width: 128,
+        height: 128,
+        description: 'Completed level tile background.'
+    },
+    level_tile_locked: {
+        path: 'images/ui/custom/level_tile_locked.png',
+        width: 128,
+        height: 128,
+        description: 'Not-yet-completed level tile background.'
+    },
+    game_hud_panel: {
+        path: 'images/ui/custom/game_hud_panel.png',
+        width: 1180,
+        height: 112,
+        description: 'Top in-level HUD panel.'
+    },
+    game_goal_badge: {
+        path: 'images/ui/custom/game_goal_badge.png',
+        width: 220,
+        height: 72,
+        description: 'Goal counter badge inside the HUD.'
+    },
+    game_playfield_frame: {
+        path: 'images/ui/custom/game_playfield_frame.png',
+        width: 900,
+        height: 520,
+        description: 'Main in-level playfield frame.'
+    },
+    game_side_panel: {
+        path: 'images/ui/custom/game_side_panel.png',
+        width: 128,
+        height: 360,
+        description: 'Left/right color-button side panel.'
+    },
+    game_settings_button: {
+        path: 'images/ui/custom/game_settings_button.png',
+        width: 96,
+        height: 96,
+        description: 'Settings button background.'
+    }
+};
+
 // ==== SPRITE PRELOADER (PIXI.Loader) ====
 const SPRITE_PATHS = [
     { name: 'bug', path: 'images/bug.png' },
@@ -495,7 +561,12 @@ const SPRITE_PATHS = [
     { name: 'neat', path: 'images/neat.png' },
     { name: 'heart', path: 'images/ui/heart.png' },
     { name: 'life', path: 'images/life.png' },
-    { name: 'gear', path: 'images/ui/gear.png' }
+    { name: 'gear', path: 'images/ui/gear.png' },
+    ...Object.entries(UI_ASSET_SLOTS).map(([name, slot]) => ({
+        name,
+        path: slot.path,
+        optional: true
+    }))
 ];
 
 // Store loaded textures
@@ -540,7 +611,7 @@ function getUsedLevelColors(level = levelData) {
 }
 
 function getButtonTextureName(color) {
-    return getButtonTextureNameUI(color);
+    return COLOR_BUTTON_SLOTS.find((slot) => slot.color === color)?.textureName || getButtonTextureNameUI(color);
 }
 
 function getGameLayout() {
@@ -563,6 +634,29 @@ function createRoundedPanel(width, height, radius, fill = THEME.cardBg, borderCo
 
 function createLabelSprite(textureName, maxWidth, maxHeight) {
     return createLabelSpriteUI({ textureName, maxWidth, maxHeight, textures: TEXTURES });
+}
+
+function createUIAssetSprite(slotName, maxWidth, maxHeight, options = {}) {
+    const texture = TEXTURES[slotName];
+    if (!texture) return null;
+
+    const sprite = new PIXI.Sprite(texture);
+    const {
+        anchorX = 0,
+        anchorY = 0,
+        contain = true
+    } = options;
+    sprite.anchor.set(anchorX, anchorY);
+
+    if (contain) {
+        const scale = Math.min(maxWidth / texture.width, maxHeight / texture.height);
+        sprite.scale.set(scale);
+    } else {
+        sprite.width = maxWidth;
+        sprite.height = maxHeight;
+    }
+
+    return sprite;
 }
 
 function pauseGameplayForOverlay() {
@@ -702,6 +796,12 @@ loader.onProgress.add((loader) => {
 
 // Add error handler
 loader.onError.add((error, loader, resource) => {
+    const isOptionalResource = SPRITE_PATHS.some(({ name, optional }) => optional && resource?.name === name);
+    if (isOptionalResource) {
+        console.warn('Optional UI asset not loaded, using Pixi fallback:', resource?.url || resource?.name);
+        return;
+    }
+
     console.error('Error loading sprite:', {
         error: error,
         resource: resource ? {
@@ -719,7 +819,10 @@ loader.load(() => {
     console.log('All resources loaded successfully');
     // Store all loaded textures
     SPRITE_PATHS.forEach(({ name }) => {
-        TEXTURES[name] = loader.resources[name].texture;
+        const texture = loader.resources[name]?.texture;
+        if (texture) {
+            TEXTURES[name] = texture;
+        }
     });
     hidePreloader();
     resizeGame();
@@ -730,25 +833,25 @@ loader.load(() => {
 
 // Color definitions and key mappings
 const COLORS = {
-    red: 0xFF6B6B,
-    blue: 0xA46BFF,
-    green: 0x58D68D,
-    yellow: 0xFFD75E,
+    red: 0xFF4F6F,
+    blue: 0x21C8F6,
+    green: 0x83D91B,
+    yellow: 0xC64CFF,
     purple: THEME.pause
 };
 
 
-// Color buttons always keep the same left-to-right slots.
+// Color buttons keep fixed visual slots. The "blue" game color is the purple bug/button.
 const COLOR_BUTTON_SLOTS = [
-    { color: 'red', key: 'q' },
-    { color: 'blue', key: 'w' },
-    { color: 'green', key: 'e' },
-    { color: 'yellow', key: 'r' },
+    { color: 'red', key: 'q', side: 'left', icon: 'heart', textureName: 'button_red' },
+    { color: 'yellow', key: 'e', side: 'left', icon: 'star', textureName: 'button_blue' },
+    { color: 'blue', key: 'w', side: 'right', icon: 'drop', textureName: 'button_purple' },
+    { color: 'green', key: 'r', side: 'right', icon: 'leaf', textureName: 'button_green' },
 ];
 
 const MOBILE_FIXED_BUTTON_COLUMNS = {
-    left: ['red', 'blue'],
-    right: ['green', 'yellow']
+    left: ['red', 'yellow'],
+    right: ['blue', 'green']
 };
 
 let dynamicColorKeyMap = {};
@@ -1447,72 +1550,177 @@ function showLevelSelect() {
         levelSelectContainer.scrollContainer = null;
     }
 
-    // Удаляем старый обработчик wheel, если он есть
-    if (levelSelectContainer.wheelHandler) {
-        document.removeEventListener('wheel', levelSelectContainer.wheelHandler);
-    }
+    cleanupLevelSelectScroll();
 
     levelSelectContainer.removeChildren();
 
-    // Новый стиль заголовка
+    const screenW = app.screen.width;
+    const screenH = app.screen.height;
+
+    const bg = new PIXI.Graphics();
+    bg.beginFill(0xFFD984);
+    bg.drawRect(0, 0, screenW, screenH);
+    bg.endFill();
+    levelSelectContainer.addChild(bg);
+
     const title = new PIXI.Text("ВЫБЕРИ УРОВЕНЬ", {
-        fontSize: 52,
+        fontSize: Math.max(38, Math.min(68, screenW * 0.085)),
         fill: THEME.textDark,
-        fontWeight: 'bold',
+        fontWeight: '900',
         fontFamily: 'Arial'
     });
     title.anchor.set(0.5);
-    title.x = app.screen.width / 2;
-    title.y = 60;
+    title.x = screenW / 2;
+    title.y = Math.max(42, screenH * 0.075);
     levelSelectContainer.addChild(title);
 
-    // Скроллируемый контейнер
+    const scrollTop = Math.round(title.y + title.height * 0.5 + Math.max(38, screenH * 0.055));
+    const bottomPadding = Math.max(26, screenH * 0.035);
+    const visibleHeight = Math.max(120, screenH - scrollTop - bottomPadding);
+
     const scrollContainer = new PIXI.Container();
-    scrollContainer.y = 120;
+    scrollContainer.y = scrollTop;
     levelSelectContainer.addChild(scrollContainer);
     levelSelectContainer.scrollContainer = scrollContainer;
 
-    const buttonSize = 100;
-    const spacing = 20;
     const cols = 4;
+    const sidePadding = Math.max(28, screenW * 0.09);
+    const maxGridWidth = Math.min(580, screenW - sidePadding * 2);
+    const spacing = Math.max(18, Math.min(28, maxGridWidth * 0.045));
+    const buttonSize = Math.max(72, Math.min(126, (maxGridWidth - spacing * (cols - 1)) / cols));
     const totalLevels = levels.length;
     const rows = Math.ceil(totalLevels / cols);
-
-    const offsetX = (app.screen.width - (buttonSize + spacing) * cols + spacing) / 2;
+    const rowGap = spacing;
+    const contentHeight = rows * buttonSize + Math.max(0, rows - 1) * rowGap;
+    const offsetX = (screenW - (buttonSize * cols + spacing * (cols - 1))) / 2;
 
     const completed = getCompletedLevels();
+    let dragging = false;
+    let dragMoved = false;
+    let startY = 0;
+    let startScrollY = 0;
+    let lastY = 0;
+    let lastTime = performance.now();
+    let velocity = 0;
+
+    const maxY = scrollTop;
+    const minY = Math.min(maxY, scrollTop - Math.max(0, contentHeight - visibleHeight));
+
+    const applyRubberBand = (value) => {
+        if (value > maxY) return maxY + (value - maxY) * 0.34;
+        if (value < minY) return minY + (value - minY) * 0.34;
+        return value;
+    };
+
+    const clampToBounds = (value) => Math.max(minY, Math.min(maxY, value));
+
+    const stopScrollAnimation = () => {
+        if (levelSelectContainer.scrollAnimationFrame) {
+            cancelAnimationFrame(levelSelectContainer.scrollAnimationFrame);
+            levelSelectContainer.scrollAnimationFrame = null;
+        }
+        gsap.killTweensOf(scrollContainer);
+    };
+
+    const settleScroll = () => {
+        const boundedY = clampToBounds(scrollContainer.y);
+        if (Math.abs(scrollContainer.y - boundedY) > 0.5) {
+            gsap.to(scrollContainer, {
+                y: boundedY,
+                duration: 0.28,
+                ease: "back.out(1.1)"
+            });
+        }
+    };
+
+    const startInertia = () => {
+        stopScrollAnimation();
+
+        const step = () => {
+            scrollContainer.y = applyRubberBand(scrollContainer.y + velocity);
+
+            if (scrollContainer.y > maxY || scrollContainer.y < minY) {
+                velocity *= 0.72;
+            } else {
+                velocity *= 0.93;
+            }
+
+            if (Math.abs(velocity) < 0.18) {
+                levelSelectContainer.scrollAnimationFrame = null;
+                settleScroll();
+                return;
+            }
+
+            levelSelectContainer.scrollAnimationFrame = requestAnimationFrame(step);
+        };
+
+        if (Math.abs(velocity) > 0.18) {
+            levelSelectContainer.scrollAnimationFrame = requestAnimationFrame(step);
+        } else {
+            settleScroll();
+        }
+    };
 
     for (let i = 0; i < totalLevels; i++) {
         const row = Math.floor(i / cols);
         const col = i % cols;
+        const isCompleted = completed.includes(i);
+        const x = offsetX + col * (buttonSize + spacing);
+        const y = row * (buttonSize + rowGap);
 
-        // Тень под кнопкой
-        const shadow = new PIXI.Graphics();
-        shadow.beginFill(THEME.shadow, 0.18);
-        shadow.drawRoundedRect(0, 0, buttonSize, buttonSize, 6);
-        shadow.endFill();
-
-        // Кнопка
-        const button = new PIXI.Graphics();
-        button.lineStyle(completed.includes(i) ? 4 : 3, completed.includes(i) ? THEME.success : 0xE09A49, 1);
-        button.beginFill(completed.includes(i) ? THEME.levelDoneGlow : THEME.cardBg);
-        button.drawRoundedRect(0, 0, buttonSize, buttonSize, 20);
-        button.endFill();
-        button.x = offsetX + col * (buttonSize + spacing);
-        button.y = row * (buttonSize + spacing);
+        const button = new PIXI.Container();
+        button.x = x;
+        button.y = y;
         button.interactive = true;
         button.buttonMode = true;
+        button.hitArea = new PIXI.Rectangle(0, 0, buttonSize, buttonSize);
+
+        const shadow = new PIXI.Graphics();
+        shadow.beginFill(0xB96D23, 0.16);
+        shadow.drawRoundedRect(3, 5, buttonSize, buttonSize, Math.max(14, buttonSize * 0.18));
+        shadow.endFill();
+
+        const customTile = createUIAssetSprite(
+            isCompleted ? 'level_tile_completed' : 'level_tile_locked',
+            buttonSize,
+            buttonSize,
+            { contain: false }
+        );
+
+        if (customTile) {
+            button.addChild(shadow, customTile);
+        } else {
+            const tile = new PIXI.Graphics();
+            tile.beginFill(isCompleted ? 0xDFE8B3 : 0xFFE6BE);
+            tile.drawRoundedRect(0, 0, buttonSize, buttonSize, Math.max(16, buttonSize * 0.17));
+            tile.endFill();
+            tile.lineStyle(Math.max(3, buttonSize * 0.034), isCompleted ? 0x74C966 : 0xE39A42, 1);
+            tile.drawRoundedRect(1, 1, buttonSize - 2, buttonSize - 2, Math.max(16, buttonSize * 0.17));
+
+            const inner = new PIXI.Graphics();
+            inner.lineStyle(2, 0xFFF4CE, 0.6);
+            inner.drawRoundedRect(5, 5, buttonSize - 10, buttonSize - 10, Math.max(12, buttonSize * 0.13));
+
+            button.addChild(shadow, tile, inner);
+        }
+
         button.on('pointerdown', () => {
-            showLevelEntryPopup(i);
+            gsap.to(button.scale, { x: 0.97, y: 0.97, duration: 0.08 });
+        });
+        button.on('pointerup', () => {
+            gsap.to(button.scale, { x: 1, y: 1, duration: 0.12, ease: "back.out(1.7)" });
+            if (!dragMoved && !levelSelectContainer.getChildByName('levelEntryPopup')) {
+                showLevelEntryPopup(i);
+            }
+        });
+        button.on('pointerupoutside', () => {
+            gsap.to(button.scale, { x: 1, y: 1, duration: 0.12 });
         });
 
-        button.addChild(shadow); // тень ДО фона
-
-        // Текст уровня
         const label = new PIXI.Text("" + (i + 1), {
-            fontSize: 36,
+            fontSize: Math.max(30, buttonSize * 0.36),
             fill: THEME.textDark,
-            fontWeight: 'bold',
+            fontWeight: '900',
             fontFamily: 'Arial'
         });
         label.anchor.set(0.5);
@@ -1522,119 +1730,104 @@ function showLevelSelect() {
         button.addChild(label);
         scrollContainer.addChild(button);
 
-        // Если уровень пройден — рисуем жёлтую звёздочку справа от цифры
-        if (completed.includes(i)) {
+        if (isCompleted) {
             const star = new PIXI.Text('★', {
-                fontSize: 32,
+                fontSize: Math.max(28, buttonSize * 0.28),
                 fill: THEME.star,
-                fontWeight: 'bold',
+                fontWeight: '900',
                 fontFamily: 'Arial'
             });
             star.anchor.set(0, 0.5);
-            star.x = button.x + buttonSize - 18;
+            star.x = button.x + buttonSize - buttonSize * 0.18;
             star.y = button.y + buttonSize / 2;
             scrollContainer.addChild(star);
         }
     }
 
-    // Высота области для скролла
-    const visibleHeight = app.screen.height - 120 - 40;
-    const contentHeight = rows * (buttonSize + spacing);
-
-    // Маска для скролла
     const mask = new PIXI.Graphics();
     mask.beginFill(0xffffff);
-    mask.drawRect(0, 0, app.screen.width, visibleHeight);
+    mask.drawRect(0, 0, screenW, visibleHeight);
     mask.endFill();
-    mask.y = 120;
+    mask.y = scrollTop;
+    mask.renderable = false;
     scrollContainer.mask = mask;
     levelSelectContainer.addChild(mask);
 
-    // Скролл мышью/тачем
-    let startY = 0;
-    let startScrollY = 0;
-    let dragging = false;
-    let lastY = 0;
-    let velocity = 0;
-    let lastTime = Date.now();
-
     scrollContainer.interactive = true;
+    scrollContainer.hitArea = new PIXI.Rectangle(0, 0, screenW, Math.max(contentHeight, visibleHeight));
     scrollContainer.on('pointerdown', (e) => {
+        stopScrollAnimation();
         dragging = true;
+        dragMoved = false;
         startY = e.data.global.y;
         startScrollY = scrollContainer.y;
         lastY = e.data.global.y;
-        lastTime = Date.now();
+        lastTime = performance.now();
         velocity = 0;
     });
 
-    scrollContainer.on('pointerup', () => {
+    const releaseScroll = () => {
+        if (!dragging) return;
         dragging = false;
-        // Добавляем инерцию после отпускания
-        if (Math.abs(velocity) > 0.35) {
-            const animateScroll = () => {
-                if (Math.abs(velocity) < 0.35) return;
-                
-                let newY = scrollContainer.y - velocity;
-                newY = Math.min(120, newY);
-                newY = Math.max(120 - (contentHeight - visibleHeight), newY);
-                scrollContainer.y = newY;
-                
-                velocity *= 0.97; // Более мягкое замедление
-                requestAnimationFrame(animateScroll);
-            };
-            requestAnimationFrame(animateScroll);
-        }
-    });
+        startInertia();
+    };
 
-    scrollContainer.on('pointerupoutside', () => {
-        dragging = false;
-    });
+    scrollContainer.on('pointerup', releaseScroll);
+    scrollContainer.on('pointerupoutside', releaseScroll);
+    scrollContainer.on('pointercancel', releaseScroll);
 
     scrollContainer.on('pointermove', (e) => {
         if (!dragging) return;
         
-        const currentTime = Date.now();
+        const currentTime = performance.now();
         const deltaTime = currentTime - lastTime;
         const currentY = e.data.global.y;
-        
-        // Вычисляем скорость скролла
-        velocity = (lastY - currentY) / Math.max(1, deltaTime) * 22; // Чуть более отзывчивый drag
-        
-        let newY = startScrollY + (currentY - startY);
-        // Ограничения прокрутки
-        newY = Math.min(120, newY);
-        newY = Math.max(120 - (contentHeight - visibleHeight), newY);
-        scrollContainer.y = newY;
+
+        if (Math.abs(currentY - startY) > 8) {
+            dragMoved = true;
+        }
+
+        velocity = ((currentY - lastY) / Math.max(1, deltaTime)) * 16.67;
+        scrollContainer.y = applyRubberBand(startScrollY + (currentY - startY));
         
         lastY = currentY;
         lastTime = currentTime;
     });
 
-    // Обработчик колеса мыши на уровне документа
     const wheelHandler = (e) => {
         e.preventDefault();
+        stopScrollAnimation();
         const delta = e.deltaY || e.detail || e.wheelDelta;
-        const scrollSpeed = 0.8; // Более лёгкий и быстрый скролл
-        
-        let newY = scrollContainer.y - delta * scrollSpeed;
-        newY = Math.min(120, newY);
-        newY = Math.max(120 - (contentHeight - visibleHeight), newY);
-        
-        // Плавная анимация скролла
+        const targetY = clampToBounds(scrollContainer.y - delta * 0.55);
+
         gsap.to(scrollContainer, {
-            y: newY,
-            duration: 0.38,
-            ease: "power2.out"
+            y: targetY,
+            duration: 0.18,
+            ease: "power3.out",
+            onComplete: settleScroll
         });
     };
 
-    // Сохраняем обработчик для возможности его удаления
     levelSelectContainer.wheelHandler = wheelHandler;
     document.addEventListener('wheel', wheelHandler, { passive: false });
 
-    // Сброс позиции скролла при открытии
-    scrollContainer.y = 120;
+    scrollContainer.y = scrollTop;
+}
+
+function cleanupLevelSelectScroll() {
+    if (levelSelectContainer.wheelHandler) {
+        document.removeEventListener('wheel', levelSelectContainer.wheelHandler);
+        levelSelectContainer.wheelHandler = null;
+    }
+
+    if (levelSelectContainer.scrollAnimationFrame) {
+        cancelAnimationFrame(levelSelectContainer.scrollAnimationFrame);
+        levelSelectContainer.scrollAnimationFrame = null;
+    }
+
+    if (levelSelectContainer.scrollContainer) {
+        gsap.killTweensOf(levelSelectContainer.scrollContainer);
+    }
 }
 
 function closeLevelEntryPopup() {
@@ -1662,7 +1855,13 @@ function showLevelEntryPopup(levelIndex) {
     overlay.name = 'levelEntryOverlay';
     overlay.interactive = true;
     overlay.buttonMode = true;
-    overlay.on('pointerdown', closeLevelEntryPopup);
+    overlay.on('pointerdown', (event) => {
+        event.stopPropagation();
+    });
+    overlay.on('pointerup', (event) => {
+        event.stopPropagation();
+        closeLevelEntryPopup();
+    });
     levelSelectContainer.addChild(overlay);
 
     const popupBounds = getCenteredPopupBounds({
@@ -1678,6 +1877,11 @@ function showLevelEntryPopup(levelIndex) {
     popup.name = 'levelEntryPopup';
     popup.x = popupBounds.x;
     popup.y = popupBounds.y;
+    popup.interactive = true;
+    popup.hitArea = new PIXI.Rectangle(0, 0, popupWidth, popupHeight);
+    popup.on('pointerdown', (event) => event.stopPropagation());
+    popup.on('pointerup', (event) => event.stopPropagation());
+    popup.on('pointerupoutside', (event) => event.stopPropagation());
 
     const bg = new PIXI.Graphics();
     bg.beginFill(THEME.cardBg);
@@ -1691,8 +1895,23 @@ function showLevelEntryPopup(levelIndex) {
     popup.addChild(bg);
     popup.addChild(border);
 
+    const iconSize = Math.max(52, Math.min(78, popupHeight * 0.24));
+    const entryIcon = createUIAssetSprite('level_entry_icon', iconSize, iconSize, {
+        anchorX: 0.5,
+        anchorY: 0
+    });
+    const titleBaseY = entryIcon
+        ? Math.max(14, Math.round(popupHeight * 0.06)) + iconSize + Math.max(8, Math.round(popupHeight * 0.025))
+        : Math.max(18, Math.round(popupHeight * 0.11));
+
+    if (entryIcon) {
+        entryIcon.x = popupWidth / 2;
+        entryIcon.y = Math.max(14, Math.round(popupHeight * 0.06));
+        popup.addChild(entryIcon);
+    }
+
     const title = new PIXI.Text(`Уровень ${levelIndex + 1}`, {
-        fontSize: Math.max(24, Math.min(42, Math.round(Math.min(popupWidth * 0.09, popupHeight * 0.14)))),
+        fontSize: Math.max(22, Math.min(40, Math.round(Math.min(popupWidth * 0.088, popupHeight * 0.13)))),
         fill: THEME.textDark,
         fontWeight: 'bold',
         fontFamily: 'Arial',
@@ -1700,7 +1919,7 @@ function showLevelEntryPopup(levelIndex) {
     });
     title.anchor.set(0.5, 0);
     title.x = popupWidth / 2;
-    title.y = Math.max(18, Math.round(popupHeight * 0.11));
+    title.y = titleBaseY;
     popup.addChild(title);
 
     const subtitle = new PIXI.Text('Готов начать уровень?', {
@@ -1752,6 +1971,7 @@ function showLevelEntryPopup(levelIndex) {
 // запускаем уровень
 function startLevel(index) {
   // Очищаем предыдущий уровень: останавливаем интервалы и таймеры
+  cleanupLevelSelectScroll();
   clearSpawnTimer();
   clearSpawnResumeDelay();
   finishFrozenEffect();
@@ -1823,39 +2043,470 @@ function setupPlayArea() {
 }
 
 function setupDesktopPlayArea(layout, coloredTypes) {
-    const fieldWrapper = new PIXI.Container();
-    fieldWrapper.x = layout.fieldWrapper.x;
-    fieldWrapper.y = layout.fieldWrapper.y;
-    fieldWrapper.width = layout.fieldWrapper.width;
-    fieldWrapper.height = layout.fieldWrapper.height;
+    const wideLayout = calculateGameLayout();
+    buildGameBackground(wideLayout);
+    buildTopHud(wideLayout, levelData);
+    const { fieldWrapper, playField } = buildPlayField(wideLayout);
+    buildSideColorPanels(coloredTypes, wideLayout);
+
+    return { fieldWrapper, playField };
+}
+
+function calculateGameLayout() {
+    const W = app.screen.width;
+    const H = app.screen.height;
+    const padding = Math.max(8, Math.min(W, H) * 0.015, CASUAL_UI.outerPadding);
+    const hudH = Math.max(82, Math.min(150, H * CASUAL_UI.topHudHeightRatio));
+    const gap = Math.max(8, W * CASUAL_UI.gapRatio);
+    const sideW = Math.max(96, Math.min(170, W * CASUAL_UI.sidePanelWidthRatio));
+    const contentY = padding + hudH + gap;
+    const contentH = Math.max(220, H - contentY - padding);
+    const playX = padding + sideW + gap;
+    const playY = contentY;
+    const playW = Math.max(320, W - padding * 2 - sideW * 2 - gap * 2);
+    const playH = contentH;
+    const buttonGap = Math.max(10, Math.min(24, playH * 0.045));
+    const buttonSize = Math.max(58, Math.min(sideW * 0.78, (playH - buttonGap) / 2, 118));
+
+    return {
+        mode: 'desktop-wide',
+        screenWidth: W,
+        screenHeight: H,
+        padding,
+        gap,
+        hud: {
+            x: padding,
+            y: padding,
+            width: W - padding * 2,
+            height: hudH,
+            radius: CASUAL_UI.panelRadius
+        },
+        content: {
+            y: contentY,
+            height: contentH
+        },
+        leftPanel: {
+            x: padding,
+            y: contentY,
+            width: sideW,
+            height: contentH,
+            radius: CASUAL_UI.panelRadius
+        },
+        rightPanel: {
+            x: W - padding - sideW,
+            y: contentY,
+            width: sideW,
+            height: contentH,
+            radius: CASUAL_UI.panelRadius
+        },
+        playField: {
+            x: playX,
+            y: playY,
+            width: playW,
+            height: playH,
+            radius: CASUAL_UI.playfieldRadius
+        },
+        buttons: {
+            size: buttonSize,
+            gap: buttonGap
+        }
+    };
+}
+
+function buildGameBackground(layout) {
+    const bg = new PIXI.Graphics();
+    bg.beginFill(0xFFC55A);
+    bg.drawRect(0, 0, layout.screenWidth, layout.screenHeight);
+    bg.endFill();
+
+    const board = new PIXI.Graphics();
+    const inset = Math.max(4, Math.min(layout.screenWidth, layout.screenHeight) * 0.006);
+    const radius = Math.max(22, Math.min(34, layout.screenHeight * 0.055));
+    board.beginFill(0xFFE28B);
+    board.drawRoundedRect(inset, inset, layout.screenWidth - inset * 2, layout.screenHeight - inset * 2, radius);
+    board.endFill();
+    board.lineStyle(Math.max(3, inset * 0.8), 0xB86720, 0.55);
+    board.drawRoundedRect(inset, inset, layout.screenWidth - inset * 2, layout.screenHeight - inset * 2, radius);
+
+    const topGlow = new PIXI.Graphics();
+    topGlow.beginFill(0xFFF0B4, 0.58);
+    topGlow.drawRoundedRect(inset + 14, inset + 8, layout.screenWidth - inset * 2 - 28, layout.screenHeight * 0.18, radius - 8);
+    topGlow.endFill();
+
+    const bottomShade = new PIXI.Graphics();
+    bottomShade.beginFill(0xE9932E, 0.2);
+    bottomShade.drawRoundedRect(inset + 8, layout.screenHeight - inset - 22, layout.screenWidth - inset * 2 - 16, 14, 8);
+    bottomShade.endFill();
+
+    const sparkles = new PIXI.Graphics();
+    sparkles.beginFill(0xFFF5C8, 0.7);
+    sparkles.drawCircle(layout.screenWidth * 0.075, layout.screenHeight * 0.18, 4);
+    sparkles.drawCircle(layout.screenWidth * 0.94, layout.screenHeight * 0.56, 5);
+    sparkles.drawCircle(layout.screenWidth * 0.09, layout.screenHeight * 0.91, 5);
+    sparkles.drawCircle(layout.screenWidth * 0.965, layout.screenHeight * 0.92, 7);
+    sparkles.endFill();
+
+    rootUI.addChild(bg);
+    rootUI.addChild(board);
+    rootUI.addChild(topGlow);
+    rootUI.addChild(bottomShade);
+    rootUI.addChild(sparkles);
+}
+
+function createCandyPanel(width, height, radius, options = {}) {
+    const {
+        fill = 0xFFD56E,
+        innerFill = 0xFFE7A7,
+        border = 0xE89132,
+        darkBorder = 0xB86720,
+        shadow = 0xA95E1E,
+        borderWidth = 5,
+        inset = 10
+    } = options;
+    const panel = new PIXI.Container();
+
+    const drop = new PIXI.Graphics();
+    drop.beginFill(shadow, 0.18);
+    drop.drawRoundedRect(4, 6, width, height, radius);
+    drop.endFill();
+
+    const base = new PIXI.Graphics();
+    base.beginFill(fill);
+    base.drawRoundedRect(0, 0, width, height, radius);
+    base.endFill();
+    base.lineStyle(borderWidth + 2, darkBorder, 0.35);
+    base.drawRoundedRect(0, 0, width, height, radius);
+
+    const shine = new PIXI.Graphics();
+    shine.beginFill(innerFill, 0.78);
+    shine.drawRoundedRect(inset, inset * 0.8, width - inset * 2, Math.max(16, height * 0.46), Math.max(12, radius - inset));
+    shine.endFill();
+
+    const rim = new PIXI.Graphics();
+    rim.lineStyle(borderWidth, border, 0.95);
+    rim.drawRoundedRect(1, 1, width - 2, height - 2, radius);
+
+    const innerRim = new PIXI.Graphics();
+    innerRim.lineStyle(2, 0xFFF6D2, 0.82);
+    innerRim.drawRoundedRect(inset, inset, width - inset * 2, height - inset * 2, Math.max(12, radius - inset));
+
+    panel.addChild(drop, base, shine, rim, innerRim);
+    return panel;
+}
+
+function addSoftLeafDetails(container, width, height, inset = 24, alpha = 0.45) {
+    const details = new PIXI.Graphics();
+    details.lineStyle(2, 0xE8B568, alpha);
+    details.beginFill(0xFFE2A0, alpha * 0.8);
+    details.drawEllipse(inset, inset + 2, 12, 5);
+    details.drawEllipse(inset + 12, inset + 14, 10, 4);
+    details.drawEllipse(width - inset, inset + 2, 12, 5);
+    details.drawEllipse(width - inset - 12, inset + 14, 10, 4);
+    details.drawEllipse(inset, height - inset - 2, 12, 5);
+    details.drawEllipse(inset + 12, height - inset - 14, 10, 4);
+    details.drawEllipse(width - inset, height - inset - 2, 12, 5);
+    details.drawEllipse(width - inset - 12, height - inset - 14, 10, 4);
+    details.endFill();
+    container.addChild(details);
+}
+
+function buildTopHud(layout, level) {
+    hudContainer = new PIXI.Container();
+    hudContainer.name = 'topHudContainer';
+    hudContainer.x = layout.hud.x;
+    hudContainer.y = layout.hud.y;
+
+    const hudBg = createCandyPanel(layout.hud.width, layout.hud.height, layout.hud.radius, {
+        fill: 0xFFD16A,
+        innerFill: 0xFFE9A6,
+        border: 0xF4B04C,
+        darkBorder: 0xB96420,
+        borderWidth: 5,
+        inset: 14
+    });
+    hudContainer.addChild(hudBg);
+
+    const leftPatchW = Math.max(112, layout.hud.width * 0.12);
+    const leftPatch = new PIXI.Graphics();
+    leftPatch.beginFill(0xFFE9AD, 0.62);
+    leftPatch.drawRoundedRect(18, 16, leftPatchW, layout.hud.height - 28, Math.max(18, layout.hud.radius - 8));
+    leftPatch.endFill();
+    leftPatch.lineStyle(2, 0xFFF4C8, 0.65);
+    leftPatch.drawRoundedRect(18, 16, leftPatchW, layout.hud.height - 28, Math.max(18, layout.hud.radius - 8));
+    hudContainer.addChild(leftPatch);
+
+    const labelStyle = new PIXI.TextStyle({
+        fontSize: Math.max(24, Math.min(42, layout.hud.height * 0.34)),
+        fill: 0xFFF7E8,
+        fontWeight: '900',
+        fontFamily: 'Arial',
+        stroke: 0x9A5422,
+        strokeThickness: 5,
+        lineJoin: 'round'
+    });
+
+    const livesLabel = new PIXI.Text('\u0416\u0418\u0417\u041d\u0418', labelStyle);
+    livesLabel.anchor.set(0, 0.5);
+    livesLabel.x = Math.max(160, layout.hud.width * 0.21);
+    livesLabel.y = layout.hud.height * 0.52;
+    hudContainer.addChild(livesLabel);
+
+    const pauseSize = Math.max(56, Math.min(86, layout.hud.height * 0.74));
+    const pauseX = layout.hud.width - pauseSize - Math.max(18, layout.hud.width * 0.018);
+    const goalBadgeW = Math.max(178, Math.min(250, layout.hud.width * 0.19));
+    const goalBadgeH = Math.max(50, Math.min(70, layout.hud.height * 0.58));
+    const goalBadgeX = pauseX - goalBadgeW - Math.max(24, layout.hud.width * 0.045);
+
+    const hearts = [];
+    const heartsRowX = livesLabel.x + livesLabel.width + 16;
+    const maxHeartsWidth = Math.max(0, goalBadgeX - heartsRowX - 18);
+    let heartSize = Math.max(24, Math.min(44, layout.hud.height * 0.36));
+    const heartCount = Math.max(1, level.lifeCount);
+    const naturalHeartsWidth = level.lifeCount * heartSize + Math.max(0, level.lifeCount - 1) * HEART_GAP;
+    if (naturalHeartsWidth > maxHeartsWidth) {
+        heartSize = Math.max(16, Math.floor((maxHeartsWidth - Math.max(0, level.lifeCount - 1) * 3) / heartCount));
+    }
+    const heartGap = level.lifeCount > 1
+        ? Math.max(3, Math.min(HEART_GAP, (maxHeartsWidth - level.lifeCount * heartSize) / (level.lifeCount - 1)))
+        : 0;
+    const heartsRow = new PIXI.Container();
+    heartsRow.name = 'heartsRow';
+    heartsRow.x = heartsRowX;
+    heartsRow.y = layout.hud.height * 0.52 - heartSize / 2;
+
+    for (let i = 0; i < level.lifeCount; i++) {
+        let heart;
+        if (TEXTURES.heart) {
+            heart = new PIXI.Sprite(TEXTURES.heart);
+            heart.width = heartSize;
+            heart.height = heartSize;
+        } else {
+            heart = new PIXI.Text('\u2665', {
+                fontSize: heartSize,
+                fill: THEME.fail,
+                fontWeight: '900',
+                fontFamily: 'Arial',
+                stroke: 0x9A5422,
+                strokeThickness: 2
+            });
+        }
+        heart.x = i * (heartSize + heartGap);
+        heartsRow.addChild(heart);
+        hearts.push(heart);
+    }
+    hudContainer.addChild(heartsRow);
+
+    const pauseButton = createSettingsButton(pauseSize);
+    pauseButton.x = pauseX;
+    pauseButton.y = (layout.hud.height - pauseSize) / 2;
+    hudContainer.addChild(pauseButton);
+
+    const customGoalBadge = createUIAssetSprite('game_goal_badge', goalBadgeW, goalBadgeH, { contain: false });
+    const goalBadge = new PIXI.Container();
+    if (customGoalBadge) {
+        goalBadge.addChild(customGoalBadge);
+    } else {
+        goalBadge.addChild(createRoundedLabel('', {
+            width: goalBadgeW,
+            height: goalBadgeH,
+            radius: Math.max(20, goalBadgeH * 0.42),
+            fill: 0xFFF6E8,
+            borderColor: 0xE8A24A,
+            borderWidth: 4
+        }));
+    }
+    goalBadge.x = goalBadgeX;
+    goalBadge.y = (layout.hud.height - goalBadgeH) / 2;
+
+    const goalText = new PIXI.Text(`\u0426\u0415\u041b\u042c ${level.goalBugCount}`, {
+        fontSize: Math.max(20, Math.min(33, goalBadgeH * 0.46)),
+        fill: 0x7A461F,
+        fontWeight: '900',
+        fontFamily: 'Arial',
+        stroke: 0xFFFFFF,
+        strokeThickness: 3
+    });
+    goalText.anchor.set(0.5);
+    goalText.x = goalBadgeW / 2;
+    goalText.y = goalBadgeH / 2;
+    goalText.name = 'progText';
+    goalBadge.addChild(goalText);
+    hudContainer.addChild(goalBadge);
+
+    currentGameUI = {
+        mode: 'desktop-wide',
+        header: hudContainer,
+        progText: goalText,
+        hearts
+    };
+    updateLevelHeader(score, life);
+
+    rootUI.addChild(hudContainer);
+    return hudContainer;
+}
+
+function createSettingsButton(size) {
+    const button = new PIXI.Container();
+    button.name = 'pauseButton';
+    button.interactive = true;
+    button.buttonMode = true;
+    button.on('pointerdown', showPausePopup);
+
+    const customBg = createUIAssetSprite('game_settings_button', size, size, { contain: false });
+    if (customBg) {
+        button.addChild(customBg);
+    } else {
+        button.addChild(createCandyPanel(size, size, Math.max(18, size * 0.24), {
+            fill: 0xFFB13B,
+            innerFill: 0xFFD067,
+            border: 0xF0781F,
+            darkBorder: 0xB45F1F,
+            borderWidth: Math.max(4, size * 0.06),
+            inset: Math.max(7, size * 0.12)
+        }));
+    }
+
+    if (TEXTURES.gear) {
+        const gear = new PIXI.Sprite(TEXTURES.gear);
+        gear.anchor.set(0.5);
+        const scale = Math.min((size * 0.58) / gear.texture.width, (size * 0.58) / gear.texture.height);
+        gear.scale.set(scale);
+        gear.x = size / 2;
+        gear.y = size / 2;
+        button.addChild(gear);
+    } else {
+        const icon = new PIXI.Text('\u2699', {
+            fontSize: Math.floor(size * 0.48),
+            fill: THEME.white,
+            fontWeight: '900',
+            fontFamily: 'Arial',
+            stroke: THEME.borderDark,
+            strokeThickness: 3
+        });
+        icon.anchor.set(0.5);
+        icon.x = size / 2;
+        icon.y = size / 2;
+        button.addChild(icon);
+    }
+
+    return button;
+}
+
+function buildPlayField(layout) {
+    playAreaFrame = new PIXI.Container();
+    playAreaFrame.name = 'playAreaFrame';
+    playAreaFrame.x = layout.playField.x;
+    playAreaFrame.y = layout.playField.y;
+    playAreaFrame.width = layout.playField.width;
+    playAreaFrame.height = layout.playField.height;
 
     const playField = new PIXI.Container();
+    playField.name = 'playArea';
     playField.width = layout.playField.width;
     playField.height = layout.playField.height;
     playField._fieldWidth = layout.playField.width;
     playField._fieldHeight = layout.playField.height;
-    playField.y = layout.playField.y;
+    playField._fieldRadius = layout.playField.radius;
 
-    const background = new PIXI.Graphics();
-    background.beginFill(THEME.fieldBg);
-    background.drawRoundedRect(0, 0, layout.fieldWrapper.width, layout.fieldWrapper.height, BORDER_RADIUS);
-    background.endFill();
+    const shell = createCandyPanel(layout.playField.width, layout.playField.height, layout.playField.radius, {
+        fill: 0xFFF2D2,
+        innerFill: 0xFFF8EB,
+        border: 0xF2A13A,
+        darkBorder: 0xB86421,
+        borderWidth: 8,
+        inset: 13
+    });
 
-    const border = new PIXI.Graphics();
-    border.lineStyle(4, THEME.border, 1);
-    border.drawRoundedRect(0, 0, layout.fieldWrapper.width, layout.fieldWrapper.height, BORDER_RADIUS);
+    const fieldInset = Math.max(18, Math.min(28, Math.min(layout.playField.width, layout.playField.height) * 0.045));
+    const innerRadius = Math.max(18, layout.playField.radius - 12);
+    const fieldBg = new PIXI.Graphics();
+    fieldBg.beginFill(0xFFF9EF, 0.98);
+    fieldBg.drawRoundedRect(fieldInset, fieldInset, layout.playField.width - fieldInset * 2, layout.playField.height - fieldInset * 2, innerRadius);
+    fieldBg.endFill();
+    fieldBg.lineStyle(3, 0xE7A04A, 0.85);
+    fieldBg.drawRoundedRect(fieldInset, fieldInset, layout.playField.width - fieldInset * 2, layout.playField.height - fieldInset * 2, innerRadius);
 
-    playField.addChild(background);
-    playField.addChild(border);
-    playField._fieldRadius = BORDER_RADIUS;
+    const innerHighlight = new PIXI.Graphics();
+    innerHighlight.lineStyle(2, 0xFFFFFF, 0.78);
+    innerHighlight.drawRoundedRect(fieldInset + 5, fieldInset + 5, layout.playField.width - fieldInset * 2 - 10, layout.playField.height - fieldInset * 2 - 10, Math.max(14, innerRadius - 5));
+
+    playField.addChild(shell, fieldBg, innerHighlight);
+    addSoftLeafDetails(playField, layout.playField.width, layout.playField.height, fieldInset + 26, 0.38);
     addSpawnZoneDebugOverlay(playField);
-    fieldWrapper.addChild(playField);
-    rootUI.addChild(fieldWrapper);
 
-    buildDesktopLevelHeader(fieldWrapper, levelData, layout);
-    buildBottomBar(coloredTypes);
+    playAreaFrame.addChild(playField);
+    rootUI.addChild(playAreaFrame);
 
-    return { fieldWrapper, playField };
+    return { fieldWrapper: playAreaFrame, playField };
+}
+
+function createPanelBackground(width, height, radius = CASUAL_UI.panelRadius) {
+    const customPanel = createUIAssetSprite('game_side_panel', width, height, { contain: false });
+    if (customPanel) {
+        const panel = new PIXI.Container();
+        panel.addChild(customPanel);
+        return panel;
+    }
+
+    const panel = createCandyPanel(width, height, radius, {
+        fill: 0xFFE1A0,
+        innerFill: 0xFFF0CB,
+        border: 0xF0A34A,
+        darkBorder: 0xB86720,
+        borderWidth: 5,
+        inset: 9
+    });
+
+    const dashed = new PIXI.Graphics();
+    dashed.lineStyle(2, 0xE9B86D, 0.55);
+    const dash = 10;
+    const gap = 8;
+    const x = 14;
+    const y = 16;
+    const w = width - 28;
+    const h = height - 32;
+    for (let px = x + 12; px < x + w - 12; px += dash + gap) {
+        dashed.moveTo(px, y);
+        dashed.lineTo(Math.min(px + dash, x + w - 12), y);
+        dashed.moveTo(px, y + h);
+        dashed.lineTo(Math.min(px + dash, x + w - 12), y + h);
+    }
+    for (let py = y + 12; py < y + h - 12; py += dash + gap) {
+        dashed.moveTo(x, py);
+        dashed.lineTo(x, Math.min(py + dash, y + h - 12));
+        dashed.moveTo(x + w, py);
+        dashed.lineTo(x + w, Math.min(py + dash, y + h - 12));
+    }
+    panel.addChild(dashed);
+    addSoftLeafDetails(panel, width, height, 22, 0.35);
+    return panel;
+}
+
+function createRoundedLabel(text, options) {
+    const {
+        width,
+        height,
+        radius = 18,
+        fill = THEME.cardBg,
+        borderColor = THEME.border,
+        borderWidth = 4
+    } = options;
+    const label = createRoundedPanel(width, height, radius, fill, borderColor, borderWidth);
+
+    if (text) {
+        const labelText = new PIXI.Text(text, {
+            fontSize: Math.floor(height * 0.42),
+            fill: THEME.textDark,
+            fontWeight: '900',
+            fontFamily: 'Arial'
+        });
+        labelText.anchor.set(0.5);
+        labelText.x = width / 2;
+        labelText.y = height / 2;
+        label.addChild(labelText);
+    }
+
+    return label;
 }
 
 function setupMobileLandscapePlayArea(layout, coloredTypes) {
@@ -1930,6 +2581,54 @@ function buildMobileLevelHeader(layout, level) {
     return header;
 }
 
+function buildSideColorPanels(coloredTypes, layout) {
+    sidePanelsContainer = new PIXI.Container();
+    sidePanelsContainer.name = 'sidePanelsContainer';
+    colorButtonsContainer = sidePanelsContainer;
+    colorButtonsMap = {};
+    dynamicColorKeyMap = {};
+
+    const usedColors = new Set(coloredTypes.map(type => type.split('_')[1]).filter(Boolean));
+
+    const buildPanel = (panelLayout, side) => {
+        const panel = new PIXI.Container();
+        panel.name = `${side}ColorPanel`;
+        panel.x = panelLayout.x;
+        panel.y = panelLayout.y;
+        panel.addChild(createPanelBackground(panelLayout.width, panelLayout.height, panelLayout.radius));
+
+        const slots = COLOR_BUTTON_SLOTS.filter((slot) => slot.side === side);
+        const totalButtonsH = slots.length * layout.buttons.size + (slots.length - 1) * layout.buttons.gap;
+        const startY = Math.max(18, (panelLayout.height - totalButtonsH) / 2);
+
+        slots.forEach((slot, index) => {
+            const isEnabled = usedColors.has(slot.color);
+            if (isEnabled) {
+                dynamicColorKeyMap[slot.key] = slot.color;
+            }
+
+            const button = createColorButton(slot.color, layout.buttons.size, slot.key, !IS_TOUCH, 'side');
+            button.x = (panelLayout.width - layout.buttons.size) / 2;
+            button.y = startY + index * (layout.buttons.size + layout.buttons.gap);
+            button.alpha = isEnabled ? 1 : 0.45;
+            button.interactive = isEnabled;
+            button.buttonMode = isEnabled;
+            panel.addChild(button);
+
+            if (!colorButtonsMap[slot.color]) {
+                colorButtonsMap[slot.color] = [];
+            }
+            colorButtonsMap[slot.color].push(button);
+        });
+
+        sidePanelsContainer.addChild(panel);
+    };
+
+    buildPanel(layout.leftPanel, 'left');
+    buildPanel(layout.rightPanel, 'right');
+    rootUI.addChild(sidePanelsContainer);
+}
+
 function buildSideColorColumns(coloredTypes, layout) {
     colorButtonsContainer = rootUI;
     const availableColors = new Set(getUsedLevelColors());
@@ -1971,8 +2670,8 @@ function buildSideColorColumns(coloredTypes, layout) {
         rootUI.addChild(column);
     };
 
-    buildColumn(layout.leftButtons, ['red', 'green'], 'leftColorColumn');
-    buildColumn(layout.rightButtons, ['blue', 'yellow'], 'rightColorColumn');
+    buildColumn(layout.leftButtons, MOBILE_FIXED_BUTTON_COLUMNS.left, 'leftColorColumn');
+    buildColumn(layout.rightButtons, MOBILE_FIXED_BUTTON_COLUMNS.right, 'rightColorColumn');
 }
 
 function buildMobilePauseButton(layout) {
@@ -2014,6 +2713,9 @@ function buildMobilePauseButton(layout) {
 
 function updateLevelHeader(score, life) {
     updateLevelHeaderUI({ currentGameUI, score, life, levelData, textures: TEXTURES, theme: THEME });
+    if (currentGameUI?.mode === 'desktop-wide' && currentGameUI.progText) {
+        currentGameUI.progText.text = `\u0426\u0415\u041b\u042c ${Math.max(0, levelData.goalBugCount - score)}`;
+    }
 }
 
 // Функция для взвешенного случайного выбора
@@ -3767,7 +4469,10 @@ function createButton(width, height, text, onClick, variant = 'primary', fontSiz
     btn.endFill();
     btn.interactive = true;
     btn.buttonMode = true;
-    btn.on('pointerdown', onClick);
+    btn.on('pointerdown', (event) => {
+        event.stopPropagation();
+        onClick(event);
+    });
 
     const btnText = new PIXI.Text(text, {
         fontSize,
@@ -3941,11 +4646,12 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
     const buttonHeight = height;
     const minDimension = Math.min(width, buttonHeight);
     const isTallMobile = variant === 'mobile-tall';
+    const isSideButton = variant === 'side';
     const iconSize = variant === 'mobile'
         ? width * 0.82
         : isTallMobile
             ? minDimension * 0.78
-            : width * 0.9;
+            : width * (isSideButton ? 0.78 : 0.9);
 
     if (isTallMobile) {
         const shell = createRoundedPanel(
@@ -3960,7 +4666,7 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
     } else {
         const shadow = new PIXI.Graphics();
         shadow.beginFill(THEME.shadow, 0.18);
-        shadow.drawEllipse(width / 2, width * 0.78, width * 0.28, width * 0.14);
+        shadow.drawEllipse(width / 2, buttonHeight * 0.82, width * 0.32, minDimension * 0.15);
         shadow.endFill();
         button.addChild(shadow);
     }
@@ -3975,10 +4681,31 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
         button.addChild(sprite);
     } else {
         const fallback = new PIXI.Graphics();
+        const cy = isTallMobile ? buttonHeight / 2 : width / 2;
+        fallback.beginFill(0xFFFFFF, 0.95);
+        fallback.drawCircle(width / 2, cy, iconSize / 2 + 6);
+        fallback.endFill();
         fallback.beginFill(COLORS[color] || THEME.primary);
-        fallback.drawCircle(width / 2, isTallMobile ? buttonHeight / 2 : width / 2, iconSize / 2);
+        fallback.drawCircle(width / 2, cy, iconSize / 2);
+        fallback.endFill();
+        fallback.beginFill(0xFFFFFF, 0.3);
+        fallback.drawEllipse(width * 0.4, cy - iconSize * 0.16, iconSize * 0.22, iconSize * 0.12);
         fallback.endFill();
         button.addChild(fallback);
+        button.addChild(createButtonFallbackIcon(color, width / 2, cy, iconSize * 0.28));
+    }
+
+    if (!isTallMobile) {
+        const rim = new PIXI.Graphics();
+        rim.lineStyle(Math.max(3, width * 0.055), 0xFFF7E8, 0.88);
+        rim.drawCircle(width / 2, width / 2, iconSize * 0.5);
+        button.addChild(rim);
+
+        const shine = new PIXI.Graphics();
+        shine.beginFill(0xFFFFFF, 0.34);
+        shine.drawEllipse(width * 0.38, width * 0.32, iconSize * 0.2, iconSize * 0.1);
+        shine.endFill();
+        button.addChild(shine);
     }
 
     const activeIndicator = new PIXI.Graphics();
@@ -4057,6 +4784,43 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
     });
 
     return button;
+}
+
+function createButtonFallbackIcon(color, x, y, size) {
+    const icon = new PIXI.Graphics();
+    icon.beginFill(0xFFFFFF, 0.88);
+
+    if (color === 'red') {
+        icon.drawCircle(x - size * 0.32, y - size * 0.18, size * 0.32);
+        icon.drawCircle(x + size * 0.32, y - size * 0.18, size * 0.32);
+        icon.drawPolygon([
+            x - size * 0.62, y,
+            x, y + size * 0.72,
+            x + size * 0.62, y
+        ]);
+    } else if (color === 'blue') {
+        icon.moveTo(x, y - size * 0.72);
+        icon.bezierCurveTo(x + size * 0.58, y - size * 0.12, x + size * 0.52, y + size * 0.62, x, y + size * 0.68);
+        icon.bezierCurveTo(x - size * 0.52, y + size * 0.62, x - size * 0.58, y - size * 0.12, x, y - size * 0.72);
+    } else if (color === 'yellow') {
+        const points = [];
+        for (let i = 0; i < 10; i++) {
+            const angle = -Math.PI / 2 + i * Math.PI / 5;
+            const radius = i % 2 === 0 ? size * 0.72 : size * 0.32;
+            points.push(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
+        }
+        icon.drawPolygon(points);
+    } else {
+        icon.drawEllipse(x, y, size * 0.42, size * 0.72);
+        icon.endFill();
+        icon.lineStyle(Math.max(2, size * 0.08), COLORS[color] || 0x68B84D, 0.55);
+        icon.moveTo(x, y - size * 0.45);
+        icon.lineTo(x, y + size * 0.46);
+        return icon;
+    }
+
+    icon.endFill();
+    return icon;
 }
 export default levels;
 
