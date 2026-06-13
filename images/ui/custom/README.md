@@ -4,7 +4,11 @@ Put PNG files here with the exact names below. Missing files are okay: the game 
 
 Recommended source sizes:
 
-- `level_entry_icon.png` - `192x192`
+- `bg_levels.png` - `1280x590`
+  Background for the level select screen.
+- `bg_game.png` - `1280x590`
+  Background for the in-level game screen.
+- `level_entry_icon.png` - `128x128`
   Icon shown in the level entry popup.
 - `level_tile_completed.png` - `128x128`
   Completed level tile background.
@@ -20,5 +24,13 @@ Recommended source sizes:
   Left/right color-button side panel.
 - `game_settings_button.png` - `96x96`
   Settings button background.
+- `button_red.png` - `107x112`
+  Red color button.
+- `button_blue.png` - `107x112`
+  Blue/cyan color button.
+- `button_purple.png` - `107x112`
+  Purple color button.
+- `button_green.png` - `107x112`
+  Green color button.
 
 Keep transparent padding inside the PNG if the art needs glow, shadow, or soft edges.

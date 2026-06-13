@@ -491,10 +491,22 @@ PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
 // Put custom PNGs into images/ui/custom/ with these exact names.
 // Missing custom files are ignored; the game falls back to drawn Pixi UI.
 const UI_ASSET_SLOTS = {
+    bg_levels: {
+        path: 'images/ui/custom/bg_levels.png',
+        width: 1280,
+        height: 590,
+        description: 'Background for the level select screen.'
+    },
+    bg_game: {
+        path: 'images/ui/custom/bg_game.png',
+        width: 1280,
+        height: 590,
+        description: 'Background for the in-level game screen.'
+    },
     level_entry_icon: {
         path: 'images/ui/custom/level_entry_icon.png',
-        width: 192,
-        height: 192,
+        width: 128,
+        height: 128,
         description: 'Icon shown in the level entry popup.'
     },
     level_tile_completed: {
@@ -538,6 +550,30 @@ const UI_ASSET_SLOTS = {
         width: 96,
         height: 96,
         description: 'Settings button background.'
+    },
+    custom_button_red: {
+        path: 'images/ui/custom/button_red.png',
+        width: 107,
+        height: 112,
+        description: 'Custom red color button.'
+    },
+    custom_button_blue: {
+        path: 'images/ui/custom/button_blue.png',
+        width: 107,
+        height: 112,
+        description: 'Custom blue/cyan color button.'
+    },
+    custom_button_purple: {
+        path: 'images/ui/custom/button_purple.png',
+        width: 107,
+        height: 112,
+        description: 'Custom purple color button.'
+    },
+    custom_button_green: {
+        path: 'images/ui/custom/button_green.png',
+        width: 107,
+        height: 112,
+        description: 'Custom green color button.'
     }
 };
 
@@ -611,7 +647,9 @@ function getUsedLevelColors(level = levelData) {
 }
 
 function getButtonTextureName(color) {
-    return COLOR_BUTTON_SLOTS.find((slot) => slot.color === color)?.textureName || getButtonTextureNameUI(color);
+    const baseTextureName = COLOR_BUTTON_SLOTS.find((slot) => slot.color === color)?.textureName || getButtonTextureNameUI(color);
+    const customTextureName = `custom_${baseTextureName}`;
+    return TEXTURES[customTextureName] ? customTextureName : baseTextureName;
 }
 
 function getGameLayout() {
@@ -644,11 +682,15 @@ function createUIAssetSprite(slotName, maxWidth, maxHeight, options = {}) {
     const {
         anchorX = 0,
         anchorY = 0,
-        contain = true
+        contain = true,
+        fit = contain ? 'contain' : 'stretch'
     } = options;
     sprite.anchor.set(anchorX, anchorY);
 
-    if (contain) {
+    if (fit === 'cover') {
+        const scale = Math.max(maxWidth / texture.width, maxHeight / texture.height);
+        sprite.scale.set(scale);
+    } else if (fit === 'contain') {
         const scale = Math.min(maxWidth / texture.width, maxHeight / texture.height);
         sprite.scale.set(scale);
     } else {
@@ -657,6 +699,29 @@ function createUIAssetSprite(slotName, maxWidth, maxHeight, options = {}) {
     }
 
     return sprite;
+}
+
+function createCoverBackground(slotName, width, height, fallbackColor) {
+    const container = new PIXI.Container();
+    const bg = new PIXI.Graphics();
+    bg.beginFill(fallbackColor);
+    bg.drawRect(0, 0, width, height);
+    bg.endFill();
+    container.addChild(bg);
+
+    const sprite = createUIAssetSprite(slotName, width, height, {
+        fit: 'cover',
+        anchorX: 0.5,
+        anchorY: 0.5
+    });
+
+    if (sprite) {
+        sprite.x = width / 2;
+        sprite.y = height / 2;
+        container.addChild(sprite);
+    }
+
+    return container;
 }
 
 function pauseGameplayForOverlay() {
@@ -1557,11 +1622,7 @@ function showLevelSelect() {
     const screenW = app.screen.width;
     const screenH = app.screen.height;
 
-    const bg = new PIXI.Graphics();
-    bg.beginFill(0xFFD984);
-    bg.drawRect(0, 0, screenW, screenH);
-    bg.endFill();
-    levelSelectContainer.addChild(bg);
+    levelSelectContainer.addChild(createCoverBackground('bg_levels', screenW, screenH, 0xFFD984));
 
     const title = new PIXI.Text("ВЫБЕРИ УРОВЕНЬ", {
         fontSize: Math.max(38, Math.min(68, screenW * 0.085)),
@@ -2114,6 +2175,11 @@ function calculateGameLayout() {
 }
 
 function buildGameBackground(layout) {
+    if (TEXTURES.bg_game) {
+        rootUI.addChild(createCoverBackground('bg_game', layout.screenWidth, layout.screenHeight, 0xFFC55A));
+        return;
+    }
+
     const bg = new PIXI.Graphics();
     bg.beginFill(0xFFC55A);
     bg.drawRect(0, 0, layout.screenWidth, layout.screenHeight);
@@ -2216,24 +2282,29 @@ function buildTopHud(layout, level) {
     hudContainer.x = layout.hud.x;
     hudContainer.y = layout.hud.y;
 
-    const hudBg = createCandyPanel(layout.hud.width, layout.hud.height, layout.hud.radius, {
-        fill: 0xFFD16A,
-        innerFill: 0xFFE9A6,
-        border: 0xF4B04C,
-        darkBorder: 0xB96420,
-        borderWidth: 5,
-        inset: 14
-    });
-    hudContainer.addChild(hudBg);
+    const customHud = createUIAssetSprite('game_hud_panel', layout.hud.width, layout.hud.height, { fit: 'stretch' });
+    if (customHud) {
+        hudContainer.addChild(customHud);
+    } else {
+        const hudBg = createCandyPanel(layout.hud.width, layout.hud.height, layout.hud.radius, {
+            fill: 0xFFD16A,
+            innerFill: 0xFFE9A6,
+            border: 0xF4B04C,
+            darkBorder: 0xB96420,
+            borderWidth: 5,
+            inset: 14
+        });
+        hudContainer.addChild(hudBg);
 
-    const leftPatchW = Math.max(112, layout.hud.width * 0.12);
-    const leftPatch = new PIXI.Graphics();
-    leftPatch.beginFill(0xFFE9AD, 0.62);
-    leftPatch.drawRoundedRect(18, 16, leftPatchW, layout.hud.height - 28, Math.max(18, layout.hud.radius - 8));
-    leftPatch.endFill();
-    leftPatch.lineStyle(2, 0xFFF4C8, 0.65);
-    leftPatch.drawRoundedRect(18, 16, leftPatchW, layout.hud.height - 28, Math.max(18, layout.hud.radius - 8));
-    hudContainer.addChild(leftPatch);
+        const leftPatchW = Math.max(112, layout.hud.width * 0.12);
+        const leftPatch = new PIXI.Graphics();
+        leftPatch.beginFill(0xFFE9AD, 0.62);
+        leftPatch.drawRoundedRect(18, 16, leftPatchW, layout.hud.height - 28, Math.max(18, layout.hud.radius - 8));
+        leftPatch.endFill();
+        leftPatch.lineStyle(2, 0xFFF4C8, 0.65);
+        leftPatch.drawRoundedRect(18, 16, leftPatchW, layout.hud.height - 28, Math.max(18, layout.hud.radius - 8));
+        hudContainer.addChild(leftPatch);
+    }
 
     const labelStyle = new PIXI.TextStyle({
         fontSize: Math.max(24, Math.min(42, layout.hud.height * 0.34)),
@@ -2408,7 +2479,8 @@ function buildPlayField(layout) {
     playField._fieldHeight = layout.playField.height;
     playField._fieldRadius = layout.playField.radius;
 
-    const shell = createCandyPanel(layout.playField.width, layout.playField.height, layout.playField.radius, {
+    const customFrame = createUIAssetSprite('game_playfield_frame', layout.playField.width, layout.playField.height, { fit: 'stretch' });
+    const shell = customFrame || createCandyPanel(layout.playField.width, layout.playField.height, layout.playField.radius, {
         fill: 0xFFF2D2,
         innerFill: 0xFFF8EB,
         border: 0xF2A13A,
@@ -2510,17 +2582,21 @@ function createRoundedLabel(text, options) {
 }
 
 function setupMobileLandscapePlayArea(layout, coloredTypes) {
+    rootUI.addChild(createCoverBackground('bg_game', layout.screenWidth, layout.screenHeight, 0xFFC55A));
+
     const header = buildMobileLevelHeader(layout, levelData);
     rootUI.addChild(header);
 
-    const fieldShell = createRoundedPanel(
-        layout.fieldShell.width,
-        layout.fieldShell.height,
-        layout.fieldShell.radius,
-        THEME.cardBg,
-        THEME.border,
-        6
-    );
+    const customFrame = createUIAssetSprite('game_playfield_frame', layout.fieldShell.width, layout.fieldShell.height, { fit: 'stretch' });
+    const fieldShell = new PIXI.Container();
+    fieldShell.addChild(customFrame || createRoundedPanel(
+            layout.fieldShell.width,
+            layout.fieldShell.height,
+            layout.fieldShell.radius,
+            THEME.cardBg,
+            THEME.border,
+            6
+        ));
     fieldShell.x = layout.fieldShell.x;
     fieldShell.y = layout.fieldShell.y;
     fieldShell.name = 'fieldShell';
@@ -2569,13 +2645,23 @@ function buildDesktopLevelHeader(wrapper, level, layout) {
 }
 
 function buildMobileLevelHeader(layout, level) {
+    const mobileTextures = {
+        ...TEXTURES,
+        goal_panel: TEXTURES.game_goal_badge || TEXTURES.goal_panel
+    };
     const { header, ui } = buildMobileLevelHeaderUI({
         layout,
         level,
         theme: THEME,
-        textures: TEXTURES,
+        textures: mobileTextures,
         score
     });
+
+    const customHud = createUIAssetSprite('game_hud_panel', layout.header.width, layout.header.height, { fit: 'stretch' });
+    if (customHud) {
+        header.addChildAt(customHud, 0);
+    }
+
     currentGameUI = ui;
     updateLevelHeader(score, life);
     return header;
@@ -2644,12 +2730,16 @@ function buildSideColorColumns(coloredTypes, layout) {
         const buttonWidth = layout.buttons.width;
         const buttonHeight = layout.buttons.height;
         const verticalGap = layout.buttons.gap;
+        const visibleColors = slotColors.filter((color) => availableColors.has(color));
+        const stackHeight = visibleColors.length * buttonHeight + Math.max(0, visibleColors.length - 1) * verticalGap;
+        const startY = Math.max(0, (columnLayout.height - stackHeight) / 2);
         let visibleIndex = 0;
 
-        slotColors.forEach((color, index) => {
-            if (!availableColors.has(color)) {
-                return;
-            }
+        if (visibleColors.length) {
+            column.addChild(createPanelBackground(columnLayout.width, columnLayout.height, Math.max(20, columnLayout.width * 0.28)));
+        }
+
+        visibleColors.forEach((color) => {
 
             const key = COLOR_BUTTON_SLOTS.find((slot) => slot.color === color)?.key || '';
             if (key) {
@@ -2657,7 +2747,7 @@ function buildSideColorColumns(coloredTypes, layout) {
             }
             const button = createColorButton(color, buttonWidth, key, false, 'mobile-tall', buttonHeight);
             button.x = (columnLayout.width - buttonWidth) / 2;
-            button.y = visibleIndex * (buttonHeight + verticalGap);
+            button.y = startY + visibleIndex * (buttonHeight + verticalGap);
             column.addChild(button);
 
             if (!colorButtonsMap[color]) {
@@ -2684,8 +2774,8 @@ function buildMobilePauseButton(layout) {
     button.buttonMode = true;
     button.on('pointerdown', showPausePopup);
 
-    const panel = createRoundedPanel(size, size, 22, 0xFFE9C2, 0xD98B32, 5);
-    button.addChild(panel);
+    const customBg = createUIAssetSprite('game_settings_button', size, size, { fit: 'stretch' });
+    button.addChild(customBg || createRoundedPanel(size, size, 22, 0xFFE9C2, 0xD98B32, 5));
 
     if (TEXTURES.gear) {
         const gear = new PIXI.Sprite(TEXTURES.gear);
@@ -4674,10 +4764,19 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
     const textureName = getButtonTextureName(color);
     if (TEXTURES[textureName]) {
         const sprite = new PIXI.Sprite(TEXTURES[textureName]);
-        sprite.x = (width - iconSize) / 2;
-        sprite.y = isTallMobile ? (buttonHeight - iconSize) / 2 : (width - iconSize) / 2;
-        sprite.width = iconSize;
-        sprite.height = iconSize;
+        const isCustomButtonArt = textureName.startsWith('custom_button_');
+        if (isCustomButtonArt) {
+            const scale = Math.min((width * 0.98) / sprite.texture.width, (buttonHeight * 0.98) / sprite.texture.height);
+            sprite.scale.set(scale);
+            sprite.x = (width - sprite.width) / 2;
+            sprite.y = (buttonHeight - sprite.height) / 2;
+        } else {
+            sprite.x = (width - iconSize) / 2;
+            sprite.y = isTallMobile ? (buttonHeight - iconSize) / 2 : (width - iconSize) / 2;
+            sprite.width = iconSize;
+            sprite.height = iconSize;
+        }
+        sprite._usesCustomButtonArt = isCustomButtonArt;
         button.addChild(sprite);
     } else {
         const fallback = new PIXI.Graphics();
@@ -4695,7 +4794,8 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
         button.addChild(createButtonFallbackIcon(color, width / 2, cy, iconSize * 0.28));
     }
 
-    if (!isTallMobile) {
+    const usesCustomButtonArt = button.children.some((child) => child._usesCustomButtonArt);
+    if (!isTallMobile && !usesCustomButtonArt) {
         const rim = new PIXI.Graphics();
         rim.lineStyle(Math.max(3, width * 0.055), 0xFFF7E8, 0.88);
         rim.drawCircle(width / 2, width / 2, iconSize * 0.5);
