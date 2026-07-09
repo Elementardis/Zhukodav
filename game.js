@@ -466,6 +466,38 @@ function hasAnyActiveColor() {
     return activeKeyboardColor !== null || activePointerColors.size > 0;
 }
 
+function getActiveColor() {
+    if (activeKeyboardColor) return activeKeyboardColor;
+
+    for (const heldColor of activePointerColors.values()) {
+        if (heldColor) return heldColor;
+    }
+
+    return null;
+}
+
+function updatePlayAreaActiveBorder(targetPlayArea = playArea) {
+    if (!targetPlayArea?._activeBorder) return;
+
+    const activeColor = getActiveColor();
+    const borderColor = activeColor ? (COLORS[activeColor] || THEME.border) : (targetPlayArea._defaultBorderColor || 0xE6B05A);
+    const borderAlpha = activeColor ? 1 : (targetPlayArea._defaultBorderAlpha ?? 0.85);
+    const borderWidth = activeColor
+        ? (targetPlayArea._activeBorderWidth || 6)
+        : (targetPlayArea._defaultBorderWidth || 3);
+    const rect = targetPlayArea._activeBorderRect || {
+        x: 0,
+        y: 0,
+        width: targetPlayArea._fieldWidth ?? targetPlayArea.width,
+        height: targetPlayArea._fieldHeight ?? targetPlayArea.height,
+        radius: targetPlayArea._fieldRadius ?? BORDER_RADIUS
+    };
+
+    targetPlayArea._activeBorder.clear();
+    targetPlayArea._activeBorder.lineStyle(borderWidth, borderColor, borderAlpha);
+    targetPlayArea._activeBorder.drawRoundedRect(rect.x, rect.y, rect.width, rect.height, rect.radius);
+}
+
 function syncAllColorButtonStates() {
     const colors = new Set([
         ...Object.keys(colorButtonsMap || {}),
@@ -476,6 +508,7 @@ function syncAllColorButtonStates() {
     ]);
 
     colors.forEach((color) => updateButtonState(color, isColorHeld(color)));
+    updatePlayAreaActiveBorder();
 }
 
 
@@ -1246,7 +1279,7 @@ function buildChameleonFieldOverlay(width, height, radius) {
     const sprite = new PIXI.Sprite(texture);
     sprite.width = width;
     sprite.height = height;
-    sprite.alpha = 0.55;
+    sprite.alpha = 0.45;
     overlay.addChild(sprite);
 
     const mask = new PIXI.Graphics();
@@ -1259,7 +1292,7 @@ function buildChameleonFieldOverlay(width, height, radius) {
     overlay._dynamicTexture = texture;
     overlay._anims = [
         gsap.to(sprite, {
-            alpha: 0.68,
+            alpha: 0.58,
             duration: 1.2,
             repeat: -1,
             yoyo: true,
@@ -1656,9 +1689,12 @@ function showLevelSelect() {
     const offsetX = (screenW - (buttonSize * cols + spacing * (cols - 1))) / 2;
 
     const completed = getCompletedLevels();
+    const TAP_THRESHOLD = 10;
+    let startX = 0;
+    let startY = 0;
     let dragging = false;
     let dragMoved = false;
-    let startY = 0;
+    let hasScrolled = false;
     let startScrollY = 0;
     let lastY = 0;
     let lastTime = performance.now();
@@ -1768,9 +1804,13 @@ function showLevelSelect() {
         button.on('pointerdown', () => {
             gsap.to(button.scale, { x: 0.97, y: 0.97, duration: 0.08 });
         });
-        button.on('pointerup', () => {
+        button.on('pointerup', (e) => {
             gsap.to(button.scale, { x: 1, y: 1, duration: 0.12, ease: "back.out(1.7)" });
-            if (!dragMoved && !levelSelectContainer.getChildByName('levelEntryPopup')) {
+            const dx = e.data.global.x - startX;
+            const dy = e.data.global.y - startY;
+            const moved = Math.sqrt(dx * dx + dy * dy);
+
+            if (!hasScrolled && !dragMoved && moved <= TAP_THRESHOLD && !levelSelectContainer.getChildByName('levelEntryPopup')) {
                 showLevelEntryPopup(i);
             }
         });
@@ -1820,6 +1860,8 @@ function showLevelSelect() {
         stopScrollAnimation();
         dragging = true;
         dragMoved = false;
+        hasScrolled = false;
+        startX = e.data.global.x;
         startY = e.data.global.y;
         startScrollY = scrollContainer.y;
         lastY = e.data.global.y;
@@ -1842,14 +1884,18 @@ function showLevelSelect() {
         
         const currentTime = performance.now();
         const deltaTime = currentTime - lastTime;
+        const currentX = e.data.global.x;
         const currentY = e.data.global.y;
+        const dx = currentX - startX;
+        const dy = currentY - startY;
 
-        if (Math.abs(currentY - startY) > 8) {
+        if (Math.abs(dx) > TAP_THRESHOLD || Math.abs(dy) > TAP_THRESHOLD) {
             dragMoved = true;
+            hasScrolled = true;
         }
 
         velocity = ((currentY - lastY) / Math.max(1, deltaTime)) * 16.67;
-        scrollContainer.y = applyRubberBand(startScrollY + (currentY - startY));
+        scrollContainer.y = applyRubberBand(startScrollY + dy);
         
         lastY = currentY;
         lastTime = currentTime;
@@ -2491,20 +2537,48 @@ function buildPlayField(layout) {
 
     const fieldInset = Math.max(18, Math.min(28, Math.min(layout.playField.width, layout.playField.height) * 0.045));
     const innerRadius = Math.max(18, layout.playField.radius - 12);
+    const innerFieldWidth = layout.playField.width - fieldInset * 2;
+    const innerFieldHeight = layout.playField.height - fieldInset * 2;
+    playField._spawnBounds = {
+        left: fieldInset,
+        top: fieldInset,
+        right: fieldInset + innerFieldWidth,
+        bottom: fieldInset + innerFieldHeight,
+        width: innerFieldWidth,
+        height: innerFieldHeight
+    };
+    playField._activeBorderRect = {
+        x: fieldInset,
+        y: fieldInset,
+        width: innerFieldWidth,
+        height: innerFieldHeight,
+        radius: innerRadius
+    };
+    playField._defaultBorderColor = 0xE7A04A;
+    playField._defaultBorderAlpha = 0.85;
+    playField._defaultBorderWidth = 3;
+    playField._activeBorderWidth = 6;
+
     const fieldBg = new PIXI.Graphics();
     fieldBg.beginFill(0xFFF9EF, 0.98);
-    fieldBg.drawRoundedRect(fieldInset, fieldInset, layout.playField.width - fieldInset * 2, layout.playField.height - fieldInset * 2, innerRadius);
+    fieldBg.drawRoundedRect(fieldInset, fieldInset, innerFieldWidth, innerFieldHeight, innerRadius);
     fieldBg.endFill();
     fieldBg.lineStyle(3, 0xE7A04A, 0.85);
-    fieldBg.drawRoundedRect(fieldInset, fieldInset, layout.playField.width - fieldInset * 2, layout.playField.height - fieldInset * 2, innerRadius);
+    fieldBg.drawRoundedRect(fieldInset, fieldInset, innerFieldWidth, innerFieldHeight, innerRadius);
 
     const innerHighlight = new PIXI.Graphics();
     innerHighlight.lineStyle(2, 0xFFFFFF, 0.78);
-    innerHighlight.drawRoundedRect(fieldInset + 5, fieldInset + 5, layout.playField.width - fieldInset * 2 - 10, layout.playField.height - fieldInset * 2 - 10, Math.max(14, innerRadius - 5));
+    innerHighlight.drawRoundedRect(fieldInset + 5, fieldInset + 5, innerFieldWidth - 10, innerFieldHeight - 10, Math.max(14, innerRadius - 5));
 
-    playField.addChild(shell, fieldBg, innerHighlight);
+    const activeBorder = new PIXI.Graphics();
+    activeBorder.name = 'activeFieldBorder';
+    activeBorder.eventMode = 'none';
+    playField._activeBorder = activeBorder;
+
+    playField.addChild(shell, fieldBg, innerHighlight, activeBorder);
     addSoftLeafDetails(playField, layout.playField.width, layout.playField.height, fieldInset + 26, 0.38);
     addSpawnZoneDebugOverlay(playField);
+    updatePlayAreaActiveBorder(playField);
 
     playAreaFrame.addChild(playField);
     rootUI.addChild(playAreaFrame);
@@ -2608,6 +2682,25 @@ function setupMobileLandscapePlayArea(layout, coloredTypes) {
     playField.height = layout.playField.height;
     playField._fieldWidth = layout.playField.width;
     playField._fieldHeight = layout.playField.height;
+    playField._spawnBounds = {
+        left: 0,
+        top: 0,
+        right: layout.playField.width,
+        bottom: layout.playField.height,
+        width: layout.playField.width,
+        height: layout.playField.height
+    };
+    playField._activeBorderRect = {
+        x: 0,
+        y: 0,
+        width: layout.playField.width,
+        height: layout.playField.height,
+        radius: layout.playField.radius
+    };
+    playField._defaultBorderColor = 0xE6B05A;
+    playField._defaultBorderAlpha = 0.85;
+    playField._defaultBorderWidth = 4;
+    playField._activeBorderWidth = 6;
 
     const fieldBg = new PIXI.Graphics();
     fieldBg.beginFill(THEME.fieldBg);
@@ -2621,7 +2714,13 @@ function setupMobileLandscapePlayArea(layout, coloredTypes) {
     playField.addChild(fieldBg);
     playField.addChild(fieldBorder);
     playField._fieldRadius = layout.playField.radius;
+    const activeBorder = new PIXI.Graphics();
+    activeBorder.name = 'activeFieldBorder';
+    activeBorder.eventMode = 'none';
+    playField._activeBorder = activeBorder;
+    playField.addChild(activeBorder);
     addSpawnZoneDebugOverlay(playField);
+    updatePlayAreaActiveBorder(playField);
     fieldShell.addChild(playField);
     rootUI.addChild(fieldShell);
 
@@ -2931,11 +3030,17 @@ function checkCollision(obj1, obj2) {
 
 // Проверка, что объект полностью в пределах поля
 function isWithinBounds(obj, playArea) {
+    const bounds = playArea?._spawnBounds || {
+        left: 0,
+        top: 0,
+        right: playArea?.width ?? 0,
+        bottom: playArea?.height ?? 0
+    };
     return (
-        obj.x - obj.width / 2 >= 0 &&
-        obj.x + obj.width / 2 <= playArea.width &&
-        obj.y - obj.height / 2 >= 0 &&
-        obj.y + obj.height / 2 <= playArea.height
+        obj.x - obj.width / 2 >= bounds.left &&
+        obj.x + obj.width / 2 <= bounds.right &&
+        obj.y - obj.height / 2 >= bounds.top &&
+        obj.y + obj.height / 2 <= bounds.bottom
     );
 }
 
@@ -3079,19 +3184,30 @@ function applyResolvedObjectSize(container) {
 
 function getSafeSpawnBounds(objSize) {
   // рамка + небольшой запас + 10% от размера под пульсации/сквиш
-  const pad = FRAME_BORDER + SAFE_PADDING_EXTRA + Math.ceil(objSize * 0.1);
-  const minX = pad + objSize / 2;
-  const maxX = playArea.width  - pad - objSize / 2;
-  const minY = pad + objSize / 2;
-  const maxY = playArea.height - pad - objSize / 2;
+  const bounds = playArea?._spawnBounds || {
+    left: 0,
+    top: 0,
+    right: playArea?.width ?? 0,
+    bottom: playArea?.height ?? 0
+  };
+  const pad = SAFE_PADDING_EXTRA + Math.ceil(objSize * 0.1);
+  const minX = bounds.left + pad + objSize / 2;
+  const maxX = bounds.right - pad - objSize / 2;
+  const minY = bounds.top + pad + objSize / 2;
+  const maxY = bounds.bottom - pad - objSize / 2;
   return { minX, maxX, minY, maxY };
 }
 
 // Подтягивает объект внутрь безопасной зоны (при ресайзе/перестроении UI)
 function getSpawnRange(spawnZone, playArea) {
-  const fieldLeft = 0;
-  const fieldRight = playArea.width;
-  const fieldWidth = playArea.width;
+  const bounds = playArea?._spawnBounds || {
+    left: 0,
+    right: playArea?.width ?? 0,
+    width: playArea?.width ?? 0
+  };
+  const fieldLeft = bounds.left;
+  const fieldRight = bounds.right;
+  const fieldWidth = bounds.width ?? (fieldRight - fieldLeft);
   const third = fieldWidth / 3;
 
   const leftZone = {
@@ -3137,17 +3253,23 @@ function addSpawnZoneDebugOverlay(playField) {
   overlay.name = 'spawnZoneDebugOverlay';
   overlay.eventMode = 'none';
 
-  const third = playField.width / 3;
+  const bounds = playField._spawnBounds || {
+    left: 0,
+    top: 0,
+    width: playField.width,
+    height: playField.height
+  };
+  const third = bounds.width / 3;
   const zones = [
-    { x: 0, width: third, color: 0x4D96FF },
-    { x: third, width: third, color: 0x7BC67B },
-    { x: third * 2, width: playField.width - third * 2, color: 0xFF9F43 }
+    { x: bounds.left, width: third, color: 0x4D96FF },
+    { x: bounds.left + third, width: third, color: 0x7BC67B },
+    { x: bounds.left + third * 2, width: bounds.width - third * 2, color: 0xFF9F43 }
   ];
 
   zones.forEach((zone) => {
     const rect = new PIXI.Graphics();
     rect.beginFill(zone.color, 0.15);
-    rect.drawRect(zone.x, 0, zone.width, playField.height);
+    rect.drawRect(zone.x, bounds.top, zone.width, bounds.height);
     rect.endFill();
     overlay.addChild(rect);
   });
