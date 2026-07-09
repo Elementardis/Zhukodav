@@ -41,7 +41,6 @@ const FROZEN_WAVE_COLOR = 0x8FE8FF;     // максимальный размер
 const NEAT_SPAWN_DELAY_MS = 1500;
 const NEAT_WAVE_COLORS = [0xFDFDFD, 0xEAEAEA, 0xD8DDE3, 0xC8D0D8];
 const CHAMELEON_EFFECT_DURATION_MS = 5000;
-const CHAMELEON_TIMER_COLOR = 0xC64CFF;
 const CHAMELEON_WAVE_COLORS = [0xFFB7C5, 0xFFD7A8, 0xFFF0A6, 0xBAF2BB, 0xB8E7FF, 0xD8C4FF];
 const DEBUG_SHOW_SPAWN_ZONES = false;
 const CASUAL_UI = {
@@ -518,6 +517,22 @@ function getRoundedRectPerimeter(rect) {
     return 2 * (rect.width + rect.height - 4 * radius) + 2 * Math.PI * radius;
 }
 
+function lerpColor(from, to, t) {
+    const r = ((from >> 16) & 0xFF) + (((to >> 16) & 0xFF) - ((from >> 16) & 0xFF)) * t;
+    const g = ((from >> 8) & 0xFF) + (((to >> 8) & 0xFF) - ((from >> 8) & 0xFF)) * t;
+    const b = (from & 0xFF) + ((to & 0xFF) - (from & 0xFF)) * t;
+    return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
+}
+
+function getChameleonTimerColor(t) {
+    const colors = CHAMELEON_WAVE_COLORS;
+    const wrapped = ((t % 1) + 1) % 1;
+    const scaled = wrapped * colors.length;
+    const index = Math.floor(scaled) % colors.length;
+    const nextIndex = (index + 1) % colors.length;
+    return lerpColor(colors[index], colors[nextIndex], scaled - Math.floor(scaled));
+}
+
 function getRoundedRectPointAt(rect, distance) {
     const radius = Math.max(0, Math.min(rect.radius || 0, rect.width / 2, rect.height / 2));
     const perimeter = getRoundedRectPerimeter({ ...rect, radius });
@@ -581,23 +596,18 @@ function drawChameleonTimerBorder(targetPlayArea = playArea, now = Date.now()) {
     const remaining = Math.max(0, Math.min(1, (chameleonEffectEndsAt - now) / CHAMELEON_EFFECT_DURATION_MS));
     const lineWidth = Math.max(targetPlayArea._timerBorderWidth || 8, 6);
 
-    graphics.lineStyle(lineWidth, CHAMELEON_TIMER_COLOR, 1);
-    if (remaining >= 0.995) {
-        graphics.drawRoundedRect(rect.x, rect.y, rect.width, rect.height, rect.radius);
-        return;
-    }
-
     const perimeter = getRoundedRectPerimeter(rect);
     const length = perimeter * remaining;
-    const steps = Math.max(2, Math.ceil(180 * remaining));
+    const steps = Math.max(2, Math.ceil(220 * remaining));
+    let previousPoint = getRoundedRectPointAt(rect, 0);
 
-    for (let i = 0; i <= steps; i++) {
-        const point = getRoundedRectPointAt(rect, (length * i) / steps);
-        if (i === 0) {
-            graphics.moveTo(point.x, point.y);
-        } else {
-            graphics.lineTo(point.x, point.y);
-        }
+    for (let i = 1; i <= steps; i++) {
+        const distance = (length * i) / steps;
+        const point = getRoundedRectPointAt(rect, distance);
+        graphics.lineStyle(lineWidth, getChameleonTimerColor(distance / perimeter), 1);
+        graphics.moveTo(previousPoint.x, previousPoint.y);
+        graphics.lineTo(point.x, point.y);
+        previousPoint = point;
     }
 }
 
@@ -2110,17 +2120,7 @@ function showLevelEntryPopup(levelIndex) {
     popup.on('pointerup', (event) => event.stopPropagation());
     popup.on('pointerupoutside', (event) => event.stopPropagation());
 
-    const bg = new PIXI.Graphics();
-    bg.beginFill(THEME.cardBg);
-    bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 30);
-    bg.endFill();
-
-    const border = new PIXI.Graphics();
-    border.lineStyle(6, THEME.border, 1);
-    border.drawRoundedRect(0, 0, popupWidth, popupHeight, 30);
-
-    popup.addChild(bg);
-    popup.addChild(border);
+    popup.addChild(createGameFieldPopupPanel(popupWidth, popupHeight, 30, THEME.border));
 
     const iconSize = Math.max(52, Math.min(78, popupHeight * 0.24));
     const entryIcon = createUIAssetSprite('level_entry_icon', iconSize, iconSize, {
@@ -2426,6 +2426,39 @@ function createCandyPanel(width, height, radius, options = {}) {
     return panel;
 }
 
+function drawGameFieldPopupPanel(bg, border, width, height, radius = 34, borderColor = THEME.border) {
+    const inset = Math.max(12, Math.min(20, Math.min(width, height) * 0.045));
+    const innerRadius = Math.max(14, radius - inset * 0.6);
+
+    bg.clear();
+    bg.beginFill(0xB86421, 0.18);
+    bg.drawRoundedRect(5, 7, width, height, radius);
+    bg.endFill();
+    bg.beginFill(0xFFF2D2, 1);
+    bg.drawRoundedRect(0, 0, width, height, radius);
+    bg.endFill();
+    bg.beginFill(0xFFF9EF, 0.98);
+    bg.drawRoundedRect(inset, inset, width - inset * 2, height - inset * 2, innerRadius);
+    bg.endFill();
+    bg.lineStyle(2, 0xFFFFFF, 0.75);
+    bg.drawRoundedRect(inset + 5, inset + 5, width - inset * 2 - 10, height - inset * 2 - 10, Math.max(10, innerRadius - 5));
+
+    border.clear();
+    border.lineStyle(Math.max(6, Math.min(9, Math.min(width, height) * 0.025)), 0xB86421, 0.45);
+    border.drawRoundedRect(1, 1, width - 2, height - 2, radius);
+    border.lineStyle(Math.max(4, Math.min(7, Math.min(width, height) * 0.018)), borderColor, 0.95);
+    border.drawRoundedRect(inset, inset, width - inset * 2, height - inset * 2, innerRadius);
+}
+
+function createGameFieldPopupPanel(width, height, radius = 34, borderColor = THEME.border) {
+    const panel = new PIXI.Container();
+    const bg = new PIXI.Graphics();
+    const border = new PIXI.Graphics();
+    drawGameFieldPopupPanel(bg, border, width, height, radius, borderColor);
+    panel.addChild(bg, border);
+    return panel;
+}
+
 function addSoftLeafDetails(container, width, height, inset = 24, alpha = 0.45) {
     const details = new PIXI.Graphics();
     details.lineStyle(2, 0xE8B568, alpha);
@@ -2481,6 +2514,35 @@ function buildTopHud(layout, level) {
         strokeThickness: 5,
         lineJoin: 'round'
     });
+
+    const levelBadgeW = Math.max(96, Math.min(148, layout.hud.width * 0.115));
+    const levelBadgeH = Math.max(42, Math.min(64, layout.hud.height * 0.52));
+    const levelBadge = createRoundedLabel('', {
+        width: levelBadgeW,
+        height: levelBadgeH,
+        radius: Math.max(16, levelBadgeH * 0.35),
+        fill: 0xFFF6E8,
+        borderColor: 0xE8A24A,
+        borderWidth: 4
+    });
+    levelBadge.x = Math.max(18, layout.hud.width * 0.018);
+    levelBadge.y = Math.max(12, layout.hud.height * 0.12);
+
+    const levelBadgeText = new PIXI.Text(`УРОВЕНЬ\n${level.id}`, {
+        fontSize: Math.max(15, Math.min(24, levelBadgeH * 0.34)),
+        fill: 0x7A461F,
+        fontWeight: '900',
+        fontFamily: 'Arial',
+        stroke: 0xFFFFFF,
+        strokeThickness: 3,
+        align: 'center',
+        lineHeight: Math.max(16, Math.min(24, levelBadgeH * 0.36))
+    });
+    levelBadgeText.anchor.set(0.5);
+    levelBadgeText.x = levelBadgeW / 2;
+    levelBadgeText.y = levelBadgeH / 2;
+    levelBadge.addChild(levelBadgeText);
+    hudContainer.addChild(levelBadge);
 
     const livesLabel = new PIXI.Text('\u0416\u0418\u0417\u041d\u0418', labelStyle);
     livesLabel.anchor.set(0, 0.5);
@@ -4212,14 +4274,7 @@ function showIntroPopup(cfg, onClose) {
     c.x = popupX;
     c.y = popupY;
 
-    bg.clear();
-    bg.beginFill(THEME.cardBg);
-    bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 32);
-    bg.endFill();
-
-    border.clear();
-    border.lineStyle(6, THEME.border, 1);
-    border.drawRoundedRect(0, 0, popupWidth, popupHeight, 32);
+    drawGameFieldPopupPanel(bg, border, popupWidth, popupHeight, 32, THEME.border);
 
     title.style.fontSize = Math.max(26, Math.min(50, Math.round(popupWidth * 0.11)));
     title.style.wordWrapWidth = titleWrapWidth;
@@ -4366,13 +4421,9 @@ function showWinPopup(currentLevelIndex) {
 
     // Фон
     const bg = new PIXI.Graphics();
-    bg.beginFill(THEME.cardBg);
-    bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 36);
-    bg.endFill();
     // Рамка
     const border = new PIXI.Graphics();
-    border.lineStyle(8, THEME.success);
-    border.drawRoundedRect(0, 0, popupWidth, popupHeight, 36);
+    drawGameFieldPopupPanel(bg, border, popupWidth, popupHeight, 36, THEME.success);
     popup.addChild(bg);
     popup.addChild(border);
 
@@ -4492,13 +4543,9 @@ function showLosePopup(currentLevelIndex) {
 
     // Фон
     const bg = new PIXI.Graphics();
-    bg.beginFill(THEME.cardBg);
-    bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 36);
-    bg.endFill();
     // Рамка
     const border = new PIXI.Graphics();
-    border.lineStyle(8, THEME.fail);
-    border.drawRoundedRect(0, 0, popupWidth, popupHeight, 36);
+    drawGameFieldPopupPanel(bg, border, popupWidth, popupHeight, 36, THEME.fail);
     popup.addChild(bg);
     popup.addChild(border);
 
@@ -4656,14 +4703,10 @@ function showPausePopup() {
 
     // Background
     const bg = new PIXI.Graphics();
-    bg.beginFill(THEME.cardBg);
-    bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 40);
-    bg.endFill();
 
     // Border
     const border = new PIXI.Graphics();
-    border.lineStyle(6, THEME.pause);
-    border.drawRoundedRect(0, 0, popupWidth, popupHeight, 40);
+    drawGameFieldPopupPanel(bg, border, popupWidth, popupHeight, 40, THEME.pause);
     popup.addChild(bg);
     popup.addChild(border);
 

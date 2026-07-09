@@ -342,6 +342,19 @@ export function buildMobileLevelHeader({ layout, level, theme, textures, score }
     header.x = layout.header.x;
     header.y = layout.header.y;
 
+    const cornerLevelText = new PIXI.Text(`УРОВЕНЬ ${level.id}`, {
+        fontSize: Math.max(16, Math.min(24, layout.header.height * 0.24)),
+        fill: theme.white,
+        fontWeight: '900',
+        fontFamily: 'Arial',
+        stroke: theme.borderDark,
+        strokeThickness: 4
+    });
+    cornerLevelText.name = 'cornerLevelText';
+    cornerLevelText.x = 0;
+    cornerLevelText.y = 0;
+    header.addChild(cornerLevelText);
+
     const levelTexture = textures.level_panel;
     const goalTexture = textures.goal_panel;
     const baseGap = 18;
@@ -435,6 +448,7 @@ export function buildMobileLevelHeader({ layout, level, theme, textures, score }
             mode: 'mobile-landscape',
             header,
             levelValueText,
+            cornerLevelText,
             goalValueText,
             heartsContainer,
             heartSize: 34,
@@ -452,6 +466,9 @@ export function updateLevelHeaderUI({ currentGameUI, score, life, levelData, tex
     if (currentGameUI.mode === 'mobile-landscape') {
         if (currentGameUI.levelValueText) {
             currentGameUI.levelValueText.text = String(levelData.id);
+        }
+        if (currentGameUI.cornerLevelText) {
+            currentGameUI.cornerLevelText.text = `УРОВЕНЬ ${levelData.id}`;
         }
 
         if (currentGameUI.goalValueText) {
