@@ -1,7 +1,7 @@
 const levels = [
   {
     id: 1,
-    goalBugCount: 15,
+    goalBugCount: 10,
     lifeCount: 5,
     params: {
       maxObjects: 3,
@@ -9,11 +9,8 @@ const levels = [
       spawnMultiplier: 0.9,
       spawnWeights: {
         bug: 1,
+        neat: 1,
       },
-    },
-    introPopup: {
-      type: "bug",
-      descryption: "Нажми на ВСЕХ жуков. Убежит - потеряешь жизнь!",
     },
   },
   {
@@ -26,6 +23,7 @@ const levels = [
       spawnMultiplier: 1,
       spawnWeights: {
         bug: 1,
+        chameleon: 1,
       },
     },
   },
@@ -234,7 +232,6 @@ const levels = [
       spawnWeights: {
         bug: 1,
         coloredBug_red: 1,
-        chameleon: 2,
       },
     },
   },
@@ -243,13 +240,12 @@ const levels = [
     goalBugCount: 30,
     lifeCount: 7,
     params: {
-      maxObjects: 10,
-      lifetimeMultiplier: 3,
+      maxObjects: 4,
+      lifetimeMultiplier: 1.1,
       spawnMultiplier: 1.2,
       spawnWeights: {
         coloredBug_red: 1,
         bomb: 0.5,
-        neat: 1,
       },
     },
   },
@@ -327,7 +323,7 @@ const levels = [
     },
     introPopup: {
       type: "coloredBug_blue",
-      descryption: "НАЖМИ и Удерживай ФИОЛЕТОВУЮ кнопку и нажми на ФИОЛЕТОВОГО жука!",
+      descryption: "НАЖМИ и Удерживай СИНЮЮ кнопку и нажми на СИНЕГО жука!",
     },
   },
   {
