@@ -78,14 +78,14 @@ export const BUG_BALANCE = {
     spawnInterval: 500,
     clicks: 3,
     scoreValue: 1,
-    spawnZone: 'right',
+    spawnZone: 'left',
   },
   "fatColoredBug_yellow": {
     lifetime: 3000,
     spawnInterval: 500,
     clicks: 3,
     scoreValue: 1,
-    spawnZone: 'left',
+    spawnZone: 'right',
   },
   "frozen": {
     lifetime: 2000,

@@ -41,6 +41,7 @@ const FROZEN_WAVE_COLOR = 0x8FE8FF;     // максимальный размер
 const NEAT_SPAWN_DELAY_MS = 1500;
 const NEAT_WAVE_COLORS = [0xFDFDFD, 0xEAEAEA, 0xD8DDE3, 0xC8D0D8];
 const CHAMELEON_EFFECT_DURATION_MS = 5000;
+const CHAMELEON_TIMER_COLOR = 0xC64CFF;
 const CHAMELEON_WAVE_COLORS = [0xFFB7C5, 0xFFD7A8, 0xFFF0A6, 0xBAF2BB, 0xB8E7FF, 0xD8C4FF];
 const DEBUG_SHOW_SPAWN_ZONES = false;
 const CASUAL_UI = {
@@ -79,6 +80,7 @@ let frozenEffectTimer = null;
 let chameleonEffectStartedAt = 0;
 let chameleonEffectEndsAt = 0;
 let chameleonEffectTimer = null;
+let chameleonTimerTicker = null;
 let chameleonFieldOverlay = null;
 let gameLayout = null;
 let currentGameUI = { hearts: [] };
@@ -511,6 +513,120 @@ function syncAllColorButtonStates() {
     updatePlayAreaActiveBorder();
 }
 
+function getRoundedRectPerimeter(rect) {
+    const radius = Math.max(0, Math.min(rect.radius || 0, rect.width / 2, rect.height / 2));
+    return 2 * (rect.width + rect.height - 4 * radius) + 2 * Math.PI * radius;
+}
+
+function getRoundedRectPointAt(rect, distance) {
+    const radius = Math.max(0, Math.min(rect.radius || 0, rect.width / 2, rect.height / 2));
+    const perimeter = getRoundedRectPerimeter({ ...rect, radius });
+    let d = ((distance % perimeter) + perimeter) % perimeter;
+    const x = rect.x;
+    const y = rect.y;
+    const w = rect.width;
+    const h = rect.height;
+
+    const segments = [
+        { type: 'line', length: Math.max(0, w / 2 - radius), from: [x + w / 2, y], to: [x + w - radius, y] },
+        { type: 'arc', length: Math.PI * radius / 2, cx: x + w - radius, cy: y + radius, start: -Math.PI / 2, end: 0 },
+        { type: 'line', length: Math.max(0, h - radius * 2), from: [x + w, y + radius], to: [x + w, y + h - radius] },
+        { type: 'arc', length: Math.PI * radius / 2, cx: x + w - radius, cy: y + h - radius, start: 0, end: Math.PI / 2 },
+        { type: 'line', length: Math.max(0, w - radius * 2), from: [x + w - radius, y + h], to: [x + radius, y + h] },
+        { type: 'arc', length: Math.PI * radius / 2, cx: x + radius, cy: y + h - radius, start: Math.PI / 2, end: Math.PI },
+        { type: 'line', length: Math.max(0, h - radius * 2), from: [x, y + h - radius], to: [x, y + radius] },
+        { type: 'arc', length: Math.PI * radius / 2, cx: x + radius, cy: y + radius, start: Math.PI, end: Math.PI * 1.5 },
+        { type: 'line', length: Math.max(0, w / 2 - radius), from: [x + radius, y], to: [x + w / 2, y] }
+    ];
+
+    for (const segment of segments) {
+        if (d > segment.length) {
+            d -= segment.length;
+            continue;
+        }
+
+        const t = segment.length > 0 ? d / segment.length : 0;
+        if (segment.type === 'arc') {
+            const angle = segment.start + (segment.end - segment.start) * t;
+            return {
+                x: segment.cx + Math.cos(angle) * radius,
+                y: segment.cy + Math.sin(angle) * radius
+            };
+        }
+
+        return {
+            x: segment.from[0] + (segment.to[0] - segment.from[0]) * t,
+            y: segment.from[1] + (segment.to[1] - segment.from[1]) * t
+        };
+    }
+
+    return { x: x + w / 2, y };
+}
+
+function drawChameleonTimerBorder(targetPlayArea = playArea, now = Date.now()) {
+    if (!targetPlayArea?._chameleonTimerBorder) return;
+
+    const graphics = targetPlayArea._chameleonTimerBorder;
+    graphics.clear();
+
+    if (!isChameleonEffectActive(now)) return;
+
+    const rect = targetPlayArea._activeBorderRect || {
+        x: 0,
+        y: 0,
+        width: targetPlayArea._fieldWidth ?? targetPlayArea.width,
+        height: targetPlayArea._fieldHeight ?? targetPlayArea.height,
+        radius: targetPlayArea._fieldRadius ?? BORDER_RADIUS
+    };
+    const remaining = Math.max(0, Math.min(1, (chameleonEffectEndsAt - now) / CHAMELEON_EFFECT_DURATION_MS));
+    const lineWidth = Math.max(targetPlayArea._activeBorderWidth || 6, 6);
+
+    graphics.lineStyle(lineWidth, CHAMELEON_TIMER_COLOR, 1);
+    if (remaining >= 0.995) {
+        graphics.drawRoundedRect(rect.x, rect.y, rect.width, rect.height, rect.radius);
+        return;
+    }
+
+    const perimeter = getRoundedRectPerimeter(rect);
+    const length = perimeter * remaining;
+    const steps = Math.max(2, Math.ceil(180 * remaining));
+
+    for (let i = 0; i <= steps; i++) {
+        const point = getRoundedRectPointAt(rect, (length * i) / steps);
+        if (i === 0) {
+            graphics.moveTo(point.x, point.y);
+        } else {
+            graphics.lineTo(point.x, point.y);
+        }
+    }
+}
+
+function startChameleonTimerBorder() {
+    stopChameleonTimerBorder();
+    drawChameleonTimerBorder();
+
+    chameleonTimerTicker = () => {
+        if (!isChameleonEffectActive()) {
+            stopChameleonTimerBorder();
+            return;
+        }
+
+        drawChameleonTimerBorder();
+    };
+    app.ticker.add(chameleonTimerTicker);
+}
+
+function stopChameleonTimerBorder() {
+    if (chameleonTimerTicker) {
+        app.ticker.remove(chameleonTimerTicker);
+        chameleonTimerTicker = null;
+    }
+
+    if (playArea?._chameleonTimerBorder) {
+        playArea._chameleonTimerBorder.clear();
+    }
+}
+
 
 
 // ==== UI Containers ====
@@ -932,9 +1048,9 @@ loader.load(() => {
 // Color definitions and key mappings
 const COLORS = {
     red: 0xFF4F6F,
-    blue: 0x21C8F6,
+    blue: 0xC64CFF,
     green: 0x83D91B,
-    yellow: 0xC64CFF,
+    yellow: 0x21C8F6,
     purple: THEME.pause
 };
 
@@ -1279,7 +1395,7 @@ function buildChameleonFieldOverlay(width, height, radius) {
     const sprite = new PIXI.Sprite(texture);
     sprite.width = width;
     sprite.height = height;
-    sprite.alpha = 0.45;
+    sprite.alpha = 0.9;
     overlay.addChild(sprite);
 
     const mask = new PIXI.Graphics();
@@ -1292,7 +1408,7 @@ function buildChameleonFieldOverlay(width, height, radius) {
     overlay._dynamicTexture = texture;
     overlay._anims = [
         gsap.to(sprite, {
-            alpha: 0.58,
+            alpha: 0.6,
             duration: 1.2,
             repeat: -1,
             yoyo: true,
@@ -1346,6 +1462,8 @@ function syncChameleonFieldOverlay() {
         );
         playArea.addChildAt(chameleonFieldOverlay, Math.min(1, playArea.children.length));
     }
+
+    drawChameleonTimerBorder();
 }
 
 function finishFrozenEffect() {
@@ -1395,6 +1513,7 @@ function finishChameleonEffect() {
         chameleonEffectTimer = null;
     }
 
+    stopChameleonTimerBorder();
     clearChameleonFieldOverlay();
 }
 
@@ -1405,6 +1524,7 @@ function activateChameleonEffect() {
     chameleonEffectEndsAt = now + CHAMELEON_EFFECT_DURATION_MS;
     clearActiveColor();
     syncChameleonFieldOverlay();
+    startChameleonTimerBorder();
 
     if (chameleonEffectTimer) {
         clearTimeout(chameleonEffectTimer);
@@ -2574,8 +2694,12 @@ function buildPlayField(layout) {
     activeBorder.name = 'activeFieldBorder';
     activeBorder.eventMode = 'none';
     playField._activeBorder = activeBorder;
+    const chameleonTimerBorder = new PIXI.Graphics();
+    chameleonTimerBorder.name = 'chameleonTimerBorder';
+    chameleonTimerBorder.eventMode = 'none';
+    playField._chameleonTimerBorder = chameleonTimerBorder;
 
-    playField.addChild(shell, fieldBg, innerHighlight, activeBorder);
+    playField.addChild(shell, fieldBg, innerHighlight, activeBorder, chameleonTimerBorder);
     addSoftLeafDetails(playField, layout.playField.width, layout.playField.height, fieldInset + 26, 0.38);
     addSpawnZoneDebugOverlay(playField);
     updatePlayAreaActiveBorder(playField);
@@ -2719,6 +2843,11 @@ function setupMobileLandscapePlayArea(layout, coloredTypes) {
     activeBorder.eventMode = 'none';
     playField._activeBorder = activeBorder;
     playField.addChild(activeBorder);
+    const chameleonTimerBorder = new PIXI.Graphics();
+    chameleonTimerBorder.name = 'chameleonTimerBorder';
+    chameleonTimerBorder.eventMode = 'none';
+    playField._chameleonTimerBorder = chameleonTimerBorder;
+    playField.addChild(chameleonTimerBorder);
     addSpawnZoneDebugOverlay(playField);
     updatePlayAreaActiveBorder(playField);
     fieldShell.addChild(playField);
