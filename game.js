@@ -4253,52 +4253,68 @@ function showIntroPopup(cfg, onClose) {
     introActive = false;
     if (typeof onClose === 'function') onClose();
   };
+  overlay.on('pointerdown', close);
+  c.interactive = true;
+  c.hitArea = new PIXI.Rectangle(0, 0, 1, 1);
+  c.on('pointerdown', (event) => event.stopPropagation());
 
   const layoutIntroPopup = () => {
     const fieldWrapper = playArea?.parent;
-    const popupWidth = Math.min(fieldWrapper?.width ?? (app.screen.width - 24), app.screen.width - 24);
-    const popupHeight = Math.min(fieldWrapper?.height ?? (app.screen.height - 24), app.screen.height - 24);
+    const popupWidth = Math.max(260, Math.min(fieldWrapper?.width ?? (app.screen.width - 24), app.screen.width - 24));
+    const popupHeight = Math.max(260, Math.min(fieldWrapper?.height ?? (app.screen.height - 24), app.screen.height - 24));
     const popupX = fieldWrapper?.x ?? ((app.screen.width - popupWidth) / 2);
     const popupY = fieldWrapper?.y ?? Math.max(12, (app.screen.height - popupHeight) / 2);
-    const padX = Math.max(18, Math.round(popupWidth * 0.06));
-    const padTop = Math.max(18, Math.round(popupHeight * 0.05));
-    const padBottom = Math.max(18, Math.round(popupHeight * 0.05));
-    const gap = Math.max(12, Math.round(popupHeight * 0.03));
+    const padX = Math.max(16, Math.round(popupWidth * 0.055));
+    const padTop = Math.max(16, Math.round(popupHeight * 0.045));
+    const padBottom = Math.max(18, Math.round(popupHeight * 0.055));
+    const gap = Math.max(8, Math.min(14, Math.round(popupHeight * 0.025)));
     const titleWrapWidth = popupWidth - padX * 2;
     const descWrapWidth = popupWidth - padX * 2 - 24;
-    const buttonHeight = Math.max(58, Math.round(popupHeight * 0.12));
+    const buttonHeight = Math.max(46, Math.min(62, Math.round(popupHeight * 0.12)));
     const buttonWidth = Math.min(popupWidth - padX * 2, 320);
-    const descPadY = 10;
+    const descPadY = Math.max(8, Math.min(10, Math.round(popupHeight * 0.018)));
     const descBoxWidth = popupWidth - padX * 2;
 
     c.x = popupX;
     c.y = popupY;
+    c.hitArea = new PIXI.Rectangle(0, 0, popupWidth, popupHeight);
 
     drawGameFieldPopupPanel(bg, border, popupWidth, popupHeight, 32, THEME.border);
 
-    title.style.fontSize = Math.max(26, Math.min(50, Math.round(popupWidth * 0.11)));
+    title.style.fontSize = Math.max(22, Math.min(44, Math.round(Math.min(popupWidth * 0.1, popupHeight * 0.12))));
     title.style.wordWrapWidth = titleWrapWidth;
     title.style.lineHeight = Math.round(title.style.fontSize * 1.05);
     title.x = popupWidth / 2;
     title.y = padTop;
 
-    desc.style.fontSize = Math.max(16, Math.min(24, Math.round(popupWidth * 0.05)));
+    desc.style.fontSize = Math.max(14, Math.min(22, Math.round(Math.min(popupWidth * 0.046, popupHeight * 0.06))));
     desc.style.lineHeight = Math.round(desc.style.fontSize * 1.3);
     desc.style.wordWrapWidth = descWrapWidth;
 
-    const maxIconSize = Math.min(popupWidth * 0.34, popupHeight * 0.22);
-    const remainingForIcon = popupHeight - padTop - title.height - gap - desc.height - gap - buttonHeight - padBottom - gap - descPadY * 2;
-    const iconSize = Math.max(72, Math.min(maxIconSize, remainingForIcon));
+    let descBoxHeight = desc.height + descPadY * 2;
+    const maxDescBoxHeight = Math.max(52, popupHeight * 0.24);
+    if (descBoxHeight > maxDescBoxHeight) {
+      desc.style.fontSize = Math.max(12, Math.floor(desc.style.fontSize * maxDescBoxHeight / descBoxHeight));
+      desc.style.lineHeight = Math.round(desc.style.fontSize * 1.25);
+      descBoxHeight = desc.height + descPadY * 2;
+    }
+
+    const buttonCenterY = popupHeight - padBottom - buttonHeight / 2;
+    const descBoxY = buttonCenterY - buttonHeight / 2 - gap - descBoxHeight;
+    const iconTop = title.y + title.height + gap;
+    const iconBottom = descBoxY - gap;
+    const maxIconSize = Math.min(popupWidth * 0.28, Math.max(36, iconBottom - iconTop));
+    const iconSize = Math.max(36, Math.min(maxIconSize, popupHeight * 0.2));
     icon.width = icon.height = iconSize;
     icon.x = popupWidth / 2;
-    icon.y = title.y + title.height + gap + iconSize / 2;
+    icon.y = iconTop + Math.max(0, (iconBottom - iconTop - iconSize) / 2) + iconSize / 2;
 
     descBox.clear();
     descBox.beginFill(THEME.headerBg, 0.85);
-    descBox.drawRoundedRect(0, 0, descBoxWidth, desc.height + descPadY * 2, 18);
+    descBox.drawRoundedRect(0, 0, descBoxWidth, descBoxHeight, 18);
     descBox.endFill();
     descBox.x = padX;
-    descBox.y = icon.y + iconSize / 2 + gap;
+    descBox.y = Math.max(icon.y + iconSize / 2 + gap, descBoxY);
 
     desc.x = popupWidth / 2;
     desc.y = descBox.y + descPadY;
@@ -4309,7 +4325,7 @@ function showIntroPopup(cfg, onClose) {
     ok.drawRoundedRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 18);
     ok.endFill();
     ok.x = popupWidth / 2;
-    ok.y = descBox.y + descBox.height + gap + buttonHeight / 2;
+    ok.y = buttonCenterY;
 
     okLabel.style.fontSize = Math.max(26, Math.min(32, Math.round(buttonHeight * 0.48)));
     okLabel.x = 0;
