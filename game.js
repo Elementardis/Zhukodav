@@ -481,12 +481,13 @@ function getActiveColor() {
 function updatePlayAreaActiveBorder(targetPlayArea = playArea) {
     if (!targetPlayArea?._activeBorder) return;
 
+    targetPlayArea._activeBorder.clear();
     const activeColor = getActiveColor();
-    const borderColor = activeColor ? (COLORS[activeColor] || THEME.border) : (targetPlayArea._defaultBorderColor || 0xE6B05A);
-    const borderAlpha = activeColor ? 1 : (targetPlayArea._defaultBorderAlpha ?? 0.85);
-    const borderWidth = activeColor
-        ? (targetPlayArea._activeBorderWidth || 6)
-        : (targetPlayArea._defaultBorderWidth || 3);
+    if (!activeColor) return;
+
+    const borderColor = COLORS[activeColor] || THEME.border;
+    const borderAlpha = 1;
+    const borderWidth = targetPlayArea._activeBorderWidth || 6;
     const rect = targetPlayArea._activeBorderRect || {
         x: 0,
         y: 0,
@@ -495,7 +496,6 @@ function updatePlayAreaActiveBorder(targetPlayArea = playArea) {
         radius: targetPlayArea._fieldRadius ?? BORDER_RADIUS
     };
 
-    targetPlayArea._activeBorder.clear();
     targetPlayArea._activeBorder.lineStyle(borderWidth, borderColor, borderAlpha);
     targetPlayArea._activeBorder.drawRoundedRect(rect.x, rect.y, rect.width, rect.height, rect.radius);
 }
@@ -571,7 +571,7 @@ function drawChameleonTimerBorder(targetPlayArea = playArea, now = Date.now()) {
 
     if (!isChameleonEffectActive(now)) return;
 
-    const rect = targetPlayArea._activeBorderRect || {
+    const rect = targetPlayArea._timerBorderRect || {
         x: 0,
         y: 0,
         width: targetPlayArea._fieldWidth ?? targetPlayArea.width,
@@ -579,7 +579,7 @@ function drawChameleonTimerBorder(targetPlayArea = playArea, now = Date.now()) {
         radius: targetPlayArea._fieldRadius ?? BORDER_RADIUS
     };
     const remaining = Math.max(0, Math.min(1, (chameleonEffectEndsAt - now) / CHAMELEON_EFFECT_DURATION_MS));
-    const lineWidth = Math.max(targetPlayArea._activeBorderWidth || 6, 6);
+    const lineWidth = Math.max(targetPlayArea._timerBorderWidth || 8, 6);
 
     graphics.lineStyle(lineWidth, CHAMELEON_TIMER_COLOR, 1);
     if (remaining >= 0.995) {
@@ -2674,10 +2674,15 @@ function buildPlayField(layout) {
         height: innerFieldHeight,
         radius: innerRadius
     };
-    playField._defaultBorderColor = 0xE7A04A;
-    playField._defaultBorderAlpha = 0.85;
-    playField._defaultBorderWidth = 3;
+    playField._timerBorderRect = {
+        x: 5,
+        y: 5,
+        width: layout.playField.width - 10,
+        height: layout.playField.height - 10,
+        radius: Math.max(12, layout.playField.radius - 4)
+    };
     playField._activeBorderWidth = 6;
+    playField._timerBorderWidth = 8;
 
     const fieldBg = new PIXI.Graphics();
     fieldBg.beginFill(0xFFF9EF, 0.98);
@@ -2814,17 +2819,23 @@ function setupMobileLandscapePlayArea(layout, coloredTypes) {
         width: layout.playField.width,
         height: layout.playField.height
     };
+    const innerIndicatorInset = Math.max(6, Math.min(12, Math.min(layout.playField.width, layout.playField.height) * 0.025));
     playField._activeBorderRect = {
-        x: 0,
-        y: 0,
-        width: layout.playField.width,
-        height: layout.playField.height,
-        radius: layout.playField.radius
+        x: innerIndicatorInset,
+        y: innerIndicatorInset,
+        width: layout.playField.width - innerIndicatorInset * 2,
+        height: layout.playField.height - innerIndicatorInset * 2,
+        radius: Math.max(10, layout.playField.radius - innerIndicatorInset)
     };
-    playField._defaultBorderColor = 0xE6B05A;
-    playField._defaultBorderAlpha = 0.85;
-    playField._defaultBorderWidth = 4;
+    playField._timerBorderRect = {
+        x: 3,
+        y: 3,
+        width: layout.playField.width - 6,
+        height: layout.playField.height - 6,
+        radius: Math.max(10, layout.playField.radius - 3)
+    };
     playField._activeBorderWidth = 6;
+    playField._timerBorderWidth = 7;
 
     const fieldBg = new PIXI.Graphics();
     fieldBg.beginFill(THEME.fieldBg);
