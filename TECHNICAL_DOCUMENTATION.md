@@ -187,6 +187,8 @@ runtime spawnInterval = base spawnInterval / level spawnMultiplier
 - `fetchRemoteLevel(levelId)` - загрузка уровня из Firestore.
 - `saveProgress(levelId, score, won)` - сохранение прогресса.
 - `trackEvent(name, props)` - запись аналитического события.
+- `createLevelAttempt(data)` - создание аналитической записи попытки уровня в `levelAttempts`.
+- `finishLevelAttempt(attemptId, result)` - закрытие аналитической записи попытки уровнем, результатом и длительностью.
 - `recalcLeaderboard(totalLevels)` - пересчет лидерборда.
 - `rcNumber(key, fallback)` - чтение числового Remote Config параметра.
 
@@ -435,7 +437,31 @@ UI-ассеты лежат в `images/ui/` и `images/ui/custom/`. Если ка
 - `levelEnded` - уровень завершен.
 - `spawnTimer` - таймер следующего спавна.
 
-## 17. Проверка изменений
+## 17. Аналитика попыток уровня
+
+Попытки уровня пишутся в Firestore collection `levelAttempts`.
+
+Клиентское состояние в `game.js`:
+
+- `BALANCE_VERSION` - версия баланса, которую нужно менять при существенных изменениях `levels.js`.
+- `currentAttemptId` - Firestore id текущей попытки.
+- `currentAttemptPromise` - pending создание документа, если `addDoc()` еще не завершился.
+- `currentAttemptStartedAt` - локальное время старта для расчета `durationMs`.
+- `currentAttemptNo` - локальный номер попытки уровня.
+- `currentAttemptClosed` - защита от повторного закрытия.
+
+Попытка создается в `beginLevelAttempt()` внутри `startSpawning()`, то есть после закрытия обучающего intro popup и перед первым спавном. Это означает, что просмотр обучения не считается попыткой.
+
+Попытка закрывается через `closeLevelAttempt(status, exitReason)`:
+
+- победа: `status = win`;
+- поражение: `status = loss`;
+- пауза -> заново: `status = exit`, `exitReason = restart`;
+- пауза -> меню: `status = exit`, `exitReason = pause_menu`.
+
+При закрытии значения `score`, `life`, `levelData.goalBugCount` и `durationMs` снимаются синхронно до асинхронной отправки в Firebase, чтобы следующий уровень не перезаписал результат текущей попытки.
+
+## 18. Проверка изменений
 
 Минимальная проверка JavaScript-синтаксиса:
 
@@ -457,15 +483,16 @@ node --check js/progress-ui.js
 4. Проверить нужные уровни с новыми типами/весами.
 5. Проверить паузу, ресайз окна, победу и поражение.
 
-## 18. Известные технические особенности
+## 19. Известные технические особенности
 
 - `game.js` является большим монолитным файлом. При дальнейшем росте проекта стоит постепенно выносить подсистемы: spawn, object behavior, effects, popups, assets.
 - В нескольких старых комментариях видна битая кодировка. Это не влияет на выполнение, но затрудняет сопровождение.
 - Поле `descryption` в `levels.js` написано с ошибкой, но является частью текущего контракта данных.
 - `autoBalanceFeedback.js` нуждается в обновлении под актуальную структуру `levels.js`.
 - Firebase SDK и часть библиотек загружаются с CDN, поэтому offline-режим ограничен.
+- Если игрок закрывает вкладку во время уровня, запись `levelAttempts` может остаться в статусе `in_progress`; это ожидаемое поведение и полезный сигнал оборванной сессии.
 
-## 19. Рекомендации по дальнейшему развитию
+## 20. Рекомендации по дальнейшему развитию
 
 - Разделить `game.js` на модули: `state`, `spawn`, `objects`, `effects`, `ui`, `audio`, `progress`.
 - Добавить smoke-тесты для структуры `levels.js`: последовательность `id`, существование типов в `BUG_BALANCE`, корректность весов.

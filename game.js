@@ -1,6 +1,6 @@
 import levels from './levels.js';
 import { getBugBaseBalance, getBugSpawnZone } from './bug-config.js';
-import { initBackend, fetchRemoteLevel, saveProgress, trackEvent, recalcLeaderboard, rcNumber } from './firebase.js';
+import { initBackend, fetchRemoteLevel, saveProgress, trackEvent, recalcLeaderboard, rcNumber, createLevelAttempt, finishLevelAttempt } from './firebase.js';
 import {
     isMobileDevice as isMobileDeviceUI,
     getViewportMode as getViewportModeUI,
@@ -48,6 +48,7 @@ const NEAT_WAVE_COLORS = [0xFDFDFD, 0xEAEAEA, 0xD8DDE3, 0xC8D0D8];
 const CHAMELEON_EFFECT_DURATION_MS = 5000;
 const CHAMELEON_WAVE_COLORS = [0xFFB7C5, 0xFFD7A8, 0xFFF0A6, 0xBAF2BB, 0xB8E7FF, 0xD8C4FF];
 const DEBUG_SHOW_SPAWN_ZONES = false;
+const BALANCE_VERSION = '2026-08-13-a';
 const CASUAL_UI = {
     outerPadding: 10,
     topHudHeightRatio: 0.18,
@@ -87,6 +88,11 @@ let chameleonEffectEndsAt = 0;
 let chameleonEffectTimer = null;
 let chameleonTimerTicker = null;
 let chameleonFieldOverlay = null;
+let currentAttemptId = null;
+let currentAttemptPromise = null;
+let currentAttemptStartedAt = 0;
+let currentAttemptNo = 0;
+let currentAttemptClosed = true;
 let gameLayout = null;
 let currentGameUI = { hearts: [] };
 let pendingResizeFrame = null;
@@ -2472,6 +2478,7 @@ function startLevel(index) {
 
     // реальный старт спавна
   const startSpawning = () => {
+    beginLevelAttempt();
     prepareObjectQueue();
     scheduleNextSpawn(0);
     if (typeof levelData.onEnterLevel === 'function') levelData.onEnterLevel();
@@ -4295,6 +4302,7 @@ function endGame(won) {
     levelEnded = true;
     debugSpawn('endGame called', { won, score, life });
     freezeActiveObjects();
+    closeLevelAttempt(won ? 'win' : 'loss');
 
     // Remove remaining objects without penalties
     removeAllActiveObjectsSilent();
@@ -4340,6 +4348,104 @@ function markLevelCompleted(index) {
         completed.push(index);
         localStorage.setItem('completedLevels', JSON.stringify(completed));
     }
+}
+
+function getAnalyticsSessionId() {
+    let id = sessionStorage.getItem('analyticsSessionId');
+    if (!id) {
+        id = crypto?.randomUUID
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        sessionStorage.setItem('analyticsSessionId', id);
+    }
+
+    return id;
+}
+
+function getNextAttemptNumber(levelId) {
+    const key = `levelAttempts_${levelId}`;
+    const previous = Number(localStorage.getItem(key) || 0);
+    const next = previous + 1;
+    localStorage.setItem(key, String(next));
+    return next;
+}
+
+function getLevelSpawnWeights(level) {
+    return level?.params?.spawnWeights ?? level?.spawnWeights ?? {};
+}
+
+function getLevelBugTypes(level) {
+    return Object.keys(getLevelSpawnWeights(level));
+}
+
+function beginLevelAttempt() {
+    if (!levelData) return;
+
+    currentAttemptStartedAt = Date.now();
+    currentAttemptNo = getNextAttemptNumber(levelData.id);
+    currentAttemptClosed = false;
+    currentAttemptId = null;
+
+    const spawnWeights = getLevelSpawnWeights(levelData);
+    currentAttemptPromise = createLevelAttempt({
+        levelId: levelData.id,
+        attemptNo: currentAttemptNo,
+        sessionId: getAnalyticsSessionId(),
+        playerPt: null,
+        targetsRequired: levelData.goalBugCount,
+        lifeLeft: levelData.lifeCount,
+        bugTypes: getLevelBugTypes(levelData),
+        spawnWeights,
+        levelParams: {
+            maxObjects: levelData.params?.maxObjects ?? null,
+            lifetimeMultiplier: levelData.params?.lifetimeMultiplier ?? null,
+            spawnMultiplier: levelData.params?.spawnMultiplier ?? null,
+            objectLifetime: levelData.params?.objectLifetime ?? null,
+            spawnInterval: levelData.params?.spawnInterval ?? null
+        },
+        balanceVersion: BALANCE_VERSION
+    });
+
+    currentAttemptPromise
+        .then((id) => {
+            currentAttemptId = id;
+        })
+        .catch((error) => {
+            console.warn('Failed to create level attempt', error);
+        });
+}
+
+function closeLevelAttempt(status, exitReason = null) {
+    if (currentAttemptClosed || !levelData) return;
+
+    currentAttemptClosed = true;
+
+    const result = {
+        status,
+        exitReason,
+        targetsCompleted: score,
+        targetsRequired: levelData.goalBugCount,
+        lifeLeft: life,
+        durationMs: Date.now() - currentAttemptStartedAt
+    };
+    const pendingAttemptPromise = currentAttemptPromise;
+    const knownAttemptId = currentAttemptId;
+
+    const finish = async () => {
+        try {
+            let attemptId = knownAttemptId;
+            if (!attemptId && pendingAttemptPromise) {
+                attemptId = await pendingAttemptPromise;
+            }
+
+            if (!attemptId) return;
+            await finishLevelAttempt(attemptId, result);
+        } catch (error) {
+            console.warn('Failed to finish level attempt', error);
+        }
+    };
+
+    finish();
 }
 
 function rebuildUI() {
@@ -5213,6 +5319,7 @@ function showPausePopup() {
 
     // Retry button
     const retryBtn = createButton(btnW, btnH, 'ЗАНОВО', () => {
+        closeLevelAttempt('exit', 'restart');
         cleanupPauseState();
         startLevel(levelData.id - 1);
     }, 'primary', btnFontSize);
@@ -5221,6 +5328,7 @@ function showPausePopup() {
 
     // Menu button
     const menuBtn = createButton(btnW, btnH, 'МЕНЮ', () => {
+        closeLevelAttempt('exit', 'pause_menu');
         cleanupPauseState();
         if (app.stage.children.includes(gameContainer)) {
             app.stage.removeChild(gameContainer);

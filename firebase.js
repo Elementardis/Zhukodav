@@ -1,7 +1,7 @@
 // firebase.js — верх файла (оставь ровно это один раз)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, getDocs, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { getRemoteConfig, fetchAndActivate, getValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-remote-config.js";
 
 // Your web app's Firebase configuration
@@ -58,6 +58,73 @@ export async function saveProgress(levelId, score, won) {
 export async function trackEvent(name, props = {}) {
   const uid = currentUserId() || "anon";
   await addDoc(collection(db, "events"), { ts: new Date(), userId: uid, name, props });
+}
+
+// ======================================================
+// LEVEL ATTEMPTS ANALYTICS
+// ======================================================
+
+export async function createLevelAttempt(data) {
+  await initBackend();
+
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('Firebase user is not authenticated');
+  }
+
+  const ref = await addDoc(collection(db, 'levelAttempts'), {
+    playerId: user.uid,
+
+    playerPt: data.playerPt ?? null,
+    sessionId: data.sessionId ?? null,
+
+    levelId: data.levelId,
+    attemptNo: data.attemptNo ?? 1,
+
+    status: 'in_progress',
+    exitReason: null,
+
+    targetsCompleted: 0,
+    targetsRequired: data.targetsRequired,
+
+    lifeLeft: data.lifeLeft,
+
+    bugTypes: data.bugTypes ?? [],
+    spawnWeights: data.spawnWeights ?? {},
+
+    levelParams: data.levelParams ?? {},
+
+    balanceVersion: data.balanceVersion ?? 'unknown',
+
+    startedAt: serverTimestamp(),
+    finishedAt: null,
+
+    durationMs: null
+  });
+
+  return ref.id;
+}
+
+export async function finishLevelAttempt(attemptId, result) {
+  if (!attemptId) return;
+
+  await initBackend();
+
+  const ref = doc(db, 'levelAttempts', attemptId);
+  await updateDoc(ref, {
+    status: result.status,
+
+    exitReason: result.exitReason ?? null,
+
+    targetsCompleted: result.targetsCompleted,
+    targetsRequired: result.targetsRequired,
+
+    lifeLeft: result.lifeLeft,
+
+    durationMs: result.durationMs,
+
+    finishedAt: serverTimestamp()
+  });
 }
 
 /** Пересчёт суммарного результата для лидерборда (на клиенте, простая версия) */
