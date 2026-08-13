@@ -76,6 +76,7 @@ let spawnResumeDelayTimer = null;
 let frozenEffectStartedAt = 0;
 let frozenEffectEndsAt = 0;
 let frozenEffectTimer = null;
+let frozenTimerTicker = null;
 let chameleonEffectStartedAt = 0;
 let chameleonEffectEndsAt = 0;
 let chameleonEffectTimer = null;
@@ -379,6 +380,7 @@ function ensureSpawnTimerAfterUiChange() {
 }
 
 function removeObjectFromActiveList(target) {
+    removeLifetimeIndicator(target);
     activeObjects = activeObjects.filter((obj) => obj !== target);
     ensureSpawnTimerAfterUiChange();
 }
@@ -418,6 +420,7 @@ function syncObjectLifetime(obj, now = Date.now()) {
     const decay = getLifetimeDecayMs(obj.lastLifetimeSyncAt, now);
     obj.remainingLifetimeMs = Math.max(0, obj.remainingLifetimeMs - decay);
     obj.lastLifetimeSyncAt = now;
+    updateLifetimeIndicator(obj);
     return obj.remainingLifetimeMs;
 }
 
@@ -533,6 +536,15 @@ function getChameleonTimerColor(t) {
     return lerpColor(colors[index], colors[nextIndex], scaled - Math.floor(scaled));
 }
 
+function getFrozenTimerColor(t) {
+    const colors = [0xE9FBFF, FROZEN_WAVE_COLOR, 0x4FC3F7, 0xB8F4FF];
+    const wrapped = ((t % 1) + 1) % 1;
+    const scaled = wrapped * colors.length;
+    const index = Math.floor(scaled) % colors.length;
+    const nextIndex = (index + 1) % colors.length;
+    return lerpColor(colors[index], colors[nextIndex], scaled - Math.floor(scaled));
+}
+
 function getRoundedRectPointAt(rect, distance) {
     const radius = Math.max(0, Math.min(rect.radius || 0, rect.width / 2, rect.height / 2));
     const perimeter = getRoundedRectPerimeter({ ...rect, radius });
@@ -578,24 +590,25 @@ function getRoundedRectPointAt(rect, distance) {
     return { x: x + w / 2, y };
 }
 
-function drawChameleonTimerBorder(targetPlayArea = playArea, now = Date.now()) {
-    if (!targetPlayArea?._chameleonTimerBorder) return;
-
-    const graphics = targetPlayArea._chameleonTimerBorder;
-    graphics.clear();
-
-    if (!isChameleonEffectActive(now)) return;
-
-    const rect = targetPlayArea._timerBorderRect || {
+function getInsetTimerRect(targetPlayArea, inset = 0) {
+    const baseRect = targetPlayArea._timerBorderRect || {
         x: 0,
         y: 0,
         width: targetPlayArea._fieldWidth ?? targetPlayArea.width,
         height: targetPlayArea._fieldHeight ?? targetPlayArea.height,
         radius: targetPlayArea._fieldRadius ?? BORDER_RADIUS
     };
-    const remaining = Math.max(0, Math.min(1, (chameleonEffectEndsAt - now) / CHAMELEON_EFFECT_DURATION_MS));
-    const lineWidth = Math.max(targetPlayArea._timerBorderWidth || 8, 6);
 
+    return {
+        x: baseRect.x + inset,
+        y: baseRect.y + inset,
+        width: Math.max(1, baseRect.width - inset * 2),
+        height: Math.max(1, baseRect.height - inset * 2),
+        radius: Math.max(0, (baseRect.radius || 0) - inset)
+    };
+}
+
+function drawTimerBorderSegment(graphics, rect, remaining, lineWidth, getColor) {
     const perimeter = getRoundedRectPerimeter(rect);
     const length = perimeter * remaining;
     const steps = Math.max(2, Math.ceil(220 * remaining));
@@ -604,11 +617,41 @@ function drawChameleonTimerBorder(targetPlayArea = playArea, now = Date.now()) {
     for (let i = 1; i <= steps; i++) {
         const distance = (length * i) / steps;
         const point = getRoundedRectPointAt(rect, distance);
-        graphics.lineStyle(lineWidth, getChameleonTimerColor(distance / perimeter), 1);
+        graphics.lineStyle(lineWidth, getColor(distance / perimeter), 1);
         graphics.moveTo(previousPoint.x, previousPoint.y);
         graphics.lineTo(point.x, point.y);
         previousPoint = point;
     }
+}
+
+function drawChameleonTimerBorder(targetPlayArea = playArea, now = Date.now()) {
+    if (!targetPlayArea?._chameleonTimerBorder) return;
+
+    const graphics = targetPlayArea._chameleonTimerBorder;
+    graphics.clear();
+
+    if (!isChameleonEffectActive(now)) return;
+
+    const rect = getInsetTimerRect(targetPlayArea);
+    const remaining = Math.max(0, Math.min(1, (chameleonEffectEndsAt - now) / CHAMELEON_EFFECT_DURATION_MS));
+    const lineWidth = Math.max(targetPlayArea._timerBorderWidth || 8, 6);
+
+    drawTimerBorderSegment(graphics, rect, remaining, lineWidth, getChameleonTimerColor);
+}
+
+function drawFrozenTimerBorder(targetPlayArea = playArea, now = Date.now()) {
+    if (!targetPlayArea?._frozenTimerBorder) return;
+
+    const graphics = targetPlayArea._frozenTimerBorder;
+    graphics.clear();
+
+    if (!isFrozenEffectActive(now)) return;
+
+    const lineWidth = Math.max(targetPlayArea._timerBorderWidth || 8, 6);
+    const rect = getInsetTimerRect(targetPlayArea, lineWidth + 5);
+    const remaining = Math.max(0, Math.min(1, (frozenEffectEndsAt - now) / FROZEN_EFFECT_DURATION_MS));
+
+    drawTimerBorderSegment(graphics, rect, remaining, Math.max(4, lineWidth - 2), getFrozenTimerColor);
 }
 
 function startChameleonTimerBorder() {
@@ -634,6 +677,32 @@ function stopChameleonTimerBorder() {
 
     if (playArea?._chameleonTimerBorder) {
         playArea._chameleonTimerBorder.clear();
+    }
+}
+
+function startFrozenTimerBorder() {
+    stopFrozenTimerBorder();
+    drawFrozenTimerBorder();
+
+    frozenTimerTicker = () => {
+        if (!isFrozenEffectActive()) {
+            stopFrozenTimerBorder();
+            return;
+        }
+
+        drawFrozenTimerBorder();
+    };
+    app.ticker.add(frozenTimerTicker);
+}
+
+function stopFrozenTimerBorder() {
+    if (frozenTimerTicker) {
+        app.ticker.remove(frozenTimerTicker);
+        frozenTimerTicker = null;
+    }
+
+    if (playArea?._frozenTimerBorder) {
+        playArea._frozenTimerBorder.clear();
     }
 }
 
@@ -1143,6 +1212,17 @@ function updateButtonState(color, isActive) {
 }
 
 function removeExpiredObject(obj) {
+    if (obj._isExpiring || obj._isRemoving) return;
+    obj._isExpiring = true;
+    obj.interactive = false;
+    obj.buttonMode = false;
+    removeLifetimeIndicator(obj);
+
+    if (obj.lifetimeCheckTimeout) {
+        clearTimeout(obj.lifetimeCheckTimeout);
+        obj.lifetimeCheckTimeout = null;
+    }
+
     gsap.to(obj, {
         y: obj.y + 100,
         alpha: 0,
@@ -1476,6 +1556,17 @@ function syncChameleonFieldOverlay() {
     drawChameleonTimerBorder();
 }
 
+function syncFrozenTimerBorder() {
+    if (!playArea) return;
+
+    if (!isFrozenEffectActive()) {
+        stopFrozenTimerBorder();
+        return;
+    }
+
+    drawFrozenTimerBorder();
+}
+
 function finishFrozenEffect() {
     const now = Date.now();
 
@@ -1490,6 +1581,7 @@ function finishFrozenEffect() {
         clearTimeout(frozenEffectTimer);
         frozenEffectTimer = null;
     }
+    stopFrozenTimerBorder();
 
     if (!isPaused) {
         activeObjects.forEach(obj => applyObjectAnimationTimeScale(obj, now));
@@ -1512,6 +1604,7 @@ function activateFrozenEffect() {
 
     frozenEffectTimer = setTimeout(finishFrozenEffect, FROZEN_EFFECT_DURATION_MS);
     activeObjects.forEach(obj => applyObjectAnimationTimeScale(obj, now));
+    startFrozenTimerBorder();
 }
 
 function finishChameleonEffect() {
@@ -2229,6 +2322,7 @@ function startLevel(index) {
   const { fieldWrapper, playField } = setupPlayArea();
   playArea = playField;
   syncChameleonFieldOverlay();
+  syncFrozenTimerBorder();
   updateMobilePortraitOverlay();
 
     // реальный старт спавна
@@ -2761,12 +2855,16 @@ function buildPlayField(layout) {
     activeBorder.name = 'activeFieldBorder';
     activeBorder.eventMode = 'none';
     playField._activeBorder = activeBorder;
+    const frozenTimerBorder = new PIXI.Graphics();
+    frozenTimerBorder.name = 'frozenTimerBorder';
+    frozenTimerBorder.eventMode = 'none';
+    playField._frozenTimerBorder = frozenTimerBorder;
     const chameleonTimerBorder = new PIXI.Graphics();
     chameleonTimerBorder.name = 'chameleonTimerBorder';
     chameleonTimerBorder.eventMode = 'none';
     playField._chameleonTimerBorder = chameleonTimerBorder;
 
-    playField.addChild(shell, fieldBg, innerHighlight, activeBorder, chameleonTimerBorder);
+    playField.addChild(shell, fieldBg, innerHighlight, activeBorder, frozenTimerBorder, chameleonTimerBorder);
     addSoftLeafDetails(playField, layout.playField.width, layout.playField.height, fieldInset + 26, 0.38);
     addSpawnZoneDebugOverlay(playField);
     updatePlayAreaActiveBorder(playField);
@@ -2916,6 +3014,11 @@ function setupMobileLandscapePlayArea(layout, coloredTypes) {
     activeBorder.eventMode = 'none';
     playField._activeBorder = activeBorder;
     playField.addChild(activeBorder);
+    const frozenTimerBorder = new PIXI.Graphics();
+    frozenTimerBorder.name = 'frozenTimerBorder';
+    frozenTimerBorder.eventMode = 'none';
+    playField._frozenTimerBorder = frozenTimerBorder;
+    playField.addChild(frozenTimerBorder);
     const chameleonTimerBorder = new PIXI.Graphics();
     chameleonTimerBorder.name = 'chameleonTimerBorder';
     chameleonTimerBorder.eventMode = 'none';
@@ -3215,6 +3318,10 @@ const FIELD_PULSE_SCALE = 1.2;
 const DEFAULT_PULSE_DURATION = 0.2;
 const FAT_PULSE_DURATION = 0.7;
 const COLLISION_PADDING = 8;
+const LIFETIME_BAR_HEIGHT = 5;
+const LIFETIME_BAR_OFFSET = 8;
+const LIFETIME_BAR_BG_COLOR = 0x1F2933;
+const LIFETIME_BAR_FILL_COLOR = 0x7BE495;
 
 function getCollisionRadius(obj) {
     const footprint = (obj && obj._footprint) ? obj._footprint : Math.max(obj.width, obj.height);
@@ -3310,13 +3417,36 @@ function addClicksCounter(container, clicks, {
     return countText;
 }
 
-function decrementClickCounter(container, data) {
-    if (typeof data.clicks !== 'number') return true;
-
-    data.clicks--;
+function removeClicksCounter(container) {
     const text = container.getChildByName('clickText');
+    if (!text) return;
+
+    container.removeChild(text);
+    text.destroy();
+}
+
+function decrementClickCounter(container, data) {
+    if (container._isRemoving) return false;
+
+    if (typeof data.clicks !== 'number') {
+        container._isRemoving = true;
+        container.interactive = false;
+        container.buttonMode = false;
+        return true;
+    }
+
+    data.clicks = Math.max(0, data.clicks - 1);
+    const text = container.getChildByName('clickText');
+    if (data.clicks <= 0) {
+        removeClicksCounter(container);
+        container._isRemoving = true;
+        container.interactive = false;
+        container.buttonMode = false;
+        return true;
+    }
+
     if (text) text.text = data.clicks;
-    return data.clicks <= 0;
+    return false;
 }
 
 function addFieldPulseAnimation(container, duration = DEFAULT_PULSE_DURATION) {
@@ -3329,6 +3459,89 @@ function addFieldPulseAnimation(container, duration = DEFAULT_PULSE_DURATION) {
         ease: "sine.inOut"
     });
     container.animations.push(pulseAnim);
+}
+
+function drawLifetimeBarGraphic(graphic, width, height, color, alpha = 1) {
+    graphic.clear();
+    graphic.beginFill(color, alpha);
+    graphic.drawRoundedRect(0, 0, width, height, height / 2);
+    graphic.endFill();
+}
+
+function layoutLifetimeIndicator(container) {
+    const indicator = container?.getChildByName('lifetimeIndicator');
+    if (!indicator) return;
+
+    const footprint = container._footprint || Math.max(container.width, container.height);
+    const barWidth = Math.max(28, footprint * 0.58);
+    const isFatVisual = container.type === 'fat' || container.type.startsWith('fatColoredBug_');
+    const visual = container.getChildByName('bugVisual');
+    const visualHeight = visual?.height || footprint;
+    const visualBottom = (isFatVisual ? visualHeight : Math.min(visualHeight, footprint)) / 2;
+
+    indicator._barWidth = barWidth;
+    indicator._barHeight = LIFETIME_BAR_HEIGHT;
+    indicator.x = -barWidth / 2;
+    indicator.y = visualBottom + LIFETIME_BAR_OFFSET;
+
+    const bg = indicator.getChildByName('lifetimeBarBg');
+    const fill = indicator.getChildByName('lifetimeBarFill');
+    if (bg) drawLifetimeBarGraphic(bg, barWidth, LIFETIME_BAR_HEIGHT, LIFETIME_BAR_BG_COLOR, 0.35);
+    if (fill) updateLifetimeIndicator(container);
+}
+
+function updateLifetimeIndicator(container) {
+    const indicator = container?.getChildByName('lifetimeIndicator');
+    if (!indicator) return;
+
+    const fill = indicator.getChildByName('lifetimeBarFill');
+    if (!fill) return;
+
+    const total = Math.max(1, container.totalLifetimeMs || container.remainingLifetimeMs || 1);
+    const progress = Math.max(0, Math.min(1, (container.remainingLifetimeMs || 0) / total));
+    const width = (indicator._barWidth || 0) * progress;
+    drawLifetimeBarGraphic(fill, width, indicator._barHeight || LIFETIME_BAR_HEIGHT, LIFETIME_BAR_FILL_COLOR, 0.95);
+}
+
+function removeLifetimeIndicator(container) {
+    if (!container?._lifetimeIndicatorTicker) return;
+
+    app.ticker.remove(container._lifetimeIndicatorTicker);
+    container._lifetimeIndicatorTicker = null;
+}
+
+function addLifetimeIndicator(container) {
+    const indicator = new PIXI.Container();
+    indicator.name = 'lifetimeIndicator';
+
+    const bg = new PIXI.Graphics();
+    bg.name = 'lifetimeBarBg';
+    indicator.addChild(bg);
+
+    const fill = new PIXI.Graphics();
+    fill.name = 'lifetimeBarFill';
+    indicator.addChild(fill);
+
+    container.addChild(indicator);
+    layoutLifetimeIndicator(container);
+
+    container._lifetimeIndicatorTicker = () => {
+        if (!activeObjects.includes(container) || container._isRemoving || container._isExpiring) {
+            removeLifetimeIndicator(container);
+            return;
+        }
+
+        if (isPaused || orientationPauseActive || !container.parent || container.parent !== playArea) {
+            updateLifetimeIndicator(container);
+            return;
+        }
+
+        const remainingTime = syncObjectLifetime(container);
+        if (remainingTime <= 0) {
+            removeExpiredObject(container);
+        }
+    };
+    app.ticker.add(container._lifetimeIndicatorTicker);
 }
 
 // --- Safe bounds helpers ---
@@ -3382,6 +3595,8 @@ function applyResolvedObjectSize(container) {
     const textScale = Math.max(0.9, Math.min(1.45, footprint / 120));
     clickText.scale.set(textScale);
   }
+
+  layoutLifetimeIndicator(container);
 }
 
 function getSafeSpawnBounds(objSize) {
@@ -3653,8 +3868,10 @@ function spawnObject() {
     }
 
     // Lifetime is tracked as remaining time so temporary effects can scale it at runtime.
+    container.totalLifetimeMs = data.lifetime;
     container.remainingLifetimeMs = data.lifetime;
     container.lastLifetimeSyncAt = Date.now();
+    addLifetimeIndicator(container);
 
     // Every bug gets the same field pulse; fat bugs pulse slower.
     const pulseDuration = isFat ? FAT_PULSE_DURATION : DEFAULT_PULSE_DURATION;
@@ -4002,6 +4219,7 @@ function rebuildUI() {
     const { fieldWrapper, playField } = setupPlayArea();
     playArea = playField;
     syncChameleonFieldOverlay();
+    syncFrozenTimerBorder();
     
     // Restore state
     score = prevScore;
