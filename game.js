@@ -14,6 +14,11 @@ import {
     buildMobileLevelHeader as buildMobileLevelHeaderUI,
     updateLevelHeaderUI
 } from './js/game-ui.js';
+import {
+    createProgressScreen,
+    layoutProgressScreen,
+    updateProgressScreen
+} from './js/progress-ui.js';
 const MOBILE_MAX_VIEWPORT = 1366;
 const MOBILE_LANDSCAPE_MIN_RATIO = 1.15;
 const MOBILE_OVERLAY_ID = 'mobile-orientation-overlay';
@@ -711,6 +716,7 @@ function stopFrozenTimerBorder() {
 // ==== UI Containers ====
 const startContainer = new PIXI.Container();
 const levelSelectContainer = new PIXI.Container();
+let progressContainer = null;
 let selectedLevelIndex = null;
 
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
@@ -802,6 +808,12 @@ const UI_ASSET_SLOTS = {
         width: 107,
         height: 112,
         description: 'Custom green color button.'
+    },
+    progress_play: {
+        path: 'images/ui/custom/play.png',
+        width: 120,
+        height: 120,
+        description: 'Play button for the progress screen.'
     }
 };
 
@@ -1837,7 +1849,7 @@ playButton.y = app.screen.height / 2 + 50;
 playButton.interactive = true;
 playButton.buttonMode = true;
 playButton.on('pointerdown', () => {
-    showLevelSelect();
+    showProgressScreen();
 });
 startContainer.addChild(playButton);
 
@@ -1852,6 +1864,135 @@ playText.anchor.set(0.5);
 playButton.addChild(playText);
 
 // ==== Экран выбора уровня ====
+function removeProgressScreenFromStage() {
+    if (progressContainer && app.stage.children.includes(progressContainer)) {
+        app.stage.removeChild(progressContainer);
+    }
+}
+
+function getNextPlayableLevelIndex() {
+    const completed = getCompletedLevels();
+    return levels.findIndex((level, index) => !completed.includes(index));
+}
+
+function clearProgressPopup() {
+    const popup = progressContainer?.getChildByName('allLevelsCompletedPopup');
+    if (popup) {
+        progressContainer.removeChild(popup);
+        popup.destroy({ children: true });
+    }
+
+    const overlay = progressContainer?.getChildByName('allLevelsCompletedOverlay');
+    if (overlay) {
+        progressContainer.removeChild(overlay);
+        overlay.destroy();
+    }
+}
+
+function showAllLevelsCompletedPopup() {
+    if (!progressContainer) return;
+    clearProgressPopup();
+
+    const overlay = new PIXI.Graphics();
+    overlay.name = 'allLevelsCompletedOverlay';
+    overlay.beginFill(THEME.overlay, 0.24);
+    overlay.drawRect(0, 0, app.screen.width, app.screen.height);
+    overlay.endFill();
+    overlay.interactive = true;
+    progressContainer.addChild(overlay);
+
+    const popupWidth = Math.max(300, Math.min(460, app.screen.width * 0.52));
+    const popupHeight = Math.max(150, Math.min(220, app.screen.height * 0.42));
+    const popup = new PIXI.Container();
+    popup.name = 'allLevelsCompletedPopup';
+    popup.x = (app.screen.width - popupWidth) / 2;
+    popup.y = (app.screen.height - popupHeight) / 2;
+
+    const bg = new PIXI.Graphics();
+    bg.beginFill(THEME.cardBg, 0.98);
+    bg.lineStyle(5, THEME.borderDark, 1);
+    bg.drawRoundedRect(0, 0, popupWidth, popupHeight, 28);
+    bg.endFill();
+    popup.addChild(bg);
+
+    const title = new PIXI.Text('ВСЕ УРОВНИ\nПРОЙДЕНЫ!', {
+        fontSize: Math.max(28, Math.min(42, popupWidth * 0.09)),
+        fill: THEME.textDark,
+        fontWeight: '900',
+        fontFamily: 'Arial',
+        align: 'center'
+    });
+    title.anchor.set(0.5);
+    title.x = popupWidth / 2;
+    title.y = popupHeight * 0.42;
+    popup.addChild(title);
+
+    const ok = createButton(popupWidth * 0.55, Math.max(44, popupHeight * 0.24), 'OK', clearProgressPopup, 'secondary', Math.max(20, popupHeight * 0.12));
+    ok.x = popupWidth / 2;
+    ok.y = popupHeight * 0.78;
+    popup.addChild(ok);
+
+    progressContainer.addChild(popup);
+}
+
+function continueGameFromProgress() {
+    const nextLevelIndex = getNextPlayableLevelIndex();
+    if (nextLevelIndex < 0) {
+        showAllLevelsCompletedPopup();
+        return;
+    }
+
+    startLevel(nextLevelIndex);
+}
+
+function showProgressScreen() {
+    clearSpawnTimer();
+    cleanupLevelSelectScroll();
+    finishFrozenEffect();
+    finishChameleonEffect();
+    isPaused = false;
+    introActive = false;
+    levelEnded = false;
+    orientationPauseActive = false;
+    clearActiveColor();
+    objectQueue = [];
+
+    if (app.stage.children.includes(startContainer)) {
+        app.stage.removeChild(startContainer);
+    }
+    if (app.stage.children.includes(levelSelectContainer)) {
+        app.stage.removeChild(levelSelectContainer);
+    }
+    if (app.stage.children.includes(gameContainer)) {
+        app.stage.removeChild(gameContainer);
+    }
+    gameContainer.removeChildren();
+
+    const completed = getCompletedLevels();
+    clearProgressPopup();
+    if (!progressContainer) {
+        progressContainer = createProgressScreen({
+            backgroundTexture: TEXTURES.bg_game,
+            playTexture: TEXTURES.progress_play,
+            completedLevels: completed,
+            onPlay: continueGameFromProgress,
+            onLevelSelect: showLevelSelect
+        });
+    } else {
+        updateProgressScreen(progressContainer, completed);
+    }
+
+    layoutProgressScreen(progressContainer, {
+        width: app.screen.width,
+        height: app.screen.height
+    });
+
+    if (!app.stage.children.includes(progressContainer)) {
+        app.stage.addChild(progressContainer);
+    }
+    updateMobilePortraitOverlay();
+}
+
 function showLevelSelect() {
     clearSpawnTimer();
     finishFrozenEffect();
@@ -1863,6 +2004,7 @@ function showLevelSelect() {
     objectQueue = [];
 
     app.stage.removeChild(startContainer);
+    removeProgressScreenFromStage();
     app.stage.addChild(levelSelectContainer);
 
     // Удаляем старый scrollContainer, если он есть
@@ -2309,7 +2451,10 @@ function startLevel(index) {
     removeAllActiveObjectsImmediate();
   }
   
-  app.stage.removeChild(levelSelectContainer);
+  if (app.stage.children.includes(levelSelectContainer)) {
+    app.stage.removeChild(levelSelectContainer);
+  }
+  removeProgressScreenFromStage();
   app.stage.addChild(gameContainer);
   gameContainer.addChild(rootUI);
   levelData = levels[index];
@@ -4288,6 +4433,14 @@ function resizeGame() {
         playButton.y = app.screen.height / 2 + 50;
     }
 
+    if (progressContainer && app.stage.children.includes(progressContainer)) {
+        layoutProgressScreen(progressContainer, {
+            width: app.screen.width,
+            height: app.screen.height
+        });
+        updateProgressScreen(progressContainer, getCompletedLevels());
+    }
+
     // Экран выбора уровня
     if (app.stage.children.includes(levelSelectContainer)) {
         showLevelSelect();
@@ -4702,7 +4855,7 @@ function showWinPopup(currentLevelIndex) {
         if (levels[currentLevelIndex + 1]) {
             startLevel(currentLevelIndex + 1);
         } else {
-            showLevelSelect();
+            showProgressScreen();
         }
     });
     popup.addChild(nextBtn);
@@ -4735,7 +4888,7 @@ function showWinPopup(currentLevelIndex) {
             app.stage.removeChild(gameContainer);
         }
         gameContainer.removeChildren();
-        showLevelSelect();
+        showProgressScreen();
     });
     popup.addChild(menuBtn);
 
@@ -4864,7 +5017,7 @@ function showLosePopup(currentLevelIndex) {
             app.stage.removeChild(gameContainer);
         }
         gameContainer.removeChildren();
-        showLevelSelect();
+        showProgressScreen();
     });
     popup.addChild(menuBtn);
 
@@ -5073,7 +5226,7 @@ function showPausePopup() {
             app.stage.removeChild(gameContainer);
         }
         gameContainer.removeChildren();
-        showLevelSelect();
+        showProgressScreen();
     }, 'secondary', btnFontSize);
     menuBtn.y = (btnH + btnSpacing) * 2;
     buttonsContainer.addChild(menuBtn);
