@@ -75,11 +75,7 @@ export async function createLevelAttempt(data) {
   const ref = await addDoc(collection(db, 'levelAttempts'), {
     playerId: user.uid,
 
-    playerPt: data.playerPt ?? null,
-    sessionId: data.sessionId ?? null,
-
     levelId: data.levelId,
-    attemptNo: data.attemptNo ?? 1,
 
     status: 'in_progress',
     exitReason: null,

@@ -91,7 +91,6 @@ let chameleonFieldOverlay = null;
 let currentAttemptId = null;
 let currentAttemptPromise = null;
 let currentAttemptStartedAt = 0;
-let currentAttemptNo = 0;
 let currentAttemptClosed = true;
 let gameLayout = null;
 let currentGameUI = { hearts: [] };
@@ -4350,26 +4349,6 @@ function markLevelCompleted(index) {
     }
 }
 
-function getAnalyticsSessionId() {
-    let id = sessionStorage.getItem('analyticsSessionId');
-    if (!id) {
-        id = crypto?.randomUUID
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        sessionStorage.setItem('analyticsSessionId', id);
-    }
-
-    return id;
-}
-
-function getNextAttemptNumber(levelId) {
-    const key = `levelAttempts_${levelId}`;
-    const previous = Number(localStorage.getItem(key) || 0);
-    const next = previous + 1;
-    localStorage.setItem(key, String(next));
-    return next;
-}
-
 function getLevelSpawnWeights(level) {
     return level?.params?.spawnWeights ?? level?.spawnWeights ?? {};
 }
@@ -4382,16 +4361,12 @@ function beginLevelAttempt() {
     if (!levelData) return;
 
     currentAttemptStartedAt = Date.now();
-    currentAttemptNo = getNextAttemptNumber(levelData.id);
     currentAttemptClosed = false;
     currentAttemptId = null;
 
     const spawnWeights = getLevelSpawnWeights(levelData);
     currentAttemptPromise = createLevelAttempt({
         levelId: levelData.id,
-        attemptNo: currentAttemptNo,
-        sessionId: getAnalyticsSessionId(),
-        playerPt: null,
         targetsRequired: levelData.goalBugCount,
         lifeLeft: levelData.lifeCount,
         bugTypes: getLevelBugTypes(levelData),
@@ -4409,9 +4384,10 @@ function beginLevelAttempt() {
     currentAttemptPromise
         .then((id) => {
             currentAttemptId = id;
+            console.log('Level attempt created:', id);
         })
         .catch((error) => {
-            console.warn('Failed to create level attempt', error);
+            console.warn('Failed to create level attempt:', error?.code || error?.name || error, error);
         });
 }
 
@@ -4440,8 +4416,9 @@ function closeLevelAttempt(status, exitReason = null) {
 
             if (!attemptId) return;
             await finishLevelAttempt(attemptId, result);
+            console.log('Level attempt finished:', attemptId, result.status, result.exitReason);
         } catch (error) {
-            console.warn('Failed to finish level attempt', error);
+            console.warn('Failed to finish level attempt:', error?.code || error?.name || error, error);
         }
     };
 
