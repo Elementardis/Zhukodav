@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Жукодав — аналитика уровней</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      font-family: Arial, sans-serif;
+      color: #3c1b00;
+      background: #fff8df;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; }
+    h1 { margin: 0 0 18px; }
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: end;
+      margin-bottom: 18px;
+    }
+    label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 700; }
+    select, button {
+      min-height: 38px; padding: 8px 12px; border-radius: 10px;
+      border: 1px solid #d58b42; background: #fff; color: #3c1b00;
+    }
+    button { cursor: pointer; font-weight: 700; }
+    .cards {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px; margin-bottom: 20px;
+    }
+    .card {
+      background: #fff; border: 1px solid #efd3a6; border-radius: 16px; padding: 16px;
+      box-shadow: 0 3px 12px rgba(60,27,0,.06);
+    }
+    .card .label { font-size: 12px; opacity: .7; margin-bottom: 5px; }
+    .card .value { font-size: 28px; font-weight: 800; }
+    .charts {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 16px; margin-bottom: 20px;
+    }
+    .panel {
+      background: #fff; border: 1px solid #efd3a6; border-radius: 16px; padding: 16px;
+      box-shadow: 0 3px 12px rgba(60,27,0,.06);
+    }
+    .chartWrap { height: 320px; }
+    .tableWrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 900px; }
+    th, td { padding: 10px 9px; border-bottom: 1px solid #eee2cf; text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    th { position: sticky; top: 0; background: #fff6df; }
+    tbody tr:hover { background: #fffaf0; }
+    .status { margin: 10px 0 16px; font-size: 14px; }
+    .error { color: #b00020; }
+    .muted { opacity: .65; }
+    @media (max-width: 700px) { body { padding: 12px; } .charts { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <h1>Жукодав — аналитика уровней</h1>
+
+  <div class="toolbar">
+    <label>
+      Версия баланса
+      <select id="balanceFilter"><option value="all">Все</option></select>
+    </label>
+    <label>
+      Статус попытки
+      <select id="statusFilter">
+        <option value="all">Все</option>
+        <option value="win">Победа</option>
+        <option value="loss">Поражение</option>
+        <option value="exit">Выход</option>
+        <option value="in_progress">Не завершена</option>
+      </select>
+    </label>
+    <button id="reloadBtn">Обновить</button>
+    <button id="csvBtn">Скачать CSV</button>
+  </div>
+
+  <div id="status" class="status muted">Загрузка данных…</div>
+
+  <div class="cards">
+    <div class="card"><div class="label">Уникальных игроков</div><div class="value" id="players">—</div></div>
+    <div class="card"><div class="label">Попыток</div><div class="value" id="attempts">—</div></div>
+    <div class="card"><div class="label">Побед</div><div class="value" id="wins">—</div></div>
+    <div class="card"><div class="label">Поражений</div><div class="value" id="losses">—</div></div>
+    <div class="card"><div class="label">Выходов</div><div class="value" id="exits">—</div></div>
+    <div class="card"><div class="label">Win rate</div><div class="value" id="winRate">—</div></div>
+  </div>
+
+  <div class="charts">
+    <div class="panel">
+      <h3>Win rate по уровням</h3>
+      <div class="chartWrap"><canvas id="winChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h3>Сколько игроков дошло до уровня</h3>
+      <div class="chartWrap"><canvas id="reachChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="panel tableWrap">
+    <h3>Уровни</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Уровень</th>
+          <th>Игроков</th>
+          <th>Попыток</th>
+          <th>Побед</th>
+          <th>Поражений</th>
+          <th>Выходов</th>
+          <th>Win rate</th>
+          <th>Ср. прогресс</th>
+          <th>Ср. время, сек</th>
+        </tr>
+      </thead>
+      <tbody id="levelTable"></tbody>
+    </table>
+  </div>
+
+<script type="module">
+  import { initBackend, currentUserId, getLevelAttempts } from './firebase.js';
+
+  let rawAttempts = [];
+  let filteredAttempts = [];
+  let winChart = null;
+  let reachChart = null;
+
+  const $ = id => document.getElementById(id);
+  const pct = value => Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : '—';
+
+  function tsToDate(v) {
+    if (!v) return null;
+    if (typeof v.toDate === 'function') return v.toDate();
+    if (v.seconds) return new Date(v.seconds * 1000);
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function getFiltered() {
+    const balance = $('balanceFilter').value;
+    const status = $('statusFilter').value;
+    return rawAttempts.filter(a => {
+      const okBalance = balance === 'all' || String(a.balanceVersion ?? 'unknown') === balance;
+      const okStatus = status === 'all' || a.status === status;
+      return okBalance && okStatus;
+    });
+  }
+
+  function groupByLevel(rows) {
+    const map = new Map();
+    for (const a of rows) {
+      const level = Number(a.levelId);
+      if (!Number.isFinite(level)) continue;
+      if (!map.has(level)) map.set(level, []);
+      map.get(level).push(a);
+    }
+    return [...map.entries()].sort((a,b) => a[0]-b[0]);
+  }
+
+  function render() {
+    filteredAttempts = getFiltered();
+
+    const players = new Set(filteredAttempts.map(a => a.playerId).filter(Boolean)).size;
+    const wins = filteredAttempts.filter(a => a.status === 'win').length;
+    const losses = filteredAttempts.filter(a => a.status === 'loss').length;
+    const exits = filteredAttempts.filter(a => a.status === 'exit').length;
+    const ended = wins + losses;
+
+    $('players').textContent = players;
+    $('attempts').textContent = filteredAttempts.length;
+    $('wins').textContent = wins;
+    $('losses').textContent = losses;
+    $('exits').textContent = exits;
+    $('winRate').textContent = ended ? pct(wins / ended) : '—';
+
+    const groups = groupByLevel(filteredAttempts);
+    const table = $('levelTable');
+    table.innerHTML = '';
+
+    const labels = [];
+    const winRates = [];
+    const reach = [];
+
+    for (const [level, rows] of groups) {
+      const levelPlayers = new Set(rows.map(a => a.playerId).filter(Boolean)).size;
+      const levelWins = rows.filter(a => a.status === 'win').length;
+      const levelLosses = rows.filter(a => a.status === 'loss').length;
+      const levelExits = rows.filter(a => a.status === 'exit').length;
+      const levelEnded = levelWins + levelLosses;
+      const wr = levelEnded ? levelWins / levelEnded : NaN;
+
+      const progressValues = rows
+        .filter(a => Number(a.targetsRequired) > 0)
+        .map(a => Number(a.targetsCompleted || 0) / Number(a.targetsRequired));
+      const avgProgress = progressValues.length
+        ? progressValues.reduce((s,v) => s+v,0) / progressValues.length
+        : NaN;
+
+      const durations = rows.map(a => Number(a.durationMs)).filter(Number.isFinite);
+      const avgDuration = durations.length
+        ? durations.reduce((s,v) => s+v,0) / durations.length / 1000
+        : NaN;
+
+      labels.push(String(level));
+      winRates.push(Number.isFinite(wr) ? +(wr * 100).toFixed(1) : null);
+      reach.push(levelPlayers);
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${level}</td>
+        <td>${levelPlayers}</td>
+        <td>${rows.length}</td>
+        <td>${levelWins}</td>
+        <td>${levelLosses}</td>
+        <td>${levelExits}</td>
+        <td>${Number.isFinite(wr) ? pct(wr) : '—'}</td>
+        <td>${Number.isFinite(avgProgress) ? pct(avgProgress) : '—'}</td>
+        <td>${Number.isFinite(avgDuration) ? avgDuration.toFixed(1) : '—'}</td>`;
+      table.appendChild(tr);
+    }
+
+    if (winChart) winChart.destroy();
+    winChart = new Chart($('winChart'), {
+      type: 'line',
+      data: { labels, datasets: [{ label: 'Win rate, %', data: winRates, tension: 0.25 }] },
+      options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 100 } } }
+    });
+
+    if (reachChart) reachChart.destroy();
+    reachChart = new Chart($('reachChart'), {
+      type: 'bar',
+      data: { labels, datasets: [{ label: 'Уникальных игроков', data: reach }] },
+      options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+    });
+
+    $('status').textContent = `Загружено записей: ${rawAttempts.length}. В текущем фильтре: ${filteredAttempts.length}.`;
+    $('status').className = 'status muted';
+  }
+
+  function fillFilters() {
+    const versions = [...new Set(rawAttempts.map(a => String(a.balanceVersion ?? 'unknown')))].sort();
+    const select = $('balanceFilter');
+    select.innerHTML = '<option value="all">Все</option>';
+    for (const v of versions) {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      select.appendChild(o);
+    }
+  }
+
+  function csvEscape(value) {
+    if (value == null) return '';
+    const s = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    return `"${s.replaceAll('"', '""')}"`;
+  }
+
+  function downloadCsv() {
+    const rows = filteredAttempts;
+    const cols = [
+      'id','playerId','playerPt','sessionId','levelId','attemptNo','status','exitReason',
+      'targetsCompleted','targetsRequired','lifeLeft','durationMs','balanceVersion',
+      'bugTypes','spawnWeights','levelParams','startedAt','finishedAt'
+    ];
+    const lines = [cols.join(',')];
+    for (const a of rows) {
+      const normalized = {
+        ...a,
+        startedAt: tsToDate(a.startedAt)?.toISOString() ?? '',
+        finishedAt: tsToDate(a.finishedAt)?.toISOString() ?? ''
+      };
+      lines.push(cols.map(c => csvEscape(normalized[c])).join(','));
+    }
+    const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'zhukodav_level_attempts.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function load() {
+    $('status').textContent = 'Загрузка данных…';
+    $('status').className = 'status muted';
+    try {
+      await initBackend();
+      rawAttempts = await getLevelAttempts();
+      fillFilters();
+      render();
+    } catch (e) {
+      console.error(e);
+      $('status').textContent = `Не удалось прочитать levelAttempts. UID этого браузера: ${currentUserId() || 'нет'}. Ошибка: ${e.message}`;
+      $('status').className = 'status error';
+    }
+  }
+
+  $('balanceFilter').addEventListener('change', render);
+  $('statusFilter').addEventListener('change', render);
+  $('reloadBtn').addEventListener('click', load);
+  $('csvBtn').addEventListener('click', downloadCsv);
+
+  load();
+</script>
+</body>
+</html>

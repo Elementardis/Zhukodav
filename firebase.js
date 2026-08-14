@@ -141,3 +141,18 @@ export function rcNumber(key, fallback = null) {
     return fallback;
   }
 }
+
+
+/** Чтение сырых попыток уровней для внутреннего дашборда */
+export async function getLevelAttempts() {
+  await initBackend();
+
+  const snaps = await getDocs(
+    collection(db, "levelAttempts")
+  );
+
+  return snaps.docs.map(s => ({
+    id: s.id,
+    ...s.data()
+  }));
+}

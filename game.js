@@ -3471,7 +3471,6 @@ const FAT_PULSE_DURATION = 0.7;
 const COLLISION_PADDING = 8;
 const LIFETIME_BAR_HEIGHT = 5;
 const LIFETIME_BAR_OFFSET = 8;
-const LIFETIME_BAR_BG_COLOR = 0x1F2933;
 const LIFETIME_BAR_FILL_COLOR = 0x7BE495;
 
 function getCollisionRadius(obj) {
@@ -3635,9 +3634,7 @@ function layoutLifetimeIndicator(container) {
     indicator.x = -barWidth / 2;
     indicator.y = visualBottom + LIFETIME_BAR_OFFSET;
 
-    const bg = indicator.getChildByName('lifetimeBarBg');
     const fill = indicator.getChildByName('lifetimeBarFill');
-    if (bg) drawLifetimeBarGraphic(bg, barWidth, LIFETIME_BAR_HEIGHT, LIFETIME_BAR_BG_COLOR, 0.35);
     if (fill) updateLifetimeIndicator(container);
 }
 
@@ -3650,7 +3647,9 @@ function updateLifetimeIndicator(container) {
 
     const total = Math.max(1, container.totalLifetimeMs || container.remainingLifetimeMs || 1);
     const progress = Math.max(0, Math.min(1, (container.remainingLifetimeMs || 0) / total));
-    const width = (indicator._barWidth || 0) * progress;
+    const fullWidth = indicator._barWidth || 0;
+    const width = fullWidth * progress;
+    fill.x = (fullWidth - width) / 2;
     drawLifetimeBarGraphic(fill, width, indicator._barHeight || LIFETIME_BAR_HEIGHT, LIFETIME_BAR_FILL_COLOR, 0.95);
 }
 
@@ -3664,10 +3663,6 @@ function removeLifetimeIndicator(container) {
 function addLifetimeIndicator(container) {
     const indicator = new PIXI.Container();
     indicator.name = 'lifetimeIndicator';
-
-    const bg = new PIXI.Graphics();
-    bg.name = 'lifetimeBarBg';
-    indicator.addChild(bg);
 
     const fill = new PIXI.Graphics();
     fill.name = 'lifetimeBarFill';
