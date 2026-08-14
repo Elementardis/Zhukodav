@@ -48,7 +48,7 @@ const NEAT_WAVE_COLORS = [0xFDFDFD, 0xEAEAEA, 0xD8DDE3, 0xC8D0D8];
 const CHAMELEON_EFFECT_DURATION_MS = 5000;
 const CHAMELEON_WAVE_COLORS = [0xFFB7C5, 0xFFD7A8, 0xFFF0A6, 0xBAF2BB, 0xB8E7FF, 0xD8C4FF];
 const DEBUG_SHOW_SPAWN_ZONES = false;
-const BALANCE_VERSION = '2026-08-13-a';
+const BALANCE_VERSION = '1';
 const CASUAL_UI = {
     outerPadding: 10,
     topHudHeightRatio: 0.18,
@@ -5328,7 +5328,7 @@ function showPausePopup() {
 
     // Menu button
     const menuBtn = createButton(btnW, btnH, 'МЕНЮ', () => {
-        closeLevelAttempt('exit', 'pause_menu');
+        closeLevelAttempt('exit', 'menu');
         cleanupPauseState();
         if (app.stage.children.includes(gameContainer)) {
             app.stage.removeChild(gameContainer);
