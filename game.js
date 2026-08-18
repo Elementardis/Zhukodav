@@ -3469,6 +3469,7 @@ const FIELD_PULSE_SCALE = 1.2;
 const DEFAULT_PULSE_DURATION = 0.2;
 const FAT_PULSE_DURATION = 0.7;
 const COLLISION_PADDING = 8;
+const BUG_TAP_AREA_SCALE = 1.15;
 const LIFETIME_BAR_HEIGHT = 5;
 const LIFETIME_BAR_OFFSET = 8;
 const LIFETIME_BAR_FILL_COLOR = 0x7BE495;
@@ -3476,6 +3477,12 @@ const LIFETIME_BAR_FILL_COLOR = 0x7BE495;
 function getCollisionRadius(obj) {
     const footprint = (obj && obj._footprint) ? obj._footprint : Math.max(obj.width, obj.height);
     return (footprint * FIELD_PULSE_SCALE) / 2;
+}
+
+function updateBugTapArea(container) {
+    const footprint = (container && container._footprint) ? container._footprint : Math.max(container.width, container.height);
+    const radius = (footprint * BUG_TAP_AREA_SCALE) / 2;
+    container.hitArea = new PIXI.Circle(0, 0, radius);
 }
 
 function checkCollision(obj1, obj2) {
@@ -3725,6 +3732,7 @@ function applyResolvedObjectSize(container) {
   container.height = footprint;
   container.pivot.set(footprint / 2);
   container._footprint = footprint;
+  updateBugTapArea(container);
 
   const visual = container.getChildByName('bugVisual') ||
     container.children.find((child) => child instanceof PIXI.Sprite);
@@ -3881,6 +3889,7 @@ function spawnObject() {
     container.height = footprint;
     container.pivot.set(footprint / 2);
     container._footprint = footprint;
+    updateBugTapArea(container);
     container.interactive = true;
     container.buttonMode = true;
     container.animations = [];
