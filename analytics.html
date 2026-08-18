@@ -97,6 +97,14 @@
       <h3>Сколько игроков дошло до уровня</h3>
       <div class="chartWrap"><canvas id="reachChart"></canvas></div>
     </div>
+    <div class="panel">
+      <h3>Средний % оставшихся сердец по уровням</h3>
+      <div class="chartWrap"><canvas id="heartsChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h3>Средние выполненные цели при поражениях</h3>
+      <div class="chartWrap"><canvas id="lossTargetsChart"></canvas></div>
+    </div>
   </div>
 
   <div class="panel tableWrap">
@@ -111,7 +119,9 @@
           <th>Поражений</th>
           <th>Выходов</th>
           <th>Win rate</th>
-          <th>Ср. прогресс</th>
+          <th>Ср. прогресс, % / цели</th>
+          <th>Поражения, цели</th>
+          <th>Сердца, % / шт.</th>
           <th>Ср. время, сек</th>
         </tr>
       </thead>
@@ -121,11 +131,14 @@
 
 <script type="module">
   import { initBackend, currentUserId, getLevelAttempts } from './firebase.js';
+  import levels from './levels.js';
 
   let rawAttempts = [];
   let filteredAttempts = [];
   let winChart = null;
   let reachChart = null;
+  let heartsChart = null;
+  let lossTargetsChart = null;
 
   const $ = id => document.getElementById(id);
   const pct = value => Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : '—';
@@ -159,6 +172,19 @@
     return [...map.entries()].sort((a,b) => a[0]-b[0]);
   }
 
+  function getLevelLifeCount(levelId) {
+    const config = levels[Number(levelId) - 1];
+    const lifeCount = Number(config?.lifeCount);
+    return Number.isFinite(lifeCount) && lifeCount > 0 ? lifeCount : NaN;
+  }
+
+  function getHeartRatio(attempt) {
+    const lifeLeft = Number(attempt.lifeLeft);
+    const lifeCount = getLevelLifeCount(attempt.levelId);
+    if (!Number.isFinite(lifeLeft) || !Number.isFinite(lifeCount)) return NaN;
+    return Math.max(0, Math.min(lifeLeft, lifeCount)) / lifeCount;
+  }
+
   function render() {
     filteredAttempts = getFiltered();
 
@@ -182,6 +208,8 @@
     const labels = [];
     const winRates = [];
     const reach = [];
+    const heartsLeftRates = [];
+    const lossTargetsCompleted = [];
 
     for (const [level, rows] of groups) {
       const levelPlayers = new Set(rows.map(a => a.playerId).filter(Boolean)).size;
@@ -191,11 +219,23 @@
       const levelEnded = levelWins + levelLosses;
       const wr = levelEnded ? levelWins / levelEnded : NaN;
 
-      const progressValues = rows
-        .filter(a => Number(a.targetsRequired) > 0)
-        .map(a => Number(a.targetsCompleted || 0) / Number(a.targetsRequired));
-      const avgProgress = progressValues.length
-        ? progressValues.reduce((s,v) => s+v,0) / progressValues.length
+      const progressRows = rows.filter(a => a.status !== 'in_progress' && Number(a.targetsRequired) > 0);
+      const avgProgress = progressRows.length
+        ? progressRows.reduce((s,a) => s + Number(a.targetsCompleted || 0) / Number(a.targetsRequired), 0) / progressRows.length
+        : NaN;
+      const avgTargetsCompleted = progressRows.length
+        ? progressRows.reduce((s,a) => s + Number(a.targetsCompleted || 0), 0) / progressRows.length
+        : NaN;
+      const avgTargetsRequired = progressRows.length
+        ? progressRows.reduce((s,a) => s + Number(a.targetsRequired), 0) / progressRows.length
+        : NaN;
+
+      const lossProgressRows = rows.filter(a => a.status === 'loss' && Number(a.targetsRequired) > 0);
+      const avgLossTargetsCompleted = lossProgressRows.length
+        ? lossProgressRows.reduce((s,a) => s + Number(a.targetsCompleted || 0), 0) / lossProgressRows.length
+        : NaN;
+      const avgLossTargetsRequired = lossProgressRows.length
+        ? lossProgressRows.reduce((s,a) => s + Number(a.targetsRequired), 0) / lossProgressRows.length
         : NaN;
 
       const durations = rows.map(a => Number(a.durationMs)).filter(Number.isFinite);
@@ -203,9 +243,19 @@
         ? durations.reduce((s,v) => s+v,0) / durations.length / 1000
         : NaN;
 
+      const heartRows = rows.filter(a => a.status !== 'in_progress' && Number.isFinite(getHeartRatio(a)));
+      const avgHeartRatio = heartRows.length
+        ? heartRows.reduce((s,a) => s + getHeartRatio(a), 0) / heartRows.length
+        : NaN;
+      const avgLifeLeft = heartRows.length
+        ? heartRows.reduce((s,a) => s + Number(a.lifeLeft), 0) / heartRows.length
+        : NaN;
+
       labels.push(String(level));
       winRates.push(Number.isFinite(wr) ? +(wr * 100).toFixed(1) : null);
       reach.push(levelPlayers);
+      heartsLeftRates.push(Number.isFinite(avgHeartRatio) ? +(avgHeartRatio * 100).toFixed(1) : null);
+      lossTargetsCompleted.push(Number.isFinite(avgLossTargetsCompleted) ? +avgLossTargetsCompleted.toFixed(1) : null);
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -216,7 +266,9 @@
         <td>${levelLosses}</td>
         <td>${levelExits}</td>
         <td>${Number.isFinite(wr) ? pct(wr) : '—'}</td>
-        <td>${Number.isFinite(avgProgress) ? pct(avgProgress) : '—'}</td>
+        <td>${Number.isFinite(avgProgress) && Number.isFinite(avgTargetsCompleted) && Number.isFinite(avgTargetsRequired) ? `${pct(avgProgress)} / ${avgTargetsCompleted.toFixed(1)} из ${avgTargetsRequired.toFixed(1)}` : '—'}</td>
+        <td>${Number.isFinite(avgLossTargetsCompleted) && Number.isFinite(avgLossTargetsRequired) ? `${avgLossTargetsCompleted.toFixed(1)} из ${avgLossTargetsRequired.toFixed(1)}` : '—'}</td>
+        <td>${Number.isFinite(avgHeartRatio) && Number.isFinite(avgLifeLeft) ? `${pct(avgHeartRatio)} / ${avgLifeLeft.toFixed(1)} из ${getLevelLifeCount(level)}` : '—'}</td>
         <td>${Number.isFinite(avgDuration) ? avgDuration.toFixed(1) : '—'}</td>`;
       table.appendChild(tr);
     }
@@ -232,6 +284,20 @@
     reachChart = new Chart($('reachChart'), {
       type: 'bar',
       data: { labels, datasets: [{ label: 'Уникальных игроков', data: reach }] },
+      options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+    });
+
+    if (heartsChart) heartsChart.destroy();
+    heartsChart = new Chart($('heartsChart'), {
+      type: 'line',
+      data: { labels, datasets: [{ label: 'Оставшиеся сердца, %', data: heartsLeftRates, tension: 0.25 }] },
+      options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 100 } } }
+    });
+
+    if (lossTargetsChart) lossTargetsChart.destroy();
+    lossTargetsChart = new Chart($('lossTargetsChart'), {
+      type: 'line',
+      data: { labels, datasets: [{ label: 'Выполнено целей при поражениях', data: lossTargetsCompleted, tension: 0.25 }] },
       options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
     });
 
