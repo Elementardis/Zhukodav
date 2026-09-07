@@ -49,6 +49,31 @@ const CHAMELEON_EFFECT_DURATION_MS = 5000;
 const CHAMELEON_WAVE_COLORS = [0xFFB7C5, 0xFFD7A8, 0xFFF0A6, 0xBAF2BB, 0xB8E7FF, 0xD8C4FF];
 const DEBUG_SHOW_SPAWN_ZONES = false;
 const BALANCE_VERSION = '1';
+const AUDIO_PATHS = {
+    bugClick: 'sounds/bug-click.mp3',
+    wrongBugClick: 'sounds/wrong-bug-click.mp3',
+    bombClick: 'sounds/bomb-click.mp3',
+    levelMusic: 'sounds/level-music.mp3',
+    menuMusic: 'sounds/menu-music.mp3',
+    victory: 'sounds/victory.mp3',
+    defeat: 'sounds/defeat.mp3',
+    uiClick: 'sounds/ui-click.mp3'
+};
+const AUDIO_VOLUME = {
+    bugClick: 0.8,
+    wrongBugClick: 0.8,
+    bombClick: 0.9,
+    levelMusic: 0.35,
+    menuMusic: 0.32,
+    victory: 0.85,
+    defeat: 0.85,
+    uiClick: 0.65
+};
+const AUDIO_DUCKING_MULTIPLIER = 0.35;
+const FROZEN_MUSIC_PLAYBACK_RATE = 0.82;
+const CHAMELEON_MUSIC_INTERVAL_MS = 120;
+const NEAT_MUSIC_SWEEP_MS = 900;
+const HEALER_MUSIC_GLOW_MS = 700;
 const CASUAL_UI = {
     outerPadding: 10,
     topHudHeightRatio: 0.18,
@@ -100,6 +125,278 @@ let colorButtonsMap = {};
 let levelsSinceLastAd = 0;
 let lastAdTime = 0;
 const DEBUG_SPAWN = true;
+const audioCache = {};
+let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
+let musicEnabled = localStorage.getItem('musicEnabled') !== 'false';
+let levelMusicAudio = null;
+let menuMusicAudio = null;
+let audioDuckingActive = false;
+let chameleonMusicTimer = null;
+let transientMusicEffectTimer = null;
+const musicEffectState = {
+    frozen: false,
+    chameleon: false,
+    chameleonStartedAt: 0,
+    transientRate: 1,
+    transientVolume: 1
+};
+
+function getEffectiveAudioVolume(name) {
+    const musicEffectVolume = name === 'levelMusic' ? getLevelMusicEffectVolume() : 1;
+    return (AUDIO_VOLUME[name] ?? 1) * musicEffectVolume * (audioDuckingActive ? AUDIO_DUCKING_MULTIPLIER : 1);
+}
+
+function applyAudioVolumes() {
+    Object.entries(audioCache).forEach(([name, audio]) => {
+        audio.volume = getEffectiveAudioVolume(name);
+    });
+}
+
+function getChameleonMusicPhase() {
+    if (!musicEffectState.chameleonStartedAt) return 0;
+    return (Date.now() - musicEffectState.chameleonStartedAt) / 1000;
+}
+
+function getLevelMusicEffectVolume() {
+    let volumeMultiplier = musicEffectState.transientVolume;
+
+    if (musicEffectState.chameleon) {
+        const phase = getChameleonMusicPhase();
+        volumeMultiplier *= 0.92 + Math.sin(phase * Math.PI * 2.2) * 0.08;
+    }
+
+    return Math.max(0.05, volumeMultiplier);
+}
+
+function getLevelMusicPlaybackRate() {
+    let playbackRate = musicEffectState.transientRate;
+
+    if (musicEffectState.frozen) {
+        playbackRate *= FROZEN_MUSIC_PLAYBACK_RATE;
+    }
+
+    if (musicEffectState.chameleon) {
+        const phase = getChameleonMusicPhase();
+        playbackRate *= 0.96 + Math.sin(phase * Math.PI * 2.6) * 0.12;
+    }
+
+    return Math.max(0.5, Math.min(1.5, playbackRate));
+}
+
+function applyMusicPlaybackRates() {
+    if (levelMusicAudio) {
+        levelMusicAudio.playbackRate = getLevelMusicPlaybackRate();
+    }
+    if (menuMusicAudio) {
+        menuMusicAudio.playbackRate = 1;
+    }
+}
+
+function applyAudioState() {
+    applyMusicPlaybackRates();
+    applyAudioVolumes();
+}
+
+function getAudio(name) {
+    if (!AUDIO_PATHS[name]) return null;
+    if (!audioCache[name]) {
+        const audio = new Audio(AUDIO_PATHS[name]);
+        audio.preload = 'auto';
+        audio.volume = getEffectiveAudioVolume(name);
+        audio.addEventListener('error', () => {
+            console.warn(`Audio file not loaded: ${AUDIO_PATHS[name]}`);
+        }, { once: true });
+        audioCache[name] = audio;
+    }
+
+    return audioCache[name];
+}
+
+function playSound(name) {
+    if (!soundEnabled) return;
+
+    const audio = getAudio(name);
+    if (!audio) return;
+
+    audio.pause();
+    audio.currentTime = 0;
+    audio.volume = getEffectiveAudioVolume(name);
+    audio.play().catch(() => {});
+}
+
+function playUiClick() {
+    playSound('uiClick');
+}
+
+function playBugClick() {
+    playSound('bugClick');
+}
+
+function playWrongBugClick() {
+    playSound('wrongBugClick');
+}
+
+function playBombClick() {
+    playSound('bombClick');
+}
+
+function startLevelMusic() {
+    if (!musicEnabled) return;
+
+    pauseMenuMusic();
+    const audio = getAudio('levelMusic');
+    if (!audio) return;
+
+    levelMusicAudio = audio;
+    levelMusicAudio.loop = true;
+    levelMusicAudio.volume = getEffectiveAudioVolume('levelMusic');
+    levelMusicAudio.playbackRate = getLevelMusicPlaybackRate();
+    levelMusicAudio.play().catch(() => {});
+}
+
+function startMenuMusic() {
+    if (!musicEnabled) return;
+
+    stopLevelMusic();
+    const audio = getAudio('menuMusic');
+    if (!audio) return;
+
+    menuMusicAudio = audio;
+    menuMusicAudio.loop = true;
+    menuMusicAudio.volume = getEffectiveAudioVolume('menuMusic');
+    menuMusicAudio.playbackRate = 1;
+    menuMusicAudio.play().catch(() => {});
+}
+
+function pauseLevelMusic() {
+    if (levelMusicAudio) {
+        levelMusicAudio.pause();
+    }
+}
+
+function stopLevelMusic() {
+    if (!levelMusicAudio) return;
+    levelMusicAudio.pause();
+    levelMusicAudio.currentTime = 0;
+    levelMusicAudio.playbackRate = 1;
+}
+
+function pauseMenuMusic() {
+    if (menuMusicAudio) {
+        menuMusicAudio.pause();
+    }
+}
+
+function stopMenuMusic() {
+    if (!menuMusicAudio) return;
+    menuMusicAudio.pause();
+    menuMusicAudio.currentTime = 0;
+}
+
+function setAudioDucking(active) {
+    if (audioDuckingActive === active) return;
+    audioDuckingActive = active;
+    applyAudioVolumes();
+}
+
+function startChameleonMusicEffect() {
+    musicEffectState.chameleon = true;
+    musicEffectState.chameleonStartedAt = Date.now();
+
+    if (chameleonMusicTimer) {
+        clearInterval(chameleonMusicTimer);
+    }
+
+    chameleonMusicTimer = setInterval(applyAudioState, CHAMELEON_MUSIC_INTERVAL_MS);
+    applyAudioState();
+}
+
+function stopChameleonMusicEffect() {
+    musicEffectState.chameleon = false;
+    musicEffectState.chameleonStartedAt = 0;
+
+    if (chameleonMusicTimer) {
+        clearInterval(chameleonMusicTimer);
+        chameleonMusicTimer = null;
+    }
+
+    applyAudioState();
+}
+
+function setFrozenMusicEffect(active) {
+    musicEffectState.frozen = active;
+    applyAudioState();
+}
+
+function clearTransientMusicEffect() {
+    if (transientMusicEffectTimer) {
+        clearTimeout(transientMusicEffectTimer);
+        transientMusicEffectTimer = null;
+    }
+
+    musicEffectState.transientRate = 1;
+    musicEffectState.transientVolume = 1;
+    applyAudioState();
+}
+
+function clearGameplayMusicEffects() {
+    musicEffectState.frozen = false;
+    stopChameleonMusicEffect();
+    clearTransientMusicEffect();
+}
+
+function playTransientMusicEffect(rate, volume, durationMs) {
+    if (transientMusicEffectTimer) {
+        clearTimeout(transientMusicEffectTimer);
+    }
+
+    musicEffectState.transientRate = rate;
+    musicEffectState.transientVolume = volume;
+    applyAudioState();
+
+    transientMusicEffectTimer = setTimeout(() => {
+        musicEffectState.transientRate = 1;
+        musicEffectState.transientVolume = 1;
+        transientMusicEffectTimer = null;
+        applyAudioState();
+    }, durationMs);
+}
+
+function playNeatMusicEffect() {
+    playTransientMusicEffect(1.28, 0.72, NEAT_MUSIC_SWEEP_MS);
+}
+
+function playHealerMusicEffect() {
+    playTransientMusicEffect(1.03, 1.22, HEALER_MUSIC_GLOW_MS);
+}
+
+function setSoundEnabled(enabled) {
+    soundEnabled = enabled;
+    localStorage.setItem('soundEnabled', enabled ? 'true' : 'false');
+}
+
+function setMusicEnabled(enabled) {
+    musicEnabled = enabled;
+    localStorage.setItem('musicEnabled', enabled ? 'true' : 'false');
+
+    if (!enabled) {
+        stopLevelMusic();
+        stopMenuMusic();
+        return;
+    }
+
+    if (document.hidden) return;
+
+    const gameScreenActive = app?.stage?.children?.includes(gameContainer);
+    if (gameScreenActive && levelData && !levelEnded) {
+        if (!isPaused && !orientationPauseActive) {
+            startLevelMusic();
+        }
+        return;
+    }
+
+    startMenuMusic();
+}
 
 function isYandexGames() {
     return typeof window !== 'undefined' && !!window.ysdk;
@@ -523,6 +820,7 @@ function syncAllColorButtonStates() {
 
     colors.forEach((color) => updateButtonState(color, isColorHeld(color)));
     updatePlayAreaActiveBorder();
+    setAudioDucking(hasAnyActiveColor());
 }
 
 function getRoundedRectPerimeter(rect) {
@@ -974,6 +1272,7 @@ function pauseGameplayForOverlay() {
 
     orientationPauseActive = true;
     clearSpawnTimer();
+    pauseLevelMusic();
 
     activeObjects.forEach(obj => {
         obj.pausedLifetime = syncObjectLifetime(obj);
@@ -1137,6 +1436,7 @@ loader.load(() => {
     hidePreloader();
     resizeGame();
     app.stage.addChild(startContainer);
+    startMenuMusic();
 });
 
 // ...весь остальной код...
@@ -1449,6 +1749,7 @@ function animateNeatSweepRemove(obj, delay = 0, onComplete) {
 function clearFieldWithNeat(triggerContainer) {
     clearSpawnTimer();
     startSpawnResumeDelay(NEAT_SPAWN_DELAY_MS);
+    playNeatMusicEffect();
 
     const targets = [...activeObjects];
     if (!targets.length) return;
@@ -1593,6 +1894,7 @@ function finishFrozenEffect() {
 
     frozenEffectStartedAt = 0;
     frozenEffectEndsAt = 0;
+    setFrozenMusicEffect(false);
 
     if (frozenEffectTimer) {
         clearTimeout(frozenEffectTimer);
@@ -1614,6 +1916,7 @@ function activateFrozenEffect() {
 
     frozenEffectStartedAt = now;
     frozenEffectEndsAt = now + FROZEN_EFFECT_DURATION_MS;
+    setFrozenMusicEffect(true);
 
     if (frozenEffectTimer) {
         clearTimeout(frozenEffectTimer);
@@ -1627,6 +1930,7 @@ function activateFrozenEffect() {
 function finishChameleonEffect() {
     chameleonEffectStartedAt = 0;
     chameleonEffectEndsAt = 0;
+    stopChameleonMusicEffect();
 
     if (chameleonEffectTimer) {
         clearTimeout(chameleonEffectTimer);
@@ -1642,6 +1946,7 @@ function activateChameleonEffect() {
 
     chameleonEffectStartedAt = now;
     chameleonEffectEndsAt = now + CHAMELEON_EFFECT_DURATION_MS;
+    startChameleonMusicEffect();
     clearActiveColor();
     syncChameleonFieldOverlay();
     startChameleonTimerBorder();
@@ -1820,7 +2125,15 @@ window.addEventListener('keyup', (e) => {
 window.addEventListener('touchcancel', clearActiveColor);
 window.addEventListener('blur', clearActiveColor);
 document.addEventListener('visibilitychange', () => {
-    if (document.hidden) clearActiveColor();
+    if (document.hidden) {
+        clearActiveColor();
+        pauseLevelMusic();
+        pauseMenuMusic();
+    } else if (levelData && !levelEnded && !isPaused && !orientationPauseActive) {
+        startLevelMusic();
+    } else {
+        startMenuMusic();
+    }
 });
 
 // ==== Стартовый экран ====
@@ -1854,6 +2167,7 @@ playButton.y = app.screen.height / 2 + 50;
 playButton.interactive = true;
 playButton.buttonMode = true;
 playButton.on('pointerdown', () => {
+    playUiClick();
     showProgressScreen();
 });
 startContainer.addChild(playButton);
@@ -1952,6 +2266,8 @@ function continueGameFromProgress() {
 
 function showProgressScreen() {
     clearSpawnTimer();
+    clearGameplayMusicEffects();
+    startMenuMusic();
     cleanupLevelSelectScroll();
     finishFrozenEffect();
     finishChameleonEffect();
@@ -2000,6 +2316,8 @@ function showProgressScreen() {
 
 function showLevelSelect() {
     clearSpawnTimer();
+    clearGameplayMusicEffects();
+    startMenuMusic();
     finishFrozenEffect();
     isPaused = false;
     introActive = false;
@@ -2181,6 +2499,7 @@ function showLevelSelect() {
             const moved = Math.sqrt(dx * dx + dy * dy);
 
             if (!hasScrolled && !dragMoved && moved <= TAP_THRESHOLD && !levelSelectContainer.getChildByName('levelEntryPopup')) {
+                playUiClick();
                 showLevelEntryPopup(i);
             }
         });
@@ -2441,6 +2760,9 @@ function startLevel(index) {
   cleanupLevelSelectScroll();
   clearSpawnTimer();
   clearSpawnResumeDelay();
+  stopLevelMusic();
+  stopMenuMusic();
+  clearGameplayMusicEffects();
   finishFrozenEffect();
   finishChameleonEffect();
   isPaused = false;
@@ -2478,6 +2800,7 @@ function startLevel(index) {
     // реальный старт спавна
   const startSpawning = () => {
     beginLevelAttempt();
+    startLevelMusic();
     prepareObjectQueue();
     scheduleNextSpawn(0);
     if (typeof levelData.onEnterLevel === 'function') levelData.onEnterLevel();
@@ -4037,6 +4360,18 @@ function spawnObject() {
     container.on('pointerdown', () => {
         if (isPaused || levelEnded) return; // Don't handle clicks while paused
 
+        const isColoredBug = type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_');
+        const heldColorMatchesBug = isColoredBug && isColorHeld(type.split('_')[1]);
+        const wrongPlainBugWithColor = hasAnyActiveColor() && !isChameleonEffectActive() && !isColoredBug && type !== 'bomb';
+        const wrongColoredBugWithoutColor = isColoredBug && !isChameleonEffectActive() && !heldColorMatchesBug;
+        if (type === 'bomb') {
+            playBombClick();
+        } else if (wrongPlainBugWithColor || wrongColoredBugWithoutColor) {
+            playWrongBugClick();
+        } else {
+            playBugClick();
+        }
+
         // If any color is active, only colored bugs and bombs can be clicked
         if (hasAnyActiveColor() && !isChameleonEffectActive() && !type.startsWith('coloredBug_') && !type.startsWith('fatColoredBug_') && type !== 'bomb') {
             if (type === 'fat') {
@@ -4191,6 +4526,7 @@ function spawnObject() {
             const maxLives = levelData?.lifeCount ?? life;
             const nextLife = Math.min(maxLives, life + Math.max(0, Math.round(data.healAmount ?? 0)));
             const healTargetPoint = getHealTargetGlobalPosition(nextLife);
+            playHealerMusicEffect();
 
             animateHealingHeart(container, healTargetPoint, () => {
                 healPlayer(data.healAmount);
@@ -4302,7 +4638,13 @@ function endGame(won) {
     clearSpawnResumeDelay();
     finishFrozenEffect();
     finishChameleonEffect();
+    clearTransientMusicEffect();
     levelEnded = true;
+    stopLevelMusic();
+    playSound(won ? 'victory' : 'defeat');
+    setTimeout(() => {
+        if (levelEnded && !document.hidden) startMenuMusic();
+    }, 900);
     debugSpawn('endGame called', { won, score, life });
     freezeActiveObjects();
     closeLevelAttempt(won ? 'win' : 'loss');
@@ -4938,6 +5280,7 @@ function showWinPopup(currentLevelIndex) {
     nextBtn.interactive = true;
     nextBtn.buttonMode = true;
     nextBtn.on('pointerdown', () => {
+        playUiClick();
         clearAllPopups();
         if (levels[currentLevelIndex + 1]) {
             startLevel(currentLevelIndex + 1);
@@ -4970,6 +5313,7 @@ function showWinPopup(currentLevelIndex) {
     menuBtn.interactive = true;
     menuBtn.buttonMode = true;
     menuBtn.on('pointerdown', () => {
+        playUiClick();
         clearAllPopups();
         if (app.stage.children.includes(gameContainer)) {
             app.stage.removeChild(gameContainer);
@@ -5070,6 +5414,7 @@ function showLosePopup(currentLevelIndex) {
     retryBtn.interactive = true;
     retryBtn.buttonMode = true;
     retryBtn.on('pointerdown', () => {
+        playUiClick();
         clearAllPopups();
         startLevel(currentLevelIndex);
     });
@@ -5099,6 +5444,7 @@ function showLosePopup(currentLevelIndex) {
     menuBtn.interactive = true;
     menuBtn.buttonMode = true;
     menuBtn.on('pointerdown', () => {
+        playUiClick();
         clearAllPopups();
         if (app.stage.children.includes(gameContainer)) {
             app.stage.removeChild(gameContainer);
@@ -5125,7 +5471,9 @@ function showLosePopup(currentLevelIndex) {
 
 function showPausePopup() {
     if (isPaused) return; // Prevent multiple popups
+    playUiClick();
     isPaused = true;
+    pauseLevelMusic();
     
     // Clear the spawn interval
     clearSpawnTimer();
@@ -5208,8 +5556,8 @@ function showPausePopup() {
     iconsRow.y = title.y + title.height + Math.max(14, Math.round(popupHeight * 0.06));
 
     // Load sound states from localStorage
-    const isSoundEnabled = localStorage.getItem('soundEnabled') !== 'false';
-    const isMusicEnabled = localStorage.getItem('musicEnabled') !== 'false';
+    let isSoundEnabled = localStorage.getItem('soundEnabled') !== 'false';
+    let isMusicEnabled = localStorage.getItem('musicEnabled') !== 'false';
 
     // Кнопка звука
     const soundBtn = new PIXI.Graphics();
@@ -5256,6 +5604,22 @@ function showPausePopup() {
     iconsRow.addChild(soundBtn);
     iconsRow.addChild(musicBtn);
     popup.addChild(iconsRow);
+
+    soundBtn.on('pointerdown', (event) => {
+        event.stopPropagation();
+        isSoundEnabled = !isSoundEnabled;
+        setSoundEnabled(isSoundEnabled);
+        if (isSoundEnabled) playUiClick();
+        updateSoundIcons(soundIcon, musicIcon, isSoundEnabled, isMusicEnabled);
+    });
+
+    musicBtn.on('pointerdown', (event) => {
+        event.stopPropagation();
+        playUiClick();
+        isMusicEnabled = !isMusicEnabled;
+        setMusicEnabled(isMusicEnabled);
+        updateSoundIcons(soundIcon, musicIcon, isSoundEnabled, isMusicEnabled);
+    });
 
     const btnW = popupWidth * 0.8;
     const buttonLayout = getVerticalStackLayout({
@@ -5342,6 +5706,7 @@ function createButton(width, height, text, onClick, variant = 'primary', fontSiz
     btn.buttonMode = true;
     btn.on('pointerdown', (event) => {
         event.stopPropagation();
+        playUiClick();
         onClick(event);
     });
 
@@ -5390,6 +5755,8 @@ function animateRemoveObject(container, onAfterRemove) {
 }
 
 function resumeGame() {
+    startLevelMusic();
+
     // Resume spawn timer using the next queued bug balance.
     scheduleNextSpawn();
 
@@ -5616,6 +5983,7 @@ function createColorButton(color, size, key, showKey = true, variant = 'desktop'
     button.originalScale = 1;
 
     button.on('pointerdown', (event) => {
+        playUiClick();
         const pointerId = getPointerId(event);
         const pointerKey = getPointerColorKey(pointerId);
 
