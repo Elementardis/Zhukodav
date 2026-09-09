@@ -37,9 +37,11 @@ Zhukodav, также отображаемый в `index.html` как `Click Them
 │   ├── pixi.min.js               # Локальная копия PixiJS
 │   ├── game-ui.js                # Layout/UI-хелперы
 │   └── progress-ui.js            # Экран прогресса игрока
-├── images/                       # Игровые спрайты
-│   └── ui/                       # UI-ассеты и fallback-ассеты
-└── design/                       # Исходные/дизайн-материалы
+└── images/                       # Изображения проекта
+    ├── bugs/                     # Жуки, бомба и её взрыв
+    ├── buttons/                  # Цветные кнопки и резервные варианты
+    ├── backgrounds/              # Фоны экранов
+    └── ui/                       # Остальные элементы интерфейса
 ```
 
 ## 4. Запуск проекта
@@ -344,8 +346,8 @@ runtime spawnInterval = base spawnInterval / level spawnMultiplier
 
 Основные правила:
 
-- используется существующий фон `images/ui/custom/bg_game.png`;
-- используется существующая графическая кнопка `images/ui/custom/play.png`;
+- используется существующий фон `images/backgrounds/bg_game.png`;
+- используется существующая графическая кнопка `images/ui/play.png`;
 - силуэт жука строится программно через маску 18 x 16;
 - непустых клеток в маске строго 120;
 - непройденные клетки всегда видны нейтральным цветом;
@@ -365,7 +367,7 @@ runtime spawnInterval = base spawnInterval / level spawnMultiplier
 
 ## 13. Ассеты
 
-Основные игровые изображения лежат в `images/`:
+Изображения жуков лежат в `images/bugs/`:
 
 - `bug.png`
 - `bomb.png`
@@ -375,14 +377,14 @@ runtime spawnInterval = base spawnInterval / level spawnMultiplier
 - `neat.png`
 - `healer.png`
 
-UI-ассеты лежат в `images/ui/` и `images/ui/custom/`. Если кастомный UI-ассет отсутствует, код использует fallback, нарисованный через Pixi Graphics.
+Цветные кнопки лежат в `images/buttons/`: `custom_button_*.png` — основное оформление, `button_*.png` — резервное. Фоны экранов лежат в `images/backgrounds/`, остальные элементы интерфейса — в `images/ui/`. Если кастомный UI-ассет отсутствует, код использует резервную текстуру или Pixi Graphics. Структура и размеры описаны в `images/README.md`.
 
 Новые UI-слоты добавляются в `UI_ASSET_SLOTS` в `game.js`.
 
 ## 14. Как добавить новый тип жука
 
 1. Добавить базовый баланс в `BUG_BALANCE` в `bug-config.js`.
-2. Добавить спрайт в `images/`.
+2. Добавить спрайт в `images/bugs/`.
 3. Добавить текстуру в список загрузки в `game.js`.
 4. Добавить ветку создания визуала в `spawnObject()`, если новый тип требует отдельной картинки или размера.
 5. Добавить обработку клика в `spawnObject()`, если поведение отличается от обычного жука.

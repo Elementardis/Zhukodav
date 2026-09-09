@@ -212,6 +212,32 @@ function getAudio(name) {
     return audioCache[name];
 }
 
+// Reuse these audio elements during playback; never play audio to preload it.
+function preloadAudio(name) {
+    return new Promise((resolve) => {
+        const audio = getAudio(name);
+        if (!audio || audio.readyState >= 4) {
+            resolve();
+            return;
+        }
+
+        const finish = () => {
+            clearTimeout(timeout);
+            audio.removeEventListener('canplaythrough', finish);
+            audio.removeEventListener('error', finish);
+            resolve();
+        };
+        // Some mobile browsers defer media loading until a user gesture.
+        const timeout = setTimeout(() => {
+            console.warn(`Audio preload timed out: ${AUDIO_PATHS[name]}`);
+            finish();
+        }, 15000);
+        audio.addEventListener('canplaythrough', finish, { once: true });
+        audio.addEventListener('error', finish, { once: true });
+        audio.load();
+    });
+}
+
 function playSound(name) {
     if (!soundEnabled) return;
 
@@ -1025,95 +1051,95 @@ let selectedLevelIndex = null;
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
 
 // ==== UI ASSET SLOTS ====
-// Put custom PNGs into images/ui/custom/ with these exact names.
+// Asset folders and filenames are documented in images/README.md.
 // Missing custom files are ignored; the game falls back to drawn Pixi UI.
 const UI_ASSET_SLOTS = {
     bg_levels: {
-        path: 'images/ui/custom/bg_levels.png',
+        path: 'images/backgrounds/bg_levels.png',
         width: 1280,
         height: 590,
         description: 'Background for the level select screen.'
     },
     bg_game: {
-        path: 'images/ui/custom/bg_game.png',
+        path: 'images/backgrounds/bg_game.png',
         width: 1280,
         height: 590,
         description: 'Background for the in-level game screen.'
     },
     level_entry_icon: {
-        path: 'images/ui/custom/level_entry_icon.png',
+        path: 'images/ui/level_entry_icon.png',
         width: 128,
         height: 128,
         description: 'Icon shown in the level entry popup.'
     },
     level_tile_completed: {
-        path: 'images/ui/custom/level_tile_completed.png',
+        path: 'images/ui/level_tile_completed.png',
         width: 128,
         height: 128,
         description: 'Completed level tile background.'
     },
     level_tile_locked: {
-        path: 'images/ui/custom/level_tile_locked.png',
+        path: 'images/ui/level_tile_locked.png',
         width: 128,
         height: 128,
         description: 'Not-yet-completed level tile background.'
     },
     game_hud_panel: {
-        path: 'images/ui/custom/game_hud_panel.png',
+        path: 'images/ui/game_hud_panel.png',
         width: 1180,
         height: 112,
         description: 'Top in-level HUD panel.'
     },
     game_goal_badge: {
-        path: 'images/ui/custom/game_goal_badge.png',
+        path: 'images/ui/game_goal_badge.png',
         width: 220,
         height: 72,
         description: 'Goal counter badge inside the HUD.'
     },
     game_playfield_frame: {
-        path: 'images/ui/custom/game_playfield_frame.png',
+        path: 'images/ui/game_playfield_frame.png',
         width: 900,
         height: 520,
         description: 'Main in-level playfield frame.'
     },
     game_side_panel: {
-        path: 'images/ui/custom/game_side_panel.png',
+        path: 'images/ui/game_side_panel.png',
         width: 128,
         height: 360,
         description: 'Left/right color-button side panel.'
     },
     game_settings_button: {
-        path: 'images/ui/custom/game_settings_button.png',
+        path: 'images/ui/game_settings_button.png',
         width: 96,
         height: 96,
         description: 'Settings button background.'
     },
     custom_button_red: {
-        path: 'images/ui/custom/button_red.png',
+        path: 'images/buttons/custom_button_red.png',
         width: 107,
         height: 112,
         description: 'Custom red color button.'
     },
     custom_button_blue: {
-        path: 'images/ui/custom/button_blue.png',
+        path: 'images/buttons/custom_button_blue.png',
         width: 107,
         height: 112,
         description: 'Custom blue/cyan color button.'
     },
     custom_button_purple: {
-        path: 'images/ui/custom/button_purple.png',
+        path: 'images/buttons/custom_button_purple.png',
         width: 107,
         height: 112,
         description: 'Custom purple color button.'
     },
     custom_button_green: {
-        path: 'images/ui/custom/button_green.png',
+        path: 'images/buttons/custom_button_green.png',
         width: 107,
         height: 112,
         description: 'Custom green color button.'
     },
     progress_play: {
-        path: 'images/ui/custom/play.png',
+        path: 'images/ui/play.png',
         width: 120,
         height: 120,
         description: 'Play button for the progress screen.'
@@ -1122,24 +1148,23 @@ const UI_ASSET_SLOTS = {
 
 // ==== SPRITE PRELOADER (PIXI.Loader) ====
 const SPRITE_PATHS = [
-    { name: 'bug', path: 'images/bug.png' },
-    { name: 'healer', path: 'images/healer.png' },
-    { name: 'bomb', path: 'images/bomb.png' },
-    { name: 'coloredBug_red', path: 'images/coloredBug_red.png' },
-    { name: 'coloredBug_blue', path: 'images/coloredBug_blue.png' },
-    { name: 'coloredBug_green', path: 'images/coloredBug_green.png' },
-    { name: 'coloredBug_yellow', path: 'images/coloredBug_yellow.png' },
-    { name: 'bomb_explosion', path: 'images/bomb.gif'},
-    { name: 'button_green',  path: 'images/ui/button_green.png' },
-    { name: 'button_blue',   path: 'images/ui/button_blue.png' },
-    { name: 'button_purple', path: 'images/ui/button_purple.png' },
-    { name: 'button_red',    path: 'images/ui/button_red.png' },
-    { name: 'button_yellow', path: 'images/ui/button_yellow.png' },
-    { name: 'frozen', path: 'images/ui/frozen.png' },
-    { name: 'chameleon', path: 'images/chameleon.png' },
-    { name: 'neat', path: 'images/neat.png' },
+    { name: 'bug', path: 'images/bugs/bug.png' },
+    { name: 'healer', path: 'images/bugs/healer.png' },
+    { name: 'bomb', path: 'images/bugs/bomb.png' },
+    { name: 'coloredBug_red', path: 'images/bugs/coloredBug_red.png' },
+    { name: 'coloredBug_blue', path: 'images/bugs/coloredBug_blue.png' },
+    { name: 'coloredBug_green', path: 'images/bugs/coloredBug_green.png' },
+    { name: 'coloredBug_yellow', path: 'images/bugs/coloredBug_yellow.png' },
+    { name: 'bomb_explosion', path: 'images/bugs/bomb.gif'},
+    { name: 'button_green',  path: 'images/buttons/button_green.png' },
+    { name: 'button_blue',   path: 'images/buttons/button_blue.png' },
+    { name: 'button_purple', path: 'images/buttons/button_purple.png' },
+    { name: 'button_red',    path: 'images/buttons/button_red.png' },
+    { name: 'frozen', path: 'images/bugs/frozen.png' },
+    { name: 'chameleon', path: 'images/bugs/chameleon.png' },
+    { name: 'neat', path: 'images/bugs/neat.png' },
     { name: 'heart', path: 'images/ui/heart.png' },
-    { name: 'life', path: 'images/life.png' },
+    { name: 'life', path: 'images/ui/life.png' },
     { name: 'gear', path: 'images/ui/gear.png' },
     ...Object.entries(UI_ASSET_SLOTS).map(([name, slot]) => ({
         name,
@@ -1363,7 +1388,7 @@ function hidePreloader() {
     }
 }
 
-// ==== START GAME ONLY AFTER SPRITES LOADED ====
+// ==== START GAME AFTER IMAGE AND AUDIO PRELOADING ====
 const { preloader, progressFill } = showPreloader();
 
 // Create PIXI Application
@@ -1397,10 +1422,22 @@ SPRITE_PATHS.forEach(({ name, path }) => {
     loader.add(name, path);
 });
 
+const audioNames = Object.keys(AUDIO_PATHS);
+let loadedAudioCount = 0;
+function updatePreloadProgress() {
+    const loadedSprites = SPRITE_PATHS.length * loader.progress / 100;
+    const progress = Math.round(100 * (loadedSprites + loadedAudioCount) / (SPRITE_PATHS.length + audioNames.length));
+    progressFill.style.width = `${progress}%`;
+}
+
+const audioReady = Promise.all(audioNames.map((name) => preloadAudio(name).then(() => {
+    loadedAudioCount += 1;
+    updatePreloadProgress();
+})));
+
 // Add loading progress handler
 loader.onProgress.add((loader) => {
-    const progress = Math.round(loader.progress);
-    progressFill.style.width = `${progress}%`;
+    updatePreloadProgress();
 });
 
 // Add error handler
@@ -1424,8 +1461,7 @@ loader.onError.add((error, loader, resource) => {
 });
 
 // Start loading
-loader.load(() => {
-    console.log('All resources loaded successfully');
+loader.load(async () => {
     // Store all loaded textures
     SPRITE_PATHS.forEach(({ name }) => {
         const texture = loader.resources[name]?.texture;
@@ -1433,6 +1469,8 @@ loader.load(() => {
             TEXTURES[name] = texture;
         }
     });
+    await audioReady;
+    updatePreloadProgress();
     hidePreloader();
     resizeGame();
     app.stage.addChild(startContainer);

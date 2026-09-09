@@ -10,3 +10,7 @@ Put audio files for the game in this folder with these exact names:
 - ui-click.mp3 - UI button click
 
 MP3 is currently wired in game.js. If you want to use another format, update AUDIO_PATHS there.
+
+All files listed in AUDIO_PATHS are preloaded alongside images and included in the
+loading bar. Playback reuses the cached audio elements. An audio error or a
+15-second timeout lets startup continue; playback still follows the sound/music settings.
