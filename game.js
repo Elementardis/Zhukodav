@@ -1,4 +1,5 @@
 import levels from './levels.js';
+import { createSoundEffects } from './js/sound-effects.js';
 import { getBugBaseBalance, getBugSpawnZone } from './bug-config.js';
 import { initBackend, fetchRemoteLevel, saveProgress, trackEvent, recalcLeaderboard, rcNumber, createLevelAttempt, finishLevelAttempt } from './firebase.js';
 import {
@@ -124,7 +125,7 @@ let pendingOrientationResizeTimeout = null;
 let colorButtonsMap = {};
 let levelsSinceLastAd = 0;
 let lastAdTime = 0;
-const DEBUG_SPAWN = true;
+const DEBUG_SPAWN = false;
 const audioCache = {};
 let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
 let musicEnabled = localStorage.getItem('musicEnabled') !== 'false';
@@ -140,6 +141,7 @@ const musicEffectState = {
     transientRate: 1,
     transientVolume: 1
 };
+const soundEffects = createSoundEffects(AUDIO_PATHS, getEffectiveAudioVolume);
 
 function getEffectiveAudioVolume(name) {
     const musicEffectVolume = name === 'levelMusic' ? getLevelMusicEffectVolume() : 1;
@@ -147,6 +149,7 @@ function getEffectiveAudioVolume(name) {
 }
 
 function applyAudioVolumes() {
+    soundEffects.updateVolumes();
     Object.entries(audioCache).forEach(([name, audio]) => {
         audio.volume = getEffectiveAudioVolume(name);
     });
@@ -214,6 +217,9 @@ function getAudio(name) {
 
 // Reuse these audio elements during playback; never play audio to preload it.
 function preloadAudio(name) {
+    if (name !== 'levelMusic' && name !== 'menuMusic' && soundEffects.supported) {
+        return soundEffects.preload(name);
+    }
     return new Promise((resolve) => {
         const audio = getAudio(name);
         if (!audio || audio.readyState >= 4) {
@@ -240,6 +246,10 @@ function preloadAudio(name) {
 
 function playSound(name) {
     if (!soundEnabled) return;
+    if (soundEffects.supported) {
+        soundEffects.play(name);
+        return;
+    }
 
     const audio = getAudio(name);
     if (!audio) return;
@@ -398,6 +408,7 @@ function playHealerMusicEffect() {
 
 function setSoundEnabled(enabled) {
     soundEnabled = enabled;
+    if (!enabled) soundEffects.stopAll();
     localStorage.setItem('soundEnabled', enabled ? 'true' : 'false');
 }
 
@@ -1396,7 +1407,7 @@ const app = new PIXI.Application({
     width: window.innerWidth,
     height: window.innerHeight,
     backgroundColor: THEME.appBg,
-    resolution: window.devicePixelRatio,
+    resolution: Math.min(window.devicePixelRatio || 1, isMobileDeviceUI(MOBILE_MAX_VIEWPORT) ? 2 : Infinity),
     autoDensity: true,
     resizeTo: window,
     roundPixels: true
@@ -1424,10 +1435,26 @@ SPRITE_PATHS.forEach(({ name, path }) => {
 
 const audioNames = Object.keys(AUDIO_PATHS);
 let loadedAudioCount = 0;
+let preparedTextureProgress = 0;
 function updatePreloadProgress() {
     const loadedSprites = SPRITE_PATHS.length * loader.progress / 100;
-    const progress = Math.round(100 * (loadedSprites + loadedAudioCount) / (SPRITE_PATHS.length + audioNames.length));
+    // Reserve the final 20% for GPU preparation, not just network downloads.
+    const progress = Math.floor(80 * (loadedSprites + loadedAudioCount) / (SPRITE_PATHS.length + audioNames.length)
+        + 20 * preparedTextureProgress);
     progressFill.style.width = `${progress}%`;
+}
+
+async function prepareLoadedTextures() {
+    const baseTextures = [...new Set(Object.values(TEXTURES).map(texture => texture.baseTexture))];
+    const prepare = app.renderer.plugins.prepare;
+    for (let index = 0; index < baseTextures.length; index += 1) {
+        // Pixi's prepare queue uploads outside gameplay, yielding between textures.
+        await new Promise(resolve => prepare.upload(baseTextures[index], resolve));
+        preparedTextureProgress = (index + 1) / baseTextures.length;
+        updatePreloadProgress();
+    }
+    preparedTextureProgress = 1;
+    updatePreloadProgress();
 }
 
 const audioReady = Promise.all(audioNames.map((name) => preloadAudio(name).then(() => {
@@ -1469,7 +1496,7 @@ loader.load(async () => {
             TEXTURES[name] = texture;
         }
     });
-    await audioReady;
+    await Promise.all([audioReady, prepareLoadedTextures()]);
     updatePreloadProgress();
     hidePreloader();
     resizeGame();
@@ -4003,7 +4030,11 @@ function layoutLifetimeIndicator(container) {
     indicator.y = visualBottom + LIFETIME_BAR_OFFSET;
 
     const fill = indicator.getChildByName('lifetimeBarFill');
-    if (fill) updateLifetimeIndicator(container);
+    if (fill) {
+        // Build the geometry only on creation/resize; animate its transform below.
+        drawLifetimeBarGraphic(fill, barWidth, indicator._barHeight, LIFETIME_BAR_FILL_COLOR, 0.95);
+        updateLifetimeIndicator(container);
+    }
 }
 
 function updateLifetimeIndicator(container) {
@@ -4018,7 +4049,8 @@ function updateLifetimeIndicator(container) {
     const fullWidth = indicator._barWidth || 0;
     const width = fullWidth * progress;
     fill.x = (fullWidth - width) / 2;
-    drawLifetimeBarGraphic(fill, width, indicator._barHeight || LIFETIME_BAR_HEIGHT, LIFETIME_BAR_FILL_COLOR, 0.95);
+    fill.scale.x = progress;
+    fill.visible = progress > 0;
 }
 
 function removeLifetimeIndicator(container) {

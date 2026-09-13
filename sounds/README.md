@@ -12,5 +12,10 @@ Put audio files for the game in this folder with these exact names:
 MP3 is currently wired in game.js. If you want to use another format, update AUDIO_PATHS there.
 
 All files listed in AUDIO_PATHS are preloaded alongside images and included in the
-loading bar. Playback reuses the cached audio elements. An audio error or a
+loading bar. Short effects are fetched and decoded once into Web Audio buffers
+by `js/sound-effects.js`; clicks reuse these buffers with one active voice per
+effect. Audio is unlocked on a pointer or keyboard gesture. Music reuses HTML
+Audio elements; browsers without Web Audio also use HTML Audio for effects.
+Unavailable effects are skipped without retrying downloads on each click.
+An audio error or a
 15-second timeout lets startup continue; playback still follows the sound/music settings.
