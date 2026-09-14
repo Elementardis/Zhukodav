@@ -290,18 +290,6 @@ export function buildDesktopLevelHeader({ wrapper, level, layout, theme, heartSi
     lvlText.x = 18;
     header.addChild(lvlText);
 
-    const progText = new PIXI.Text(`0/${level.goalBugCount}`, {
-        fontSize: headerH * 0.35,
-        fill: theme.textDark,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
-        align: 'right',
-    });
-    progText.anchor.set(1, 0);
-    progText.x = wrapper.width - 18;
-    progText.y = headerH * 0.15;
-    progText.name = 'progText';
-    header.addChild(progText);
 
     const heartSz = Math.floor(headerH * heartSizeRatio);
     const hearts = new PIXI.Container();
@@ -330,7 +318,7 @@ export function buildDesktopLevelHeader({ wrapper, level, layout, theme, heartSi
         ui: {
             mode: 'desktop',
             header,
-            progText,
+            
             hearts: heartRefs
         }
     };
@@ -356,22 +344,22 @@ export function buildMobileLevelHeader({ layout, level, theme, textures, score }
     header.addChild(cornerLevelText);
 
     const levelTexture = textures.level_panel;
-    const goalTexture = textures.goal_panel;
-    const baseGap = 18;
+    
+    
     const targetHeight = layout.header.height;
 
     const levelBaseWidth = levelTexture?.width ?? 540;
     const levelBaseHeight = levelTexture?.height ?? 124;
-    const goalBaseWidth = goalTexture?.width ?? 220;
-    const goalBaseHeight = goalTexture?.height ?? 124;
+    
+    
 
-    const scaleByHeight = targetHeight / Math.max(levelBaseHeight, goalBaseHeight);
-    const scaleByWidth = layout.header.width / (levelBaseWidth + goalBaseWidth + baseGap);
+    const scaleByHeight = targetHeight / levelBaseHeight;
+    const scaleByWidth = layout.header.width / levelBaseWidth;
     const hudScale = Math.min(scaleByHeight, scaleByWidth, 1);
-    const scaledGap = baseGap * hudScale;
-    const totalWidth = (levelBaseWidth + goalBaseWidth) * hudScale + scaledGap;
+
+    const totalWidth = levelBaseWidth * hudScale;
     const startX = Math.max(0, (layout.header.width - totalWidth) / 2);
-    const topOffset = Math.max(0, (layout.header.height - Math.max(levelBaseHeight, goalBaseHeight) * hudScale) / 2);
+    const topOffset = Math.max(0, (layout.header.height - levelBaseHeight * hudScale) / 2);
 
     const levelPanelContainer = new PIXI.Container();
     levelPanelContainer.name = 'levelPanelContainer';
@@ -419,28 +407,6 @@ export function buildMobileLevelHeader({ layout, level, theme, textures, score }
     heartsContainer.name = 'heartsRow';
     levelPanelContainer.addChild(heartsContainer);
 
-    const goalPanelContainer = new PIXI.Container();
-    goalPanelContainer.name = 'goalPanelContainer';
-    goalPanelContainer.x = startX + levelBaseWidth * hudScale + scaledGap;
-    goalPanelContainer.y = topOffset;
-    goalPanelContainer.scale.set(hudScale);
-    header.addChild(goalPanelContainer);
-
-    if (goalTexture) {
-        goalPanelContainer.addChild(new PIXI.Sprite(goalTexture));
-    }
-
-    const goalLabelText = new PIXI.Text('ЦЕЛЬ:', levelTextStyle);
-    goalLabelText.anchor.set(0, 0.5);
-    goalLabelText.x = 28;
-    goalLabelText.y = goalBaseHeight * 0.52;
-    goalPanelContainer.addChild(goalLabelText);
-
-    const goalValueText = new PIXI.Text(String(Math.max(0, level.goalBugCount - score)), valueTextStyle);
-    goalValueText.anchor.set(1, 0.5);
-    goalValueText.x = goalBaseWidth - 28;
-    goalValueText.y = goalLabelText.y;
-    goalPanelContainer.addChild(goalValueText);
 
     return {
         header,
@@ -449,7 +415,7 @@ export function buildMobileLevelHeader({ layout, level, theme, textures, score }
             header,
             levelValueText,
             cornerLevelText,
-            goalValueText,
+
             heartsContainer,
             heartSize: 34,
             heartGap: 8,
@@ -460,7 +426,7 @@ export function buildMobileLevelHeader({ layout, level, theme, textures, score }
     };
 }
 
-export function updateLevelHeaderUI({ currentGameUI, score, life, levelData, textures, theme }) {
+export function updateLevelHeaderUI({ currentGameUI, life, levelData, textures, theme }) {
     if (!currentGameUI) return;
 
     if (currentGameUI.mode === 'mobile-landscape') {
@@ -471,9 +437,6 @@ export function updateLevelHeaderUI({ currentGameUI, score, life, levelData, tex
             currentGameUI.cornerLevelText.text = `УРОВЕНЬ ${levelData.id}`;
         }
 
-        if (currentGameUI.goalValueText) {
-            currentGameUI.goalValueText.text = String(Math.max(0, levelData.goalBugCount - score));
-        }
 
         if (currentGameUI.heartsContainer) {
             currentGameUI.heartsContainer.removeChildren();
@@ -509,9 +472,6 @@ export function updateLevelHeaderUI({ currentGameUI, score, life, levelData, tex
         return;
     }
 
-    if (currentGameUI.progText) {
-        currentGameUI.progText.text = `${score}/${levelData.goalBugCount}`;
-    }
 
     currentGameUI.hearts.forEach((heart, index) => {
         const isAlive = index < life;

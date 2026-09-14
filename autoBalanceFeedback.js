@@ -1,3 +1,4 @@
+import { getBugBaseBalance } from './bug-config.js';
 import levels from './levels.js';
 
 // =========================
@@ -27,9 +28,9 @@ const COSTS = {
 // =========================
 
 function calculateLevel(level) {
-  const goal = level.goalBugCount;
+  const durationMs = level.durationSeconds * 1000;
 
-  const weights = level.spawnWeights ?? {};
+  const weights = level.params?.spawnWeights ?? {};
 
   const totalWeight = Object.values(weights)
     .reduce((a, b) => a + b, 0);
@@ -39,7 +40,8 @@ function calculateLevel(level) {
 
   for (const [type, weight] of Object.entries(weights)) {
     const p = weight / totalWeight;
-    const expected = p * goal;
+    const interval = getBugBaseBalance(type).spawnInterval * (level.params?.spawnMultiplier || 1);
+    const expected = p * durationMs / interval;
     const cost = COSTS[type] ?? 1;
 
     const value = expected * cost;

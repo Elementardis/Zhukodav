@@ -82,6 +82,8 @@ export async function createLevelAttempt(data) {
 
     targetsCompleted: 0,
     targetsRequired: data.targetsRequired,
+    objectiveType: data.objectiveType ?? 'bugs',
+    bugsRepelled: data.bugsRepelled ?? 0,
 
     lifeLeft: data.lifeLeft,
 
@@ -114,6 +116,8 @@ export async function finishLevelAttempt(attemptId, result) {
 
     targetsCompleted: result.targetsCompleted,
     targetsRequired: result.targetsRequired,
+    objectiveType: result.objectiveType ?? 'bugs',
+    bugsRepelled: result.bugsRepelled ?? 0,
 
     lifeLeft: result.lifeLeft,
 

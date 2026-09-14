@@ -1,7 +1,7 @@
 const levels = [
   {
     id: 1,
-    goalBugCount: 10,
+    durationSeconds: 10,
     lifeCount: 5,
     params: {
       maxObjects: 3,
@@ -14,7 +14,7 @@ const levels = [
   },
   {
     id: 2,
-    goalBugCount: 15,
+    durationSeconds: 15,
     lifeCount: 5,
     params: {
       maxObjects: 3,
@@ -27,7 +27,7 @@ const levels = [
   },
   {
     id: 3,
-    goalBugCount: 20,
+    durationSeconds: 20,
     lifeCount: 5,
     params: {
       maxObjects: 3,
@@ -45,7 +45,7 @@ const levels = [
   },
   {
     id: 4,
-    goalBugCount: 30,
+    durationSeconds: 30,
     lifeCount: 5,
     params: {
       maxObjects: 4,
@@ -59,7 +59,7 @@ const levels = [
   },
   {
     id: 5,
-    goalBugCount: 20,
+    durationSeconds: 20,
     lifeCount: 7,
     params: {
       maxObjects: 3,
@@ -76,7 +76,7 @@ const levels = [
   },
   {
     id: 6,
-    goalBugCount: 45,
+    durationSeconds: 45,
     lifeCount: 7,
     params: {
       maxObjects: 4,
@@ -90,7 +90,7 @@ const levels = [
   },
   {
     id: 7,
-    goalBugCount: 30,
+    durationSeconds: 30,
     lifeCount: 7,
     params: {
       maxObjects: 4,
@@ -105,7 +105,7 @@ const levels = [
   },
   {
     id: 8,
-    goalBugCount: 45,
+    durationSeconds: 45,
     lifeCount: 7,
     params: {
       maxObjects: 5,
@@ -124,7 +124,7 @@ const levels = [
   },
   {
     id: 9,
-    goalBugCount: 45,
+    durationSeconds: 45,
     lifeCount: 7,
     params: {
       maxObjects: 5,
@@ -139,7 +139,7 @@ const levels = [
   },
   {
     id: 10,
-    goalBugCount: 20,
+    durationSeconds: 20,
     lifeCount: 7,
     params: {
       maxObjects: 4,
@@ -153,7 +153,7 @@ const levels = [
   },
   {
     id: 11,
-    goalBugCount: 15,
+    durationSeconds: 15,
     lifeCount: 7,
     params: {
       maxObjects: 3,
@@ -171,7 +171,7 @@ const levels = [
   },
   {
     id: 12,
-    goalBugCount: 30,
+    durationSeconds: 30,
     lifeCount: 7,
     params: {
       maxObjects: 3,
@@ -185,7 +185,7 @@ const levels = [
   },
   {
     id: 13,
-    goalBugCount: 35,
+    durationSeconds: 35,
     lifeCount: 7,
     params: {
       maxObjects: 4,
@@ -200,7 +200,7 @@ const levels = [
   },
   {
     id: 14,
-    goalBugCount: 45,
+    durationSeconds: 45,
     lifeCount: 7,
     params: {
       maxObjects: 3,
@@ -216,7 +216,7 @@ const levels = [
   },
   {
     id: 15,
-    goalBugCount: 50,
+    durationSeconds: 50,
     lifeCount: 7,
     params: {
       maxObjects: 4,
@@ -232,7 +232,7 @@ const levels = [
   },
   {
     id: 16,
-    goalBugCount: 30,
+    durationSeconds: 30,
     lifeCount: 8,
     params: {
       maxObjects: 5,
@@ -250,7 +250,7 @@ const levels = [
   },
   {
     id: 17,
-    goalBugCount: 40,
+    durationSeconds: 40,
     lifeCount: 8,
     params: {
       maxObjects: 4,
@@ -265,7 +265,7 @@ const levels = [
   },
   {
     id: 18,
-    goalBugCount: 45,
+    durationSeconds: 45,
     lifeCount: 8,
     params: {
       maxObjects: 3,
@@ -279,7 +279,7 @@ const levels = [
   },
   {
     id: 19,
-    goalBugCount: 50,
+    durationSeconds: 50,
     lifeCount: 8,
     params: {
       maxObjects: 4,
@@ -295,7 +295,7 @@ const levels = [
   },
   {
     id: 20,
-    goalBugCount: 50,
+    durationSeconds: 50,
     lifeCount: 8,
     params: {
       maxObjects: 4,
@@ -314,7 +314,7 @@ const levels = [
   },
   {
     id: 21,
-    goalBugCount: 55,
+    durationSeconds: 55,
     lifeCount: 8,
     params: {
       maxObjects: 5,
@@ -331,7 +331,7 @@ const levels = [
   },
   {
     id: 22,
-    goalBugCount: 55,
+    durationSeconds: 55,
     lifeCount: 8,
     params: {
       maxObjects: 4,
@@ -347,7 +347,7 @@ const levels = [
   },
   {
     id: 23,
-    goalBugCount: 55,
+    durationSeconds: 55,
     lifeCount: 8,
     params: {
       maxObjects: 4,
@@ -362,7 +362,7 @@ const levels = [
   },
   {
     id: 24,
-    goalBugCount: 55,
+    durationSeconds: 55,
     lifeCount: 8,
     params: {
       maxObjects: 4,
@@ -378,7 +378,7 @@ const levels = [
   },
   {
     id: 25,
-    goalBugCount: 55,
+    durationSeconds: 55,
     lifeCount: 8,
     params: {
       maxObjects: 5,
@@ -394,7 +394,7 @@ const levels = [
   },
   {
     id: 26,
-    goalBugCount: 50,
+    durationSeconds: 50,
     lifeCount: 10,
     params: {
       maxObjects: 3,
@@ -410,7 +410,7 @@ const levels = [
   },
   {
     id: 27,
-    goalBugCount: 50,
+    durationSeconds: 50,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -427,7 +427,7 @@ const levels = [
   },
   {
     id: 28,
-    goalBugCount: 50,
+    durationSeconds: 50,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -448,7 +448,7 @@ const levels = [
   },
   {
     id: 29,
-    goalBugCount: 50,
+    durationSeconds: 50,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -465,7 +465,7 @@ const levels = [
   },
   {
     id: 30,
-    goalBugCount: 45,
+    durationSeconds: 45,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -481,7 +481,7 @@ const levels = [
   },
   {
     id: 31,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -496,7 +496,7 @@ const levels = [
   },
   {
     id: 32,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -512,7 +512,7 @@ const levels = [
   },
   {
     id: 33,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -530,7 +530,7 @@ const levels = [
   },
   {
     id: 34,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -544,7 +544,7 @@ const levels = [
   },
   {
     id: 35,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -560,7 +560,7 @@ const levels = [
   },
   {
     id: 36,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -576,7 +576,7 @@ const levels = [
   },
   {
     id: 37,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -593,7 +593,7 @@ const levels = [
   },
   {
     id: 38,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -609,7 +609,7 @@ const levels = [
   },
   {
     id: 39,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -628,7 +628,7 @@ const levels = [
   },
   {
     id: 40,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 3,
@@ -644,7 +644,7 @@ const levels = [
   },
   {
     id: 41,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -660,7 +660,7 @@ const levels = [
   },
   {
     id: 42,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -676,7 +676,7 @@ const levels = [
   },
   {
     id: 43,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -694,7 +694,7 @@ const levels = [
   },
   {
     id: 44,
-    goalBugCount: 45,
+    durationSeconds: 45,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -709,7 +709,7 @@ const levels = [
   },
   {
     id: 45,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -725,7 +725,7 @@ const levels = [
   },
   {
     id: 46,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -741,7 +741,7 @@ const levels = [
   },
   {
     id: 47,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -757,7 +757,7 @@ const levels = [
   },
   {
     id: 48,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -773,7 +773,7 @@ const levels = [
   },
   {
     id: 49,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 4,
@@ -790,7 +790,7 @@ const levels = [
   },
   {
     id: 50,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -813,7 +813,7 @@ const levels = [
   },
   {
     id: 51,
-    goalBugCount: 30,
+    durationSeconds: 30,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -830,7 +830,7 @@ const levels = [
   },
   {
     id: 52,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -844,7 +844,7 @@ const levels = [
   },
   {
     id: 53,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -859,7 +859,7 @@ const levels = [
   },
   {
     id: 54,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 3,
@@ -876,7 +876,7 @@ const levels = [
   },
   {
     id: 55,
-    goalBugCount: 60,
+    durationSeconds: 60,
     lifeCount: 10,
     params: {
       maxObjects: 3,
@@ -894,7 +894,7 @@ const levels = [
   },
   {
     id: 56,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -907,7 +907,7 @@ const levels = [
   },
   {
     id: 57,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -920,7 +920,7 @@ const levels = [
   },
   {
     id: 58,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -933,7 +933,7 @@ const levels = [
   },
   {
     id: 59,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -946,7 +946,7 @@ const levels = [
   },
   {
     id: 60,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -959,7 +959,7 @@ const levels = [
   },
   {
     id: 61,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -976,7 +976,7 @@ const levels = [
   },
   {
     id: 62,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -989,7 +989,7 @@ const levels = [
   },
   {
     id: 63,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -1002,7 +1002,7 @@ const levels = [
   },
   {
     id: 64,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -1015,7 +1015,7 @@ const levels = [
   },
   {
     id: 65,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -1028,7 +1028,7 @@ const levels = [
   },
   {
     id: 66,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -1041,7 +1041,7 @@ const levels = [
   },
   {
     id: 67,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -1054,7 +1054,7 @@ const levels = [
   },
   {
     id: 68,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -1067,7 +1067,7 @@ const levels = [
   },
   {
     id: 69,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -1080,7 +1080,7 @@ const levels = [
   },
   {
     id: 70,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -1093,7 +1093,7 @@ const levels = [
   },
   {
     id: 71,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -1106,7 +1106,7 @@ const levels = [
   },
   {
     id: 72,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -1119,7 +1119,7 @@ const levels = [
   },
   {
     id: 73,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -1132,7 +1132,7 @@ const levels = [
   },
   {
     id: 74,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -1145,7 +1145,7 @@ const levels = [
   },
   {
     id: 75,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 6,
@@ -1158,7 +1158,7 @@ const levels = [
   },
   {
     id: 76,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -1171,7 +1171,7 @@ const levels = [
   },
   {
     id: 77,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -1184,7 +1184,7 @@ const levels = [
   },
   {
     id: 78,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -1197,7 +1197,7 @@ const levels = [
   },
   {
     id: 79,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 5,
@@ -1210,7 +1210,7 @@ const levels = [
   },
   {
     id: 80,
-    goalBugCount: 75,
+    durationSeconds: 75,
     lifeCount: 10,
     params: {
       maxObjects: 6,

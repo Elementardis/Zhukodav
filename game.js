@@ -49,7 +49,7 @@ const NEAT_WAVE_COLORS = [0xFDFDFD, 0xEAEAEA, 0xD8DDE3, 0xC8D0D8];
 const CHAMELEON_EFFECT_DURATION_MS = 5000;
 const CHAMELEON_WAVE_COLORS = [0xFFB7C5, 0xFFD7A8, 0xFFF0A6, 0xBAF2BB, 0xB8E7FF, 0xD8C4FF];
 const DEBUG_SHOW_SPAWN_ZONES = false;
-const BALANCE_VERSION = '1';
+const BALANCE_VERSION = '2-survival';
 const AUDIO_PATHS = {
     bugClick: 'sounds/bug-click.mp3',
     wrongBugClick: 'sounds/wrong-bug-click.mp3',
@@ -61,17 +61,17 @@ const AUDIO_PATHS = {
     uiClick: 'sounds/ui-click.mp3'
 };
 const AUDIO_VOLUME = {
-    bugClick: 0.8,
+    bugClick: 0.92,
     wrongBugClick: 0.8,
-    bombClick: 0.9,
-    levelMusic: 0.35,
+    bombClick: 0.5,
+    levelMusic: 0.3,
     menuMusic: 0.32,
-    victory: 0.85,
-    defeat: 0.85,
-    uiClick: 0.65
+    victory: 0.7225,
+    defeat: 0.7225,
+    uiClick: 0.95
 };
 const AUDIO_DUCKING_MULTIPLIER = 0.35;
-const FROZEN_MUSIC_PLAYBACK_RATE = 0.82;
+const FROZEN_MUSIC_PLAYBACK_RATE = 0.9;
 const CHAMELEON_MUSIC_INTERVAL_MS = 120;
 const NEAT_MUSIC_SWEEP_MS = 900;
 const HEALER_MUSIC_GLOW_MS = 700;
@@ -100,6 +100,9 @@ let levelData;
 let objectQueue = [];
 let isPaused = false;
 let spawnTimer = null;
+let levelTimeRemainingMs = 0;
+let levelCountdownTicker = null;
+let levelCountdownLastAt = null;
 let score = 0;
 let life = 0;
 let orientationPauseActive = false;
@@ -151,7 +154,7 @@ function getEffectiveAudioVolume(name) {
 function applyAudioVolumes() {
     soundEffects.updateVolumes();
     Object.entries(audioCache).forEach(([name, audio]) => {
-        audio.volume = getEffectiveAudioVolume(name);
+        audio.volume = getEffectiveAudioVolume(name) * (audio._fadeProgress ?? 1);
     });
 }
 
@@ -256,7 +259,18 @@ function playSound(name) {
 
     audio.pause();
     audio.currentTime = 0;
-    audio.volume = getEffectiveAudioVolume(name);
+    gsap.killTweensOf(audio);
+    const fadeIn = name === 'victory' || name === 'defeat';
+    audio._fadeProgress = fadeIn ? 0 : 1;
+    audio.volume = getEffectiveAudioVolume(name) * audio._fadeProgress;
+    if (fadeIn) {
+        gsap.to(audio, {
+            _fadeProgress: 1,
+            duration: 0.8,
+            ease: 'none',
+            onUpdate: () => { audio.volume = getEffectiveAudioVolume(name) * audio._fadeProgress; }
+        });
+    }
     audio.play().catch(() => {});
 }
 
@@ -1306,6 +1320,7 @@ function createCoverBackground(slotName, width, height, fallbackColor) {
 function pauseGameplayForOverlay() {
     if (orientationPauseActive || isPaused || introActive || levelEnded) return;
 
+    levelCountdownLastAt = null;
     orientationPauseActive = true;
     clearSpawnTimer();
     pauseLevelMusic();
@@ -2190,7 +2205,9 @@ window.addEventListener('keyup', (e) => {
 window.addEventListener('touchcancel', clearActiveColor);
 window.addEventListener('blur', clearActiveColor);
 document.addEventListener('visibilitychange', () => {
+    levelCountdownLastAt = null;
     if (document.hidden) {
+        if (levelCountdownTicker && !isPaused && !introActive && !orientationPauseActive && !levelEnded) showPausePopup();
         clearActiveColor();
         pauseLevelMusic();
         pauseMenuMusic();
@@ -2330,6 +2347,7 @@ function continueGameFromProgress() {
 }
 
 function showProgressScreen() {
+    stopLevelCountdown();
     clearSpawnTimer();
     clearGameplayMusicEffects();
     startMenuMusic();
@@ -2380,6 +2398,7 @@ function showProgressScreen() {
 }
 
 function showLevelSelect() {
+    stopLevelCountdown();
     clearSpawnTimer();
     clearGameplayMusicEffects();
     startMenuMusic();
@@ -2821,6 +2840,7 @@ function showLevelEntryPopup(levelIndex) {
 
 // запускаем уровень
 function startLevel(index) {
+    stopLevelCountdown();
   // Очищаем предыдущий уровень: останавливаем интервалы и таймеры
   cleanupLevelSelectScroll();
   clearSpawnTimer();
@@ -2855,6 +2875,7 @@ function startLevel(index) {
 
   score = 0;
   life = levelData.lifeCount;
+  levelTimeRemainingMs = levelData.durationSeconds * 1000;
 
   const { fieldWrapper, playField } = setupPlayArea();
   playArea = playField;
@@ -2864,6 +2885,7 @@ function startLevel(index) {
 
     // реальный старт спавна
   const startSpawning = () => {
+    startLevelCountdown();
     beginLevelAttempt();
     startLevelMusic();
     prepareObjectQueue();
@@ -2895,11 +2917,34 @@ function setupPlayArea() {
         type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_')
     );
 
-    if (gameLayout.mode === 'mobile-landscape') {
-        return setupMobileLandscapePlayArea(gameLayout, coloredTypes);
-    }
+    const result = gameLayout.mode === 'mobile-landscape'
+        ? setupMobileLandscapePlayArea(gameLayout, coloredTypes)
+        : setupDesktopPlayArea(gameLayout, coloredTypes);
+    const field = result.playField;
+    const timer = new PIXI.Text('', {
+        fontFamily: 'Arial', fontWeight: '900', fontSize: 100,
+        fill: 0xFFFFFF, stroke: 0x78543D, strokeThickness: 2
+    });
+    timer.name = 'fieldCountdown';
+    timer.anchor.set(0.5);
+    timer.position.set(field.width / 2, field.height / 2);
+    timer.alpha = 0.4;
+    timer.interactive = false;
+    timer.eventMode = 'none';
+    timer._targetHeight = field.height * 0.25;
+    currentGameUI.fieldCountdown = timer;
+    updateFieldCountdown();
+    // The field background is already built; bugs are appended above this text.
+    field.addChild(timer);
+    return result;
+}
 
-    return setupDesktopPlayArea(gameLayout, coloredTypes);
+function updateFieldCountdown() {
+    const timer = currentGameUI.fieldCountdown;
+    if (!timer) return;
+    timer.text = String(Math.ceil(levelTimeRemainingMs / 1000));
+    timer.scale.set(1);
+    timer.scale.set(timer._targetHeight / timer.height);
 }
 
 function setupDesktopPlayArea(layout, coloredTypes) {
@@ -3185,13 +3230,10 @@ function buildTopHud(layout, level) {
 
     const pauseSize = Math.max(56, Math.min(86, layout.hud.height * 0.74));
     const pauseX = layout.hud.width - pauseSize - Math.max(18, layout.hud.width * 0.018);
-    const goalBadgeW = Math.max(178, Math.min(250, layout.hud.width * 0.19));
-    const goalBadgeH = Math.max(50, Math.min(70, layout.hud.height * 0.58));
-    const goalBadgeX = pauseX - goalBadgeW - Math.max(24, layout.hud.width * 0.045);
 
     const hearts = [];
     const heartsRowX = livesLabel.x + livesLabel.width + 16;
-    const maxHeartsWidth = Math.max(0, goalBadgeX - heartsRowX - 18);
+    const maxHeartsWidth = Math.max(0, pauseX - heartsRowX - 24);
     let heartSize = Math.max(24, Math.min(44, layout.hud.height * 0.36));
     const heartCount = Math.max(1, level.lifeCount);
     const naturalHeartsWidth = level.lifeCount * heartSize + Math.max(0, level.lifeCount - 1) * HEART_GAP;
@@ -3233,42 +3275,11 @@ function buildTopHud(layout, level) {
     pauseButton.y = (layout.hud.height - pauseSize) / 2;
     hudContainer.addChild(pauseButton);
 
-    const customGoalBadge = createUIAssetSprite('game_goal_badge', goalBadgeW, goalBadgeH, { contain: false });
-    const goalBadge = new PIXI.Container();
-    if (customGoalBadge) {
-        goalBadge.addChild(customGoalBadge);
-    } else {
-        goalBadge.addChild(createRoundedLabel('', {
-            width: goalBadgeW,
-            height: goalBadgeH,
-            radius: Math.max(20, goalBadgeH * 0.42),
-            fill: 0xFFF6E8,
-            borderColor: 0xE8A24A,
-            borderWidth: 4
-        }));
-    }
-    goalBadge.x = goalBadgeX;
-    goalBadge.y = (layout.hud.height - goalBadgeH) / 2;
-
-    const goalText = new PIXI.Text(`\u0426\u0415\u041b\u042c ${level.goalBugCount}`, {
-        fontSize: Math.max(20, Math.min(33, goalBadgeH * 0.46)),
-        fill: 0x7A461F,
-        fontWeight: '900',
-        fontFamily: 'Arial',
-        stroke: 0xFFFFFF,
-        strokeThickness: 3
-    });
-    goalText.anchor.set(0.5);
-    goalText.x = goalBadgeW / 2;
-    goalText.y = goalBadgeH / 2;
-    goalText.name = 'progText';
-    goalBadge.addChild(goalText);
-    hudContainer.addChild(goalBadge);
 
     currentGameUI = {
         mode: 'desktop-wide',
         header: hudContainer,
-        progText: goalText,
+
         hearts
     };
     updateLevelHeader(score, life);
@@ -3745,10 +3756,8 @@ function buildMobilePauseButton(layout) {
 }
 
 function updateLevelHeader(score, life) {
-    updateLevelHeaderUI({ currentGameUI, score, life, levelData, textures: TEXTURES, theme: THEME });
-    if (currentGameUI?.mode === 'desktop-wide' && currentGameUI.progText) {
-        currentGameUI.progText.text = `\u0426\u0415\u041b\u042c ${Math.max(0, levelData.goalBugCount - score)}`;
-    }
+    updateLevelHeaderUI({ currentGameUI, life, levelData, textures: TEXTURES, theme: THEME });
+    updateFieldCountdown();
 }
 
 // Функция для взвешенного случайного выбора
@@ -3801,7 +3810,7 @@ function prepareObjectQueue() {
         unkillableWeights[type] = spawnWeights[type];
     }
 
-    const minKillableCount = levelData.goalBugCount * 3;
+    const minKillableCount = 100; // Refillable batch; spawning lasts until the timer ends.
     let killableCount = 0;
 
     while (killableCount < minKillableCount) {
@@ -4460,9 +4469,7 @@ function spawnObject() {
                     score += getObjectScoreValue(data);
                     animateRemoveObject(container, () => {
                         updateUI();
-                        if (score >= levelData.goalBugCount) {
-                            endGame(true);
-                        } else if (life <= 0) {
+                        if (life <= 0) {
                             endGame(false);
                         }
                     });
@@ -4481,9 +4488,7 @@ function spawnObject() {
                     score += getObjectScoreValue(data);
                     animateRemoveObject(container, () => {
                         updateUI();
-                        if (score >= levelData.goalBugCount) {
-                            endGame(true);
-                        } else if (life <= 0) {
+                        if (life <= 0) {
                             endGame(false);
                         }
                     });
@@ -4518,9 +4523,7 @@ function spawnObject() {
                 score += getObjectScoreValue(data);
                 animateRemoveObject(container, () => {
                     updateUI();
-                    if (score >= levelData.goalBugCount) {
-                        endGame(true);
-                    } else if (life <= 0) {
+                    if (life <= 0) {
                         endGame(false);
                     }
                 });
@@ -4541,9 +4544,7 @@ function spawnObject() {
             gsap.delayedCall(0.12, () => {
                 animateRemoveObject(container, () => {
                     updateUI();
-                    if (score >= levelData.goalBugCount) {
-                        endGame(true);
-                    } else if (life <= 0) {
+                    if (life <= 0) {
                         endGame(false);
                     }
                 });
@@ -4561,9 +4562,7 @@ function spawnObject() {
             gsap.delayedCall(0.12, () => {
                 animateRemoveObject(container, () => {
                     updateUI();
-                    if (score >= levelData.goalBugCount) {
-                        endGame(true);
-                    } else if (life <= 0) {
+                    if (life <= 0) {
                         endGame(false);
                     }
                 });
@@ -4579,9 +4578,7 @@ function spawnObject() {
             showNeatWave(container.x, container.y);
             clearFieldWithNeat(container);
             updateUI();
-            if (score >= levelData.goalBugCount) {
-                endGame(true);
-            } else if (life <= 0) {
+            if (life <= 0) {
                 endGame(false);
             }
         } else if (type === 'healer') {
@@ -4601,9 +4598,7 @@ function spawnObject() {
             animateHealingHeart(container, healTargetPoint, () => {
                 healPlayer(data.healAmount);
                 updateUI();
-                if (score >= levelData.goalBugCount) {
-                    endGame(true);
-                } else if (life <= 0) {
+                if (life <= 0) {
                     endGame(false);
                 }
             });
@@ -4615,9 +4610,7 @@ function spawnObject() {
                 score += getObjectScoreValue(data);
                 animateRemoveObject(container, () => {
                     updateUI();
-                    if (score >= levelData.goalBugCount) {
-                        endGame(true);
-                    } else if (life <= 0) {
+                    if (life <= 0) {
                         endGame(false);
                     }
                 });
@@ -4698,12 +4691,44 @@ function showExplosion(x, y) {
 }
 
 // обновление UI
+function stopLevelCountdown() {
+    if (levelCountdownTicker) app.ticker.remove(levelCountdownTicker);
+    levelCountdownTicker = null;
+    levelCountdownLastAt = null;
+}
+
+function tickLevelCountdown(now = performance.now()) {
+    if (levelEnded || isPaused || introActive || orientationPauseActive || document.hidden || getViewportMode() === 'mobile-portrait') {
+        levelCountdownLastAt = null;
+        return;
+    }
+    const previousSeconds = Math.ceil(levelTimeRemainingMs / 1000);
+    if (levelCountdownLastAt !== null) {
+        levelTimeRemainingMs = Math.max(0, levelTimeRemainingMs - Math.max(0, now - levelCountdownLastAt));
+    }
+    levelCountdownLastAt = now;
+    if (previousSeconds !== Math.ceil(levelTimeRemainingMs / 1000)) updateUI();
+    // Life takes priority, including damage whose removal animation is still running.
+    if (life <= 0) endGame(false);
+    else if (levelTimeRemainingMs === 0) endGame(true);
+}
+
+function startLevelCountdown() {
+    stopLevelCountdown();
+    levelCountdownLastAt = performance.now();
+    levelCountdownTicker = () => tickLevelCountdown();
+    app.ticker.add(levelCountdownTicker);
+    updateUI();
+}
+
 function updateUI() {
     updateLevelHeader(score, life);
 }
 
 // конец игры
 function endGame(won) {
+    if (levelEnded) return;
+    stopLevelCountdown();
     clearSpawnTimer();
     clearSpawnResumeDelay();
     finishFrozenEffect();
@@ -4783,7 +4808,9 @@ function beginLevelAttempt() {
     const spawnWeights = getLevelSpawnWeights(levelData);
     currentAttemptPromise = createLevelAttempt({
         levelId: levelData.id,
-        targetsRequired: levelData.goalBugCount,
+        targetsRequired: levelData.durationSeconds,
+        objectiveType: 'survival',
+        bugsRepelled: score,
         lifeLeft: levelData.lifeCount,
         bugTypes: getLevelBugTypes(levelData),
         spawnWeights,
@@ -4815,8 +4842,10 @@ function closeLevelAttempt(status, exitReason = null) {
     const result = {
         status,
         exitReason,
-        targetsCompleted: score,
-        targetsRequired: levelData.goalBugCount,
+        targetsCompleted: (levelData.durationSeconds * 1000 - levelTimeRemainingMs) / 1000,
+        targetsRequired: levelData.durationSeconds,
+        objectiveType: 'survival',
+        bugsRepelled: score,
         lifeLeft: life,
         durationMs: Date.now() - currentAttemptStartedAt
     };
@@ -5542,6 +5571,7 @@ function showLosePopup(currentLevelIndex) {
 function showPausePopup() {
     if (isPaused) return; // Prevent multiple popups
     playUiClick();
+    levelCountdownLastAt = null;
     isPaused = true;
     pauseLevelMusic();
     
@@ -5825,6 +5855,7 @@ function animateRemoveObject(container, onAfterRemove) {
 }
 
 function resumeGame() {
+    levelCountdownLastAt = performance.now();
     startLevelMusic();
 
     // Resume spawn timer using the next queued bug balance.

@@ -65,10 +65,13 @@ export function createSoundEffects(paths, getVolume) {
         const source = context.createBufferSource();
         const gain = context.createGain();
         source.buffer = buffers.get(name);
-        gain.gain.value = getVolume(name);
+        const fadeDuration = name === 'victory' || name === 'defeat' ? 0.8 : 0;
+        const startedAt = context.currentTime;
+        gain.gain.setValueAtTime(fadeDuration ? 0 : getVolume(name), startedAt);
+        if (fadeDuration) gain.gain.linearRampToValueAtTime(getVolume(name), startedAt + fadeDuration);
         source.connect(gain);
         gain.connect(context.destination);
-        const voice = { source, gain };
+        const voice = { source, gain, startedAt, fadeDuration };
         active.set(name, voice);
         source.onended = () => {
             source.disconnect();
@@ -83,7 +86,13 @@ export function createSoundEffects(paths, getVolume) {
         preload,
         play,
         updateVolumes() {
-            active.forEach(({ gain }, name) => { gain.gain.value = getVolume(name); });
+            active.forEach(({ gain, startedAt, fadeDuration }, name) => {
+                const now = context.currentTime;
+                const progress = fadeDuration ? Math.min(1, Math.max(0, (now - startedAt) / fadeDuration)) : 1;
+                gain.gain.cancelScheduledValues(now);
+                gain.gain.setValueAtTime(getVolume(name) * progress, now);
+                if (progress < 1) gain.gain.linearRampToValueAtTime(getVolume(name), startedAt + fadeDuration);
+            });
         },
         stopAll() { [...active.keys()].forEach(stop); }
     };

@@ -107,7 +107,7 @@ http://localhost:8000
 const levels = [
   {
     id: 1,
-    goalBugCount: 10,
+    durationSeconds: 10,
     lifeCount: 5,
     params: {
       maxObjects: 3,
@@ -126,7 +126,7 @@ export default levels;
 Поля уровня:
 
 - `id` - номер уровня.
-- `goalBugCount` - сколько очков/жуков нужно набрать для победы.
+- `durationSeconds` - длительность выживания в секундах. Таймер заменяет счётчик целей; пауза, интро и смена ориентации не расходуют время.
 - `lifeCount` - стартовое количество жизней.
 - `params.maxObjects` - максимальное количество активных объектов на поле.
 - `params.lifetimeMultiplier` - множитель времени жизни объектов.
@@ -215,7 +215,7 @@ runtime spawnInterval = base spawnInterval / level spawnMultiplier
 13. `spawnObject()` создает Pixi-контейнер, добавляет спрайт, счетчик кликов, индикатор жизни и обработчик `pointerdown`.
 14. `startLifetimeCheck()` и ticker индикатора времени отслеживают истечение времени жизни.
 15. При правильном клике объект удаляется, начисляется score и обновляется UI.
-16. Уровень завершается победой при `score >= goalBugCount`, поражением при `life <= 0`.
+16. Уровень завершается победой при истечении обратного отсчёта и `life > 0`, поражением при `life <= 0`. Очки за жуков сохраняются для статистики. Очередь спавна пополняется до конца отсчёта.
 17. Кнопки меню после уровня и из паузы возвращают игрока на экран прогресса.
 
 ## 7. Типы объектов
@@ -405,7 +405,7 @@ runtime spawnInterval = base spawnInterval / level spawnMultiplier
 ```js
 {
   id: 81,
-  goalBugCount: 75,
+  durationSeconds: 75,
   lifeCount: 10,
   params: {
     maxObjects: 5,
@@ -467,7 +467,7 @@ runtime spawnInterval = base spawnInterval / level spawnMultiplier
 - пауза -> заново: `status = exit`, `exitReason = restart`;
 - пауза -> меню: `status = exit`, `exitReason = pause_menu`.
 
-При закрытии значения `score`, `life`, `levelData.goalBugCount` и `durationMs` снимаются синхронно до асинхронной отправки в Firebase, чтобы следующий уровень не перезаписал результат текущей попытки.
+При закрытии значения `score`, `life`, `levelData.durationSeconds` и `durationMs` снимаются синхронно до асинхронной отправки в Firebase, чтобы следующий уровень не перезаписал результат текущей попытки.
 
 ## 18. Проверка изменений
 

@@ -60,6 +60,13 @@
 
   <div class="toolbar">
     <label>
+      Правила
+      <select id="objectiveFilter">
+        <option value="survival">Выживание (цели в секундах)</option>
+        <option value="bugs">Прежние (цели в жуках)</option>
+      </select>
+    </label>
+    <label>
       Версия баланса
       <select id="balanceFilter"><option value="all">Все</option></select>
     </label>
@@ -157,7 +164,7 @@
     return rawAttempts.filter(a => {
       const okBalance = balance === 'all' || String(a.balanceVersion ?? 'unknown') === balance;
       const okStatus = status === 'all' || a.status === status;
-      return okBalance && okStatus;
+      return okBalance && okStatus && (a.objectiveType ?? 'bugs') === $('objectiveFilter').value;
     });
   }
 
@@ -326,7 +333,7 @@
     const rows = filteredAttempts;
     const cols = [
       'id','playerId','playerPt','sessionId','levelId','attemptNo','status','exitReason',
-      'targetsCompleted','targetsRequired','lifeLeft','durationMs','balanceVersion',
+      'targetsCompleted','targetsRequired','objectiveType','bugsRepelled','lifeLeft','durationMs','balanceVersion',
       'bugTypes','spawnWeights','levelParams','startedAt','finishedAt'
     ];
     const lines = [cols.join(',')];
@@ -363,6 +370,7 @@
   }
 
   $('balanceFilter').addEventListener('change', render);
+  $('objectiveFilter').addEventListener('change', render);
   $('statusFilter').addEventListener('change', render);
   $('reloadBtn').addEventListener('click', load);
   $('csvBtn').addEventListener('click', downloadCsv);
