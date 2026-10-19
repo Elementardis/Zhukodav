@@ -38,7 +38,7 @@ export const BUG_BALANCE = {
     scoreValue: 1,
     spawnZone: 'right',
   },
-  "coloredBug_blue": {
+  "coloredBug_purple": {
     lifetime: 2500,
     spawnInterval: 500,
     clicks: 1,
@@ -66,7 +66,7 @@ export const BUG_BALANCE = {
     scoreValue: 1,
     spawnZone: 'right',
   },
-  "fatColoredBug_blue": {
+  "fatColoredBug_purple": {
     lifetime: 3000,
     spawnInterval: 500,
     clicks: 3,

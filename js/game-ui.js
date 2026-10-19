@@ -30,7 +30,6 @@ export function getUsedLevelColors(level, colorButtonSlots) {
 }
 
 export function getButtonTextureName(color) {
-    if (color === 'blue') return 'button_purple';
     return `button_${color}`;
 }
 

@@ -1,0 +1,136 @@
+{
+  "canvas": {
+    "width": 1920,
+    "height": 1080
+  },
+  "anchor": "top-left",
+  "coordinate_system": "pixels; origin top-left",
+  "layers": [
+    {
+      "name": "01_background",
+      "zIndex": 0,
+      "full_canvas": "layers/01_background.png",
+      "asset": "assets/01_background.png",
+      "x": 0,
+      "y": 0,
+      "width": 1920,
+      "height": 1080,
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "02_decor",
+      "zIndex": 1,
+      "full_canvas": "layers/02_decor.png",
+      "asset": "assets/02_decor.png",
+      "x": 65,
+      "y": 0,
+      "width": 1635,
+      "height": 430,
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "03_banner",
+      "zIndex": 2,
+      "full_canvas": "layers/03_banner.png",
+      "asset": "assets/03_banner.png",
+      "x": 510,
+      "y": 0,
+      "width": 1000,
+      "height": 340,
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "04_mascot",
+      "zIndex": 3,
+      "full_canvas": "layers/04_mascot.png",
+      "asset": "assets/04_mascot.png",
+      "x": 125,
+      "y": 145,
+      "width": 530,
+      "height": 865,
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "05_table",
+      "zIndex": 4,
+      "full_canvas": "layers/05_table.png",
+      "asset": "assets/05_table.png",
+      "x": 248,
+      "y": 176,
+      "width": 1672,
+      "height": 904,
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "06_dish_cake",
+      "zIndex": 5,
+      "full_canvas": "layers/06_dish_cake.png",
+      "asset": "assets/06_dish_cake.png",
+      "x": 760,
+      "y": 388,
+      "width": 530,
+      "height": 433,
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "07_button_settings",
+      "zIndex": 6,
+      "full_canvas": "layers/07_button_settings.png",
+      "asset": "assets/07_button_settings.png",
+      "x": 1700,
+      "y": 68,
+      "width": 160,
+      "height": 150,
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "08_button_dishes",
+      "zIndex": 7,
+      "full_canvas": "layers/08_button_dishes.png",
+      "asset": "assets/08_button_dishes.png",
+      "x": 1550,
+      "y": 320,
+      "width": 330,
+      "height": 260,
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "09_button_play",
+      "zIndex": 8,
+      "full_canvas": "layers/09_button_play.png",
+      "asset": "assets/09_button_play.png",
+      "x": 1510,
+      "y": 610,
+      "width": 385,
+      "height": 385,
+      "anchor": [
+        0,
+        0
+      ]
+    }
+  ]
+}

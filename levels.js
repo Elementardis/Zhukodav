@@ -239,12 +239,12 @@ const levels = [
       lifetimeMultiplier: 1,
       spawnMultiplier: 0.8,
       spawnWeights: {
-        coloredBug_blue: 1,
+        coloredBug_purple: 1,
         frozen: 0.2,
       },
     },
     introPopup: {
-      type: "coloredBug_blue",
+      type: "coloredBug_purple",
       descryption: "НАЖМИ и Удерживай ФИОЛЕТВУЮ кнопку и нажми на ФИОЛЕТОВОГО жука!",
     },
   },
@@ -258,7 +258,7 @@ const levels = [
       spawnMultiplier: 1,
       spawnWeights: {
         bug: 1,
-        coloredBug_blue: 0.5,
+        coloredBug_purple: 0.5,
         bomb: 0.5,
       },
     },
@@ -273,7 +273,7 @@ const levels = [
       spawnMultiplier: 1.3,
       spawnWeights: {
         coloredBug_red: 0.5,
-        coloredBug_blue: 1,
+        coloredBug_purple: 1,
       },
     },
   },
@@ -288,7 +288,7 @@ const levels = [
       spawnWeights: {
         bug: 1,
         coloredBug_red: 0.5,
-        coloredBug_blue: 0.5,
+        coloredBug_purple: 0.5,
         frozen: 0.3,
       },
     },
@@ -303,7 +303,7 @@ const levels = [
       spawnMultiplier: 1,
       spawnWeights: {
         coloredBug_red: 1,
-        coloredBug_blue: 1,
+        coloredBug_purple: 1,
         chameleon: 0.3,
       },
     },
@@ -323,7 +323,7 @@ const levels = [
       spawnWeights: {
         bug: 1,
         coloredBug_red: 0.2,
-        coloredBug_blue: 0.2,
+        coloredBug_purple: 0.2,
         bomb: 0.5,
         chameleon: 0.2,
       },
@@ -340,7 +340,7 @@ const levels = [
       spawnWeights: {
         bug: 1,
         coloredBug_red: 0.2,
-        coloredBug_blue: 0.2,
+        coloredBug_purple: 0.2,
         chameleon: 0.1,
       },
     },
@@ -355,7 +355,7 @@ const levels = [
       spawnMultiplier: 1,
       spawnWeights: {
         coloredBug_red: 1,
-        coloredBug_blue: 1,
+        coloredBug_purple: 1,
         chameleon: 0.1,
       },
     },
@@ -371,7 +371,7 @@ const levels = [
       spawnWeights: {
         bug: 1,
         coloredBug_red: 0.3,
-        coloredBug_blue: 0.3,
+        coloredBug_purple: 0.3,
         chameleon: 0.1,
       },
     },
@@ -386,7 +386,7 @@ const levels = [
       spawnMultiplier: 1,
       spawnWeights: {
         coloredBug_red: 1,
-        coloredBug_blue: 1,
+        coloredBug_purple: 1,
         bomb: 0.5,
         frozen: 0.1,
       },
@@ -403,7 +403,7 @@ const levels = [
       spawnWeights: {
         coloredBug_red: 0.2,
         fat: 1,
-        coloredBug_blue: 0.2,
+        coloredBug_purple: 0.2,
         chameleon: 0.3,
       },
     },
@@ -419,7 +419,7 @@ const levels = [
       spawnWeights: {
         coloredBug_red: 0.2,
         fat: 1,
-        coloredBug_blue: 0.2,
+        coloredBug_purple: 0.2,
         frozen: 0.5,
         chameleon: 0.2,
       },
@@ -436,7 +436,7 @@ const levels = [
       spawnWeights: {
         coloredBug_red: 0.2,
         fat: 1,
-        coloredBug_blue: 0.3,
+        coloredBug_purple: 0.3,
         bomb: 1,
         healer: 1,
       },
@@ -457,7 +457,7 @@ const levels = [
       spawnWeights: {
         coloredBug_red: 0.2,
         fat: 1,
-        coloredBug_blue: 0.2,
+        coloredBug_purple: 0.2,
         bomb: 1,
         healer: 0.5,
       },
@@ -490,7 +490,7 @@ const levels = [
       spawnWeights: {
         bug: 1,
         coloredBug_red: 0.5,
-        coloredBug_blue: 0.5,
+        coloredBug_purple: 0.5,
       },
     },
   },
@@ -636,7 +636,7 @@ const levels = [
       spawnMultiplier: 1,
       spawnWeights: {
         fat: 1,
-        coloredBug_blue: 0.3,
+        coloredBug_purple: 0.3,
         fatColoredBug_red: 0.3,
         neat: 0.5,
       },
@@ -717,7 +717,7 @@ const levels = [
       spawnMultiplier: 1,
       spawnWeights: {
         coloredBug_red: 1,
-        coloredBug_blue: 1,
+        coloredBug_purple: 1,
         coloredBug_green: 2,
         chameleon: 1,
       },
@@ -733,7 +733,7 @@ const levels = [
       spawnMultiplier: 1,
       spawnWeights: {
         bug: 1,
-        coloredBug_blue: 1,
+        coloredBug_purple: 1,
         coloredBug_green: 1,
         chameleon: 0.3,
       },
@@ -800,7 +800,7 @@ const levels = [
         bug: 1,
         coloredBug_red: 1,
         fat: 1,
-        coloredBug_blue: 1,
+        coloredBug_purple: 1,
         bomb: 1,
         coloredBug_green: 1,
         fatColoredBug_red: 1,
@@ -837,7 +837,7 @@ const levels = [
       lifetimeMultiplier: 1.4,
       spawnMultiplier: 1,
       spawnWeights: {
-        coloredBug_blue: 1,
+        coloredBug_purple: 1,
         coloredBug_yellow: 1,
       },
     },
@@ -867,7 +867,7 @@ const levels = [
       spawnMultiplier: 1,
       spawnWeights: {
         coloredBug_red: 1,
-        coloredBug_blue: 1,
+        coloredBug_purple: 1,
         coloredBug_green: 1,
         coloredBug_yellow: 1,
         chameleon: 0.5,
@@ -884,7 +884,7 @@ const levels = [
       spawnMultiplier: 1,
       spawnWeights: {
         coloredBug_red: 1,
-        coloredBug_blue: 1,
+        coloredBug_purple: 1,
         coloredBug_green: 1,
         coloredBug_yellow: 1,
         neat: 2,

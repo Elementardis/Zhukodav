@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync('game.js', 'utf8');
-const timerCode = source.slice(source.indexOf('function stopLevelCountdown()'), source.indexOf('function updateUI()'));
+const timerCode = source.slice(source.indexOf('function stopLevelCountdown()'), source.indexOf('function updateUI('));
 function setup() {
     const callbacks = new Set();
     const state = {
@@ -13,6 +13,7 @@ function setup() {
         app: { ticker: { add: fn => callbacks.add(fn), remove: fn => callbacks.delete(fn) } }
     };
     const context = vm.createContext(state);
+    state.advanceGameplay = dt => { state.levelTimeRemainingMs = Math.max(0, state.levelTimeRemainingMs - dt); };
     vm.runInContext(timerCode, context);
     state.endGame = won => { state.results.push(won); state.levelEnded = true; state.stopLevelCountdown(); };
     state.startLevelCountdown();

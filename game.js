@@ -1,3 +1,5 @@
+import { GAMEPLAY_ASSETS, GAMEPLAY_STYLE, buildGameplayScene, fitGameplayScene } from './js/gameplay-scene.js';
+import { FOOD_RULES, levelDurationMs, weightedType, shuffledSides, chooseEntry, createApproach, advanceApproach } from './js/food-rules.js';
 import levels from './levels.js';
 import { createSoundEffects } from './js/sound-effects.js';
 import { getBugBaseBalance, getBugSpawnZone } from './bug-config.js';
@@ -6,50 +8,23 @@ import {
     isMobileDevice as isMobileDeviceUI,
     getViewportMode as getViewportModeUI,
     getUsedLevelColors as getUsedLevelColorsUI,
-    getButtonTextureName as getButtonTextureNameUI,
-    getGameLayout as getGameLayoutUI,
     createRoundedPanel as createRoundedPanelUI,
     createLabelSprite as createLabelSpriteUI,
     syncMobilePortraitOverlay,
-    buildDesktopLevelHeader as buildDesktopLevelHeaderUI,
-    buildMobileLevelHeader as buildMobileLevelHeaderUI,
-    updateLevelHeaderUI
 } from './js/game-ui.js';
-import {
-    createProgressScreen,
-    layoutProgressScreen,
-    updateProgressScreen
-} from './js/progress-ui.js';
+import { HOME_ASSETS, createHomeScreen, layoutHomeScreen } from './js/home-ui.js';
 const MOBILE_MAX_VIEWPORT = 1366;
 const MOBILE_LANDSCAPE_MIN_RATIO = 1.15;
 const MOBILE_OVERLAY_ID = 'mobile-orientation-overlay';
 
 // ==== Global Constants ====
-const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const MIN_BAR_H = 110;    // px
-const BAR_H_PRC = 0.16;   // 14 % экрана тест
-const GAP_HORZ = 12;      // промежутки
-const BORDER_RADIUS = 40;
-const FRAME_BORDER = 12;
-const SAFE_PADDING_EXTRA = 6; // внутренний зазор от рамки, чтобы объекты не заходили на неё
-const HEADER_H_PRC = 0.10;   // 10 % высоты квадратного поля
-const HEART_SIZE_PRC = 0.50;   // 50 % высоты шапки
-const HEART_GAP = 6;      // px между сердцами
-const BUG_SIZE_PRC = 0.15;    // 15% от размера игрового поля
-const MIN_BUG_SIZE = 60;      // минимальный размер жука
-const MAX_BUG_SIZE = 120;
 const FROZEN_EFFECT_DURATION_MS = 5000;
 const FROZEN_LIFETIME_MULTIPLIER = 2;
 const FROZEN_LIFETIME_RATE = 1 / FROZEN_LIFETIME_MULTIPLIER;
-const FROZEN_ANIMATION_TIME_SCALE = 0.5;
-const FROZEN_WAVE_COLOR = 0x8FE8FF;     // максимальный размер жука
 
 const NEAT_SPAWN_DELAY_MS = 1500;
-const NEAT_WAVE_COLORS = [0xFDFDFD, 0xEAEAEA, 0xD8DDE3, 0xC8D0D8];
 const CHAMELEON_EFFECT_DURATION_MS = 5000;
-const CHAMELEON_WAVE_COLORS = [0xFFB7C5, 0xFFD7A8, 0xFFF0A6, 0xBAF2BB, 0xB8E7FF, 0xD8C4FF];
-const DEBUG_SHOW_SPAWN_ZONES = false;
-const BALANCE_VERSION = '2-survival';
+const BALANCE_VERSION = '3-food-approach';
 const AUDIO_PATHS = {
     bugClick: 'sounds/bug-click.mp3',
     wrongBugClick: 'sounds/wrong-bug-click.mp3',
@@ -75,31 +50,38 @@ const FROZEN_MUSIC_PLAYBACK_RATE = 0.9;
 const CHAMELEON_MUSIC_INTERVAL_MS = 120;
 const NEAT_MUSIC_SWEEP_MS = 900;
 const HEALER_MUSIC_GLOW_MS = 700;
-const CASUAL_UI = {
-    outerPadding: 10,
-    topHudHeightRatio: 0.18,
-    sidePanelWidthRatio: 0.12,
-    gapRatio: 0.018,
-    playfieldRadius: 32,
-    panelRadius: 26,
-};
 
 // ==== Global Variables ====
 let activeObjects = [];
 let maxSimultaneousObjects = 4;
 let rootUI = new PIXI.Container();
 let gameContainer = new PIXI.Container();
-let bottomBar = null;
 let playArea = null;
-let playAreaFrame = null;
-let hudContainer = null;
-let sidePanelsContainer = null;
-let colorButtonsContainer = null;
 let scoreText, lifeText;
 let levelData;
 let objectQueue = [];
 let isPaused = false;
 let spawnTimer = null;
+let spawnDueAt = null;
+let spawnResumeAt = 0;
+let gameTimeMs = 0;
+let spawnSides = [];
+let levelSession = 0;
+const sessionTimeouts = new Set();
+function sessionDelay(callback, ms) {
+    const session = levelSession;
+    const timer = setTimeout(() => {
+        sessionTimeouts.delete(timer);
+        if (session === levelSession) callback();
+    }, ms);
+    sessionTimeouts.add(timer);
+    return timer;
+}
+function clearSessionCallbacks() {
+    levelSession++;
+    sessionTimeouts.forEach(timer => clearTimeout(timer));
+    sessionTimeouts.clear();
+}
 let levelTimeRemainingMs = 0;
 let levelCountdownTicker = null;
 let levelCountdownLastAt = null;
@@ -107,22 +89,15 @@ let score = 0;
 let life = 0;
 let orientationPauseActive = false;
 let spawnResumeDelayBlocked = false;
-let spawnResumeDelayTimer = null;
 let frozenEffectStartedAt = 0;
 let frozenEffectEndsAt = 0;
-let frozenEffectTimer = null;
-let frozenTimerTicker = null;
 let chameleonEffectStartedAt = 0;
 let chameleonEffectEndsAt = 0;
-let chameleonEffectTimer = null;
-let chameleonTimerTicker = null;
-let chameleonFieldOverlay = null;
 let currentAttemptId = null;
 let currentAttemptPromise = null;
 let currentAttemptStartedAt = 0;
 let currentAttemptClosed = true;
-let gameLayout = null;
-let currentGameUI = { hearts: [] };
+let currentGameUI = {};
 let pendingResizeFrame = null;
 let pendingOrientationResizeTimeout = null;
 let colorButtonsMap = {};
@@ -571,17 +546,14 @@ function getLevelSpawnIntervalMultiplier(type) {
     return spawnMultiplier.default ?? 1;
 }
 
-
-
 function getRuntimeBugBalance(type) {
     const baseBalance = getBugBaseBalance(type);
     const lifetimeMultiplier = getLevelLifetimeMultiplier(type);
     const spawnIntervalMultiplier = getLevelSpawnIntervalMultiplier(type);
-    const frozenLifetimeMultiplier = isFrozenEffectActive() ? FROZEN_LIFETIME_MULTIPLIER : 1;
 
     // Итоговые параметры жука считаются из базовых значений вида * коэффициенты уровня.
     return {
-        lifetime: baseBalance.lifetime * lifetimeMultiplier * frozenLifetimeMultiplier,
+        lifetime: baseBalance.lifetime * lifetimeMultiplier,
         spawnInterval: baseBalance.spawnInterval / spawnIntervalMultiplier,
         clicks: baseBalance.clicks,
         scoreValue: baseBalance.scoreValue ?? 1,
@@ -594,208 +566,28 @@ function getObjectScoreValue(dataOrObject) {
     return Math.max(0, dataOrObject?.scoreValue ?? 1);
 }
 
-function getDisplayObjectCenterGlobal(displayObject) {
-    if (!displayObject) return null;
-    const bounds = displayObject.getBounds();
-    return new PIXI.Point(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-}
+function clearSpawnTimer() { spawnDueAt = null; spawnTimer = null; }
 
-function getHealTargetGlobalPosition(nextLifeValue) {
-    if (!currentGameUI) return null;
+function clearSpawnResumeDelay() { spawnResumeDelayBlocked = false; spawnResumeAt = 0; }
 
-    const nextLife = Math.max(1, nextLifeValue ?? life);
-
-    if (currentGameUI.mode === 'mobile-landscape' && currentGameUI.heartsContainer) {
-        const heartSize = currentGameUI.heartSize ?? 34;
-        const heartGap = currentGameUI.heartGap ?? 8;
-        const totalWidth = nextLife * heartSize + Math.max(0, nextLife - 1) * heartGap;
-        const startX = (currentGameUI.heartRightX ?? 0) - totalWidth;
-        const localPoint = new PIXI.Point(
-            startX + (nextLife - 1) * (heartSize + heartGap) + heartSize / 2,
-            currentGameUI.heartCenterY ?? heartSize / 2
-        );
-
-        return currentGameUI.heartsContainer.toGlobal(localPoint);
-    }
-
-    const heart = currentGameUI.hearts?.[nextLife - 1];
-    if (heart) {
-        return getDisplayObjectCenterGlobal(heart);
-    }
-
-    return null;
-}
-
-function animateHealingHeart(sourceObject, targetPoint, onComplete) {
-    const startPoint = getDisplayObjectCenterGlobal(sourceObject);
-    if (!startPoint || !targetPoint) {
-        onComplete?.();
-        return;
-    }
-
-    const texture = TEXTURES.life || TEXTURES.heart;
-    if (!texture) {
-        onComplete?.();
-        return;
-    }
-
-    const heart = new PIXI.Sprite(texture);
-    heart.anchor.set(0.5);
-    heart.x = startPoint.x;
-    heart.y = startPoint.y;
-    heart.width = 34;
-    heart.height = 34;
-    heart.zIndex = 9999;
-    app.stage.sortableChildren = true;
-    app.stage.addChild(heart);
-
-    const arcHeight = Math.max(36, Math.abs(targetPoint.y - startPoint.y) * 0.25 + 28);
-    const controlPoint = {
-        x: (startPoint.x + targetPoint.x) / 2,
-        y: Math.min(startPoint.y, targetPoint.y) - arcHeight
-    };
-    const flight = { t: 0 };
-
-    gsap.to(heart.scale, {
-        x: 1.2,
-        y: 1.2,
-        duration: 0.14,
-        yoyo: true,
-        repeat: 1,
-        ease: "sine.inOut"
-    });
-
-    gsap.to(flight, {
-        t: 1,
-        duration: 0.55,
-        ease: "power2.inOut",
-        onUpdate: () => {
-            const t = flight.t;
-            const inv = 1 - t;
-            heart.x = inv * inv * startPoint.x + 2 * inv * t * controlPoint.x + t * t * targetPoint.x;
-            heart.y = inv * inv * startPoint.y + 2 * inv * t * controlPoint.y + t * t * targetPoint.y;
-        },
-        onComplete: () => {
-            gsap.to(heart, {
-                alpha: 0,
-                duration: 0.12,
-                onComplete: () => {
-                    if (heart.parent) heart.parent.removeChild(heart);
-                    heart.destroy();
-                    onComplete?.();
-                }
-            });
-        }
-    });
-}
-
-function clearSpawnTimer() {
-    if (spawnTimer) {
-        clearTimeout(spawnTimer);
-        spawnTimer = null;
-    }
-}
-
-function clearSpawnResumeDelay() {
-    spawnResumeDelayBlocked = false;
-    if (spawnResumeDelayTimer) {
-        clearTimeout(spawnResumeDelayTimer);
-        spawnResumeDelayTimer = null;
-    }
-}
-
-function startSpawnResumeDelay(delay = NEAT_SPAWN_DELAY_MS) {
-    clearSpawnResumeDelay();
-    spawnResumeDelayBlocked = true;
-    spawnResumeDelayTimer = setTimeout(() => {
-        spawnResumeDelayBlocked = false;
-        spawnResumeDelayTimer = null;
-        ensureSpawnTimerAfterUiChange();
-    }, delay);
-}
+function startSpawnResumeDelay(delay = NEAT_SPAWN_DELAY_MS) { spawnResumeDelayBlocked = true; spawnResumeAt = gameTimeMs + delay; }
 
 function scheduleNextSpawn(delay) {
-    clearSpawnTimer();
-
-    if (orientationPauseActive || isPaused || introActive || levelEnded || getViewportMode() === 'mobile-portrait') {
-        debugSpawn('scheduleNextSpawn skipped by state', { delay });
-        return;
-    }
-    if (objectQueue.length === 0) {
-        debugSpawn('scheduleNextSpawn skipped because queue is empty', { delay });
-        return;
-    }
-
-    const nextDelay = Math.max(50, Math.round(delay ?? objectQueue[0].spawnInterval ?? 450));
-    debugSpawn('scheduleNextSpawn armed', { delay, nextDelay, nextType: objectQueue[0]?.type ?? null });
-    spawnTimer = setTimeout(spawnObject, nextDelay);
+    if (levelEnded) return;
+    spawnDueAt = gameTimeMs + Math.max(0, delay ?? objectQueue[0]?.spawnInterval ?? 450);
 }
 
 function ensureSpawnTimerAfterUiChange() {
-    if (spawnTimer || spawnResumeDelayBlocked || orientationPauseActive || isPaused || introActive || levelEnded) return;
-    if (objectQueue.length === 0) return;
-    scheduleNextSpawn(0);
+    if (spawnDueAt === null && !spawnResumeDelayBlocked && !levelEnded) scheduleNextSpawn(0);
 }
 
-function removeObjectFromActiveList(target) {
-    removeLifetimeIndicator(target);
-    activeObjects = activeObjects.filter((obj) => obj !== target);
-    ensureSpawnTimerAfterUiChange();
-}
-
-function isFrozenEffectActive(now = Date.now()) {
+function isFrozenEffectActive(now = gameTimeMs) {
     return frozenEffectEndsAt > now;
 }
 
-function isChameleonEffectActive(now = Date.now()) {
+function isChameleonEffectActive(now = gameTimeMs) {
     return chameleonEffectEndsAt > now;
 }
-
-function getLifetimeDecayMs(startTime, endTime) {
-    if (endTime <= startTime) return 0;
-
-    const elapsed = endTime - startTime;
-    if (!frozenEffectStartedAt || frozenEffectEndsAt <= startTime || frozenEffectStartedAt >= endTime) {
-        return elapsed;
-    }
-
-    const overlapStart = Math.max(startTime, frozenEffectStartedAt);
-    const overlapEnd = Math.min(endTime, frozenEffectEndsAt);
-    const frozenOverlap = Math.max(0, overlapEnd - overlapStart);
-    return elapsed - frozenOverlap * (1 - FROZEN_LIFETIME_RATE);
-}
-
-function syncObjectLifetime(obj, now = Date.now()) {
-    if (obj.remainingLifetimeMs == null) {
-        obj.remainingLifetimeMs = 0;
-    }
-
-    if (obj.lastLifetimeSyncAt == null) {
-        obj.lastLifetimeSyncAt = now;
-        return obj.remainingLifetimeMs;
-    }
-
-    const decay = getLifetimeDecayMs(obj.lastLifetimeSyncAt, now);
-    obj.remainingLifetimeMs = Math.max(0, obj.remainingLifetimeMs - decay);
-    obj.lastLifetimeSyncAt = now;
-    updateLifetimeIndicator(obj);
-    return obj.remainingLifetimeMs;
-}
-
-function getObjectAnimationTimeScale(now = Date.now()) {
-    return isFrozenEffectActive(now) ? FROZEN_ANIMATION_TIME_SCALE : 1;
-}
-
-function applyObjectAnimationTimeScale(obj, now = Date.now()) {
-    if (!obj.animations) return;
-    const timeScale = getObjectAnimationTimeScale(now);
-    obj.animations.forEach(anim => {
-        if (typeof anim.timeScale === 'function') {
-            anim.timeScale(timeScale);
-        }
-    });
-}
-
 
 // Color button state
 let activeKeyboardColor = null;
@@ -838,33 +630,13 @@ function getActiveColor() {
     return null;
 }
 
-function updatePlayAreaActiveBorder(targetPlayArea = playArea) {
-    if (!targetPlayArea?._activeBorder) return;
-
-    targetPlayArea._activeBorder.clear();
-    const activeColor = getActiveColor();
-    if (!activeColor) return;
-
-    const borderColor = COLORS[activeColor] || THEME.border;
-    const borderAlpha = 1;
-    const borderWidth = targetPlayArea._activeBorderWidth || 6;
-    const rect = targetPlayArea._activeBorderRect || {
-        x: 0,
-        y: 0,
-        width: targetPlayArea._fieldWidth ?? targetPlayArea.width,
-        height: targetPlayArea._fieldHeight ?? targetPlayArea.height,
-        radius: targetPlayArea._fieldRadius ?? BORDER_RADIUS
-    };
-
-    targetPlayArea._activeBorder.lineStyle(borderWidth, borderColor, borderAlpha);
-    targetPlayArea._activeBorder.drawRoundedRect(rect.x, rect.y, rect.width, rect.height, rect.radius);
-}
+function updatePlayAreaActiveBorder() { updateUI(); }
 
 function syncAllColorButtonStates() {
     const colors = new Set([
         ...Object.keys(colorButtonsMap || {}),
         'red',
-        'blue',
+        'purple',
         'green',
         'yellow'
     ]);
@@ -874,201 +646,7 @@ function syncAllColorButtonStates() {
     setAudioDucking(hasAnyActiveColor());
 }
 
-function getRoundedRectPerimeter(rect) {
-    const radius = Math.max(0, Math.min(rect.radius || 0, rect.width / 2, rect.height / 2));
-    return 2 * (rect.width + rect.height - 4 * radius) + 2 * Math.PI * radius;
-}
-
-function lerpColor(from, to, t) {
-    const r = ((from >> 16) & 0xFF) + (((to >> 16) & 0xFF) - ((from >> 16) & 0xFF)) * t;
-    const g = ((from >> 8) & 0xFF) + (((to >> 8) & 0xFF) - ((from >> 8) & 0xFF)) * t;
-    const b = (from & 0xFF) + ((to & 0xFF) - (from & 0xFF)) * t;
-    return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
-}
-
-function getChameleonTimerColor(t) {
-    const colors = CHAMELEON_WAVE_COLORS;
-    const wrapped = ((t % 1) + 1) % 1;
-    const scaled = wrapped * colors.length;
-    const index = Math.floor(scaled) % colors.length;
-    const nextIndex = (index + 1) % colors.length;
-    return lerpColor(colors[index], colors[nextIndex], scaled - Math.floor(scaled));
-}
-
-function getFrozenTimerColor(t) {
-    const colors = [0xE9FBFF, FROZEN_WAVE_COLOR, 0x4FC3F7, 0xB8F4FF];
-    const wrapped = ((t % 1) + 1) % 1;
-    const scaled = wrapped * colors.length;
-    const index = Math.floor(scaled) % colors.length;
-    const nextIndex = (index + 1) % colors.length;
-    return lerpColor(colors[index], colors[nextIndex], scaled - Math.floor(scaled));
-}
-
-function getRoundedRectPointAt(rect, distance) {
-    const radius = Math.max(0, Math.min(rect.radius || 0, rect.width / 2, rect.height / 2));
-    const perimeter = getRoundedRectPerimeter({ ...rect, radius });
-    let d = ((distance % perimeter) + perimeter) % perimeter;
-    const x = rect.x;
-    const y = rect.y;
-    const w = rect.width;
-    const h = rect.height;
-
-    const segments = [
-        { type: 'line', length: Math.max(0, w / 2 - radius), from: [x + w / 2, y], to: [x + w - radius, y] },
-        { type: 'arc', length: Math.PI * radius / 2, cx: x + w - radius, cy: y + radius, start: -Math.PI / 2, end: 0 },
-        { type: 'line', length: Math.max(0, h - radius * 2), from: [x + w, y + radius], to: [x + w, y + h - radius] },
-        { type: 'arc', length: Math.PI * radius / 2, cx: x + w - radius, cy: y + h - radius, start: 0, end: Math.PI / 2 },
-        { type: 'line', length: Math.max(0, w - radius * 2), from: [x + w - radius, y + h], to: [x + radius, y + h] },
-        { type: 'arc', length: Math.PI * radius / 2, cx: x + radius, cy: y + h - radius, start: Math.PI / 2, end: Math.PI },
-        { type: 'line', length: Math.max(0, h - radius * 2), from: [x, y + h - radius], to: [x, y + radius] },
-        { type: 'arc', length: Math.PI * radius / 2, cx: x + radius, cy: y + radius, start: Math.PI, end: Math.PI * 1.5 },
-        { type: 'line', length: Math.max(0, w / 2 - radius), from: [x + radius, y], to: [x + w / 2, y] }
-    ];
-
-    for (const segment of segments) {
-        if (d > segment.length) {
-            d -= segment.length;
-            continue;
-        }
-
-        const t = segment.length > 0 ? d / segment.length : 0;
-        if (segment.type === 'arc') {
-            const angle = segment.start + (segment.end - segment.start) * t;
-            return {
-                x: segment.cx + Math.cos(angle) * radius,
-                y: segment.cy + Math.sin(angle) * radius
-            };
-        }
-
-        return {
-            x: segment.from[0] + (segment.to[0] - segment.from[0]) * t,
-            y: segment.from[1] + (segment.to[1] - segment.from[1]) * t
-        };
-    }
-
-    return { x: x + w / 2, y };
-}
-
-function getInsetTimerRect(targetPlayArea, inset = 0) {
-    const baseRect = targetPlayArea._timerBorderRect || {
-        x: 0,
-        y: 0,
-        width: targetPlayArea._fieldWidth ?? targetPlayArea.width,
-        height: targetPlayArea._fieldHeight ?? targetPlayArea.height,
-        radius: targetPlayArea._fieldRadius ?? BORDER_RADIUS
-    };
-
-    return {
-        x: baseRect.x + inset,
-        y: baseRect.y + inset,
-        width: Math.max(1, baseRect.width - inset * 2),
-        height: Math.max(1, baseRect.height - inset * 2),
-        radius: Math.max(0, (baseRect.radius || 0) - inset)
-    };
-}
-
-function drawTimerBorderSegment(graphics, rect, remaining, lineWidth, getColor) {
-    const perimeter = getRoundedRectPerimeter(rect);
-    const length = perimeter * remaining;
-    const steps = Math.max(2, Math.ceil(220 * remaining));
-    let previousPoint = getRoundedRectPointAt(rect, 0);
-
-    for (let i = 1; i <= steps; i++) {
-        const distance = (length * i) / steps;
-        const point = getRoundedRectPointAt(rect, distance);
-        graphics.lineStyle(lineWidth, getColor(distance / perimeter), 1);
-        graphics.moveTo(previousPoint.x, previousPoint.y);
-        graphics.lineTo(point.x, point.y);
-        previousPoint = point;
-    }
-}
-
-function drawChameleonTimerBorder(targetPlayArea = playArea, now = Date.now()) {
-    if (!targetPlayArea?._chameleonTimerBorder) return;
-
-    const graphics = targetPlayArea._chameleonTimerBorder;
-    graphics.clear();
-
-    if (!isChameleonEffectActive(now)) return;
-
-    const rect = getInsetTimerRect(targetPlayArea);
-    const remaining = Math.max(0, Math.min(1, (chameleonEffectEndsAt - now) / CHAMELEON_EFFECT_DURATION_MS));
-    const lineWidth = Math.max(targetPlayArea._timerBorderWidth || 8, 6);
-
-    drawTimerBorderSegment(graphics, rect, remaining, lineWidth, getChameleonTimerColor);
-}
-
-function drawFrozenTimerBorder(targetPlayArea = playArea, now = Date.now()) {
-    if (!targetPlayArea?._frozenTimerBorder) return;
-
-    const graphics = targetPlayArea._frozenTimerBorder;
-    graphics.clear();
-
-    if (!isFrozenEffectActive(now)) return;
-
-    const lineWidth = Math.max(targetPlayArea._timerBorderWidth || 8, 6);
-    const rect = getInsetTimerRect(targetPlayArea, lineWidth + 5);
-    const remaining = Math.max(0, Math.min(1, (frozenEffectEndsAt - now) / FROZEN_EFFECT_DURATION_MS));
-
-    drawTimerBorderSegment(graphics, rect, remaining, Math.max(4, lineWidth - 2), getFrozenTimerColor);
-}
-
-function startChameleonTimerBorder() {
-    stopChameleonTimerBorder();
-    drawChameleonTimerBorder();
-
-    chameleonTimerTicker = () => {
-        if (!isChameleonEffectActive()) {
-            stopChameleonTimerBorder();
-            return;
-        }
-
-        drawChameleonTimerBorder();
-    };
-    app.ticker.add(chameleonTimerTicker);
-}
-
-function stopChameleonTimerBorder() {
-    if (chameleonTimerTicker) {
-        app.ticker.remove(chameleonTimerTicker);
-        chameleonTimerTicker = null;
-    }
-
-    if (playArea?._chameleonTimerBorder) {
-        playArea._chameleonTimerBorder.clear();
-    }
-}
-
-function startFrozenTimerBorder() {
-    stopFrozenTimerBorder();
-    drawFrozenTimerBorder();
-
-    frozenTimerTicker = () => {
-        if (!isFrozenEffectActive()) {
-            stopFrozenTimerBorder();
-            return;
-        }
-
-        drawFrozenTimerBorder();
-    };
-    app.ticker.add(frozenTimerTicker);
-}
-
-function stopFrozenTimerBorder() {
-    if (frozenTimerTicker) {
-        app.ticker.remove(frozenTimerTicker);
-        frozenTimerTicker = null;
-    }
-
-    if (playArea?._frozenTimerBorder) {
-        playArea._frozenTimerBorder.clear();
-    }
-}
-
-
-
 // ==== UI Containers ====
-const startContainer = new PIXI.Container();
 const levelSelectContainer = new PIXI.Container();
 let progressContainer = null;
 let selectedLevelIndex = null;
@@ -1084,12 +662,6 @@ const UI_ASSET_SLOTS = {
         width: 1280,
         height: 590,
         description: 'Background for the level select screen.'
-    },
-    bg_game: {
-        path: 'images/backgrounds/bg_game.png',
-        width: 1280,
-        height: 590,
-        description: 'Background for the in-level game screen.'
     },
     level_entry_icon: {
         path: 'images/ui/level_entry_icon.png',
@@ -1109,88 +681,22 @@ const UI_ASSET_SLOTS = {
         height: 128,
         description: 'Not-yet-completed level tile background.'
     },
-    game_hud_panel: {
-        path: 'images/ui/game_hud_panel.png',
-        width: 1180,
-        height: 112,
-        description: 'Top in-level HUD panel.'
-    },
-    game_goal_badge: {
-        path: 'images/ui/game_goal_badge.png',
-        width: 220,
-        height: 72,
-        description: 'Goal counter badge inside the HUD.'
-    },
-    game_playfield_frame: {
-        path: 'images/ui/game_playfield_frame.png',
-        width: 900,
-        height: 520,
-        description: 'Main in-level playfield frame.'
-    },
-    game_side_panel: {
-        path: 'images/ui/game_side_panel.png',
-        width: 128,
-        height: 360,
-        description: 'Left/right color-button side panel.'
-    },
-    game_settings_button: {
-        path: 'images/ui/game_settings_button.png',
-        width: 96,
-        height: 96,
-        description: 'Settings button background.'
-    },
-    custom_button_red: {
-        path: 'images/buttons/custom_button_red.png',
-        width: 107,
-        height: 112,
-        description: 'Custom red color button.'
-    },
-    custom_button_blue: {
-        path: 'images/buttons/custom_button_blue.png',
-        width: 107,
-        height: 112,
-        description: 'Custom blue/cyan color button.'
-    },
-    custom_button_purple: {
-        path: 'images/buttons/custom_button_purple.png',
-        width: 107,
-        height: 112,
-        description: 'Custom purple color button.'
-    },
-    custom_button_green: {
-        path: 'images/buttons/custom_button_green.png',
-        width: 107,
-        height: 112,
-        description: 'Custom green color button.'
-    },
-    progress_play: {
-        path: 'images/ui/play.png',
-        width: 120,
-        height: 120,
-        description: 'Play button for the progress screen.'
-    }
 };
 
 // ==== SPRITE PRELOADER (PIXI.Loader) ====
 const SPRITE_PATHS = [
+    ...HOME_ASSETS,
+    ...GAMEPLAY_ASSETS,
     { name: 'bug', path: 'images/bugs/bug.png' },
     { name: 'healer', path: 'images/bugs/healer.png' },
     { name: 'bomb', path: 'images/bugs/bomb.png' },
     { name: 'coloredBug_red', path: 'images/bugs/coloredBug_red.png' },
-    { name: 'coloredBug_blue', path: 'images/bugs/coloredBug_blue.png' },
+    { name: 'coloredBug_purple', path: 'images/bugs/coloredBug_purple.png' },
     { name: 'coloredBug_green', path: 'images/bugs/coloredBug_green.png' },
     { name: 'coloredBug_yellow', path: 'images/bugs/coloredBug_yellow.png' },
-    { name: 'bomb_explosion', path: 'images/bugs/bomb.gif'},
-    { name: 'button_green',  path: 'images/buttons/button_green.png' },
-    { name: 'button_blue',   path: 'images/buttons/button_blue.png' },
-    { name: 'button_purple', path: 'images/buttons/button_purple.png' },
-    { name: 'button_red',    path: 'images/buttons/button_red.png' },
     { name: 'frozen', path: 'images/bugs/frozen.png' },
     { name: 'chameleon', path: 'images/bugs/chameleon.png' },
     { name: 'neat', path: 'images/bugs/neat.png' },
-    { name: 'heart', path: 'images/ui/heart.png' },
-    { name: 'life', path: 'images/ui/life.png' },
-    { name: 'gear', path: 'images/ui/gear.png' },
     ...Object.entries(UI_ASSET_SLOTS).map(([name, slot]) => ({
         name,
         path: slot.path,
@@ -1237,26 +743,6 @@ function getViewportMode() {
 
 function getUsedLevelColors(level = levelData) {
     return getUsedLevelColorsUI(level, COLOR_BUTTON_SLOTS);
-}
-
-function getButtonTextureName(color) {
-    const baseTextureName = COLOR_BUTTON_SLOTS.find((slot) => slot.color === color)?.textureName || getButtonTextureNameUI(color);
-    const customTextureName = `custom_${baseTextureName}`;
-    return TEXTURES[customTextureName] ? customTextureName : baseTextureName;
-}
-
-function getGameLayout() {
-    return getGameLayoutUI({
-        mode: getViewportMode(),
-        screenWidth: app?.screen?.width ?? window.innerWidth,
-        screenHeight: app?.screen?.height ?? window.innerHeight,
-        barHeightRatio: BAR_H_PRC,
-        minBarHeight: MIN_BAR_H,
-        gapHorizontal: GAP_HORZ,
-        headerHeightRatio: HEADER_H_PRC,
-        borderRadius: BORDER_RADIUS,
-        colorButtonSlots: COLOR_BUTTON_SLOTS
-    });
 }
 
 function createRoundedPanel(width, height, radius, fill = THEME.cardBg, borderColor = THEME.border, borderWidth = 4) {
@@ -1319,26 +805,10 @@ function createCoverBackground(slotName, width, height, fallbackColor) {
 
 function pauseGameplayForOverlay() {
     if (orientationPauseActive || isPaused || introActive || levelEnded) return;
-
     levelCountdownLastAt = null;
     orientationPauseActive = true;
-    clearSpawnTimer();
     pauseLevelMusic();
-
-    activeObjects.forEach(obj => {
-        obj.pausedLifetime = syncObjectLifetime(obj);
-
-        if (obj.lifetimeCheckTimeout) {
-            clearTimeout(obj.lifetimeCheckTimeout);
-        }
-
-        if (obj.animations) {
-            obj.animations.forEach(anim => anim.pause());
-        }
-
-        obj.interactive = false;
-        obj.buttonMode = false;
-    });
+    freezeActiveObjects();
 }
 
 function resumeGameplayFromOverlay() {
@@ -1514,35 +984,18 @@ loader.load(async () => {
     await Promise.all([audioReady, prepareLoadedTextures()]);
     updatePreloadProgress();
     hidePreloader();
+    showProgressScreen();
     resizeGame();
-    app.stage.addChild(startContainer);
-    startMenuMusic();
 });
 
 // ...весь остальной код...
 
 // Color definitions and key mappings
-const COLORS = {
-    red: 0xFF4F6F,
-    blue: 0xC64CFF,
-    green: 0x83D91B,
-    yellow: 0x21C8F6,
-    purple: THEME.pause
-};
 
 
-// Color buttons keep fixed visual slots. The "blue" game color is the purple bug/button.
-const COLOR_BUTTON_SLOTS = [
-    { color: 'red', key: 'q', side: 'left', icon: 'heart', textureName: 'button_red' },
-    { color: 'yellow', key: 'e', side: 'left', icon: 'star', textureName: 'button_blue' },
-    { color: 'blue', key: 'w', side: 'right', icon: 'drop', textureName: 'button_purple' },
-    { color: 'green', key: 'r', side: 'right', icon: 'leaf', textureName: 'button_green' },
-];
+// Color names match the artwork; keyboard positions remain fixed.
+const COLOR_BUTTON_SLOTS = GAMEPLAY_STYLE.tools;
 
-const MOBILE_FIXED_BUTTON_COLUMNS = {
-    left: ['red', 'yellow'],
-    right: ['blue', 'green']
-};
 
 let dynamicColorKeyMap = {};
 
@@ -1559,566 +1012,43 @@ const KEY_LAYOUT_MAP = {
 };
 
 // Add helper function for button state updates
-function updateButtonState(color, isActive) {
-    const mapped = colorButtonsMap[color];
-    const buttons = Array.isArray(mapped) ? mapped : (mapped ? [mapped] : []);
+function updateButtonState(color, isActive) { colorButtonsMap[color]?.setHeld?.(isActive); }
 
-    if (!buttons.length) {
-        const fallback = colorButtonsContainer?.getChildByName(`colorButton_${color}`);
-        if (fallback) buttons.push(fallback);
-    }
-    if (!buttons.length) return;
+function syncChameleonFieldOverlay() { updateUI(); }
 
-    buttons.forEach((button) => {
-        const activeIndicator = button.getChildByName('activeIndicator');
-        if (activeIndicator) {
-            activeIndicator.visible = isActive;
-        }
+function syncFrozenTimerBorder() { updateUI(); }
 
-        if (button._holdAnim) {
-            button._holdAnim.kill();
-            button._holdAnim = null;
-        }
-
-        if (isActive) {
-            gsap.to(button.scale, {
-                x: button.originalScale * 1.06,
-                y: button.originalScale * 0.88,
-                duration: 0.06,
-                ease: "power2.inOut",
-                onComplete: () => {
-                    button._holdAnim = gsap.to(button.scale, {
-                        x: button.originalScale * 1.03,
-                        y: button.originalScale * 0.94,
-                        duration: 0.28,
-                        yoyo: true,
-                        repeat: -1,
-                        ease: "sine.inOut"
-                    });
-                }
-            });
-        } else {
-            gsap.to(button.scale, {
-                x: button.originalScale,
-                y: button.originalScale,
-                duration: 0.18,
-                ease: "elastic.out(1, 0.5)"
-            });
-        }
-    });
-}
-
-function removeExpiredObject(obj) {
-    if (obj._isExpiring || obj._isRemoving) return;
-    obj._isExpiring = true;
-    obj.interactive = false;
-    obj.buttonMode = false;
-    removeLifetimeIndicator(obj);
-
-    if (obj.lifetimeCheckTimeout) {
-        clearTimeout(obj.lifetimeCheckTimeout);
-        obj.lifetimeCheckTimeout = null;
-    }
-
-    gsap.to(obj, {
-        y: obj.y + 100,
-        alpha: 0,
-        duration: 0.4,
-        ease: "power1.in",
-        onComplete: () => {
-            if (playArea.children.includes(obj)) {
-                playArea.removeChild(obj);
-                removeObjectFromActiveList(obj);
-
-                if (!levelEnded && obj.type !== 'bomb') {
-                    life--;
-                    updateUI();
-                    if (life <= 0) endGame(false);
-                }
-            }
-        }
-    });
-}
-
-function startLifetimeCheck(obj) {
-    if (obj.lifetimeCheckTimeout) {
-        clearTimeout(obj.lifetimeCheckTimeout);
-    }
-
-    debugSpawn('startLifetimeCheck armed', {
-        type: obj.type,
-        remainingLifetimeMs: obj.remainingLifetimeMs,
-        hasParent: !!obj.parent
-    });
-
-    const checkLifetime = () => {
-        if (!activeObjects.includes(obj)) {
-            debugSpawn('lifetimeCheck stopped because object is no longer active', { type: obj.type });
-            obj.lifetimeCheckTimeout = null;
-            return;
-        }
-
-        // During rebuilds, overlays, or short-lived mobile viewport changes the object can be
-        // temporarily detached or paused. Keep the lifetime loop alive and retry shortly.
-        if (isPaused || orientationPauseActive || !obj.parent || obj.parent !== playArea) {
-            debugSpawn('lifetimeCheck postponed', {
-                type: obj.type,
-                hasParent: !!obj.parent,
-                parentMatchesPlayArea: obj.parent === playArea
-            });
-            obj.lifetimeCheckTimeout = setTimeout(checkLifetime, 100);
-            return;
-        }
-
-        const remainingTime = syncObjectLifetime(obj);
-        debugSpawn('lifetimeCheck tick', { type: obj.type, remainingTime });
-        if (remainingTime <= 0) {
-            debugSpawn('lifetimeCheck expired object', { type: obj.type });
-            removeExpiredObject(obj);
-            return;
-        }
-
-        obj.lifetimeCheckTimeout = setTimeout(checkLifetime, Math.min(remainingTime, 1000));
-    };
-
-    obj.lifetimeCheckTimeout = setTimeout(checkLifetime, 100);
-}
-
-function showFrozenWave(x, y) {
-    const wave = new PIXI.Graphics();
-    wave.lineStyle(10, FROZEN_WAVE_COLOR, 0.85);
-    wave.drawCircle(0, 0, 36);
-    wave.x = x;
-    wave.y = y;
-    wave.alpha = 0.9;
-    wave.scale.set(0.2);
-    playArea.addChild(wave);
-
-    gsap.to(wave.scale, {
-        x: 6,
-        y: 6,
-        duration: 0.5,
-        ease: "power2.out"
-    });
-    gsap.to(wave, {
-        alpha: 0,
-        duration: 0.5,
-        ease: "power1.out",
-        onComplete: () => {
-            if (wave.parent) wave.parent.removeChild(wave);
-            wave.destroy();
-        }
-    });
-}
-
-function showChameleonWave(x, y) {
-    const effectLayer = playArea?.parent ?? playArea;
-    const waveContainer = new PIXI.Container();
-    waveContainer.x = (playArea?.x ?? 0) + x;
-    waveContainer.y = (playArea?.y ?? 0) + y;
-    effectLayer.addChild(waveContainer);
-
-    const animations = [];
-    CHAMELEON_WAVE_COLORS.forEach((color, index) => {
-        const ring = new PIXI.Graphics();
-        ring.lineStyle(8, color, 0.72);
-        ring.drawCircle(0, 0, 30 + index * 4);
-        ring.alpha = 0.85;
-        ring.scale.set(0.16);
-        waveContainer.addChild(ring);
-
-        animations.push(
-            gsap.to(ring.scale, {
-                x: 7.2,
-                y: 7.2,
-                duration: 0.7,
-                delay: index * 0.03,
-                ease: "power2.out"
-            }),
-            gsap.to(ring, {
-                alpha: 0,
-                duration: 0.7,
-                delay: index * 0.03,
-                ease: "power1.out"
-            })
-        );
-    });
-
-    gsap.delayedCall(0.9, () => {
-        animations.forEach(anim => anim.kill());
-        if (waveContainer.parent) waveContainer.parent.removeChild(waveContainer);
-        waveContainer.destroy({ children: true });
-    });
-}
-
-function showNeatWave(x, y) {
-    const effectLayer = playArea?.parent ?? playArea;
-    const waveContainer = new PIXI.Container();
-    waveContainer.x = (playArea?.x ?? 0) + x;
-    waveContainer.y = (playArea?.y ?? 0) + y;
-    effectLayer.addChild(waveContainer);
-
-    const animations = [];
-    NEAT_WAVE_COLORS.forEach((color, index) => {
-        const ring = new PIXI.Graphics();
-        ring.lineStyle(10 - index, color, 0.82 - index * 0.12);
-        ring.drawCircle(0, 0, 28 + index * 8);
-        ring.scale.set(0.12);
-        waveContainer.addChild(ring);
-
-        animations.push(
-            gsap.to(ring.scale, {
-                x: 10.5,
-                y: 10.5,
-                duration: 0.65,
-                delay: index * 0.04,
-                ease: "power2.out"
-            }),
-            gsap.to(ring, {
-                alpha: 0,
-                duration: 0.65,
-                delay: index * 0.04,
-                ease: "power1.out"
-            })
-        );
-    });
-
-    gsap.delayedCall(0.85, () => {
-        animations.forEach(anim => anim.kill());
-        if (waveContainer.parent) waveContainer.parent.removeChild(waveContainer);
-        waveContainer.destroy({ children: true });
-    });
-}
-
-function animateNeatSweepRemove(obj, delay = 0, onComplete) {
-    if (obj.lifetimeCheckTimeout) {
-        clearTimeout(obj.lifetimeCheckTimeout);
-        obj.lifetimeCheckTimeout = null;
-    }
-
-    if (obj.animations) {
-        obj.animations.forEach(anim => {
-            if (typeof anim.pause === 'function') anim.pause();
-            if (typeof anim.kill === 'function') anim.kill();
-        });
-    }
-
-    obj.interactive = false;
-    obj.buttonMode = false;
-
-    gsap.to(obj, {
-        alpha: 0,
-        duration: 0.28,
-        delay,
-        ease: "power1.inOut"
-    });
-    gsap.to(obj.scale, {
-        x: 0.82,
-        y: 0.82,
-        duration: 0.28,
-        delay,
-        ease: "power2.in",
-        onComplete: () => {
-            if (obj.parent) obj.parent.removeChild(obj);
-            removeObjectFromActiveList(obj);
-            if (onComplete) onComplete();
-        }
-    });
-}
-
-function clearFieldWithNeat(triggerContainer) {
-    clearSpawnTimer();
-    startSpawnResumeDelay(NEAT_SPAWN_DELAY_MS);
-    playNeatMusicEffect();
-
-    const targets = [...activeObjects];
-    if (!targets.length) return;
-
-    const clearedTargets = targets.filter(obj => obj !== triggerContainer);
-    if (clearedTargets.length) {
-        score += clearedTargets.reduce((sum, obj) => sum + getObjectScoreValue(obj), 0);
-    }
-
-    targets.forEach((obj, index) => {
-        const delay = obj === triggerContainer ? 0.12 : Math.min(0.16, 0.03 + index * 0.01);
-        animateNeatSweepRemove(obj, delay);
-    });
-}
-
-function buildChameleonFieldOverlay(width, height, radius) {
-    const overlay = new PIXI.Container();
-    overlay.name = 'chameleonFieldOverlay';
-
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.max(2, Math.round(width));
-    canvas.height = Math.max(2, Math.round(height));
-    const ctx = canvas.getContext('2d');
-
-    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-    gradient.addColorStop(0, '#ffd6e3');
-    gradient.addColorStop(0.18, '#ffe2c2');
-    gradient.addColorStop(0.36, '#fff1c4');
-    gradient.addColorStop(0.54, '#d7f5d1');
-    gradient.addColorStop(0.72, '#d7efff');
-    gradient.addColorStop(1, '#eadcff');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.fillStyle = 'rgba(255,255,255,0.22)';
-    for (let i = 0; i < 6; i++) {
-        ctx.beginPath();
-        ctx.ellipse(
-            canvas.width * (0.12 + i * 0.16),
-            canvas.height * (0.2 + (i % 2) * 0.28),
-            canvas.width * 0.18,
-            canvas.height * 0.26,
-            Math.PI / 6,
-            0,
-            Math.PI * 2
-        );
-        ctx.fill();
-    }
-
-    const texture = PIXI.Texture.from(canvas);
-    const sprite = new PIXI.Sprite(texture);
-    sprite.width = width;
-    sprite.height = height;
-    sprite.alpha = 0.9;
-    overlay.addChild(sprite);
-
-    const mask = new PIXI.Graphics();
-    mask.beginFill(0xFFFFFF);
-    mask.drawRoundedRect(0, 0, width, height, radius);
-    mask.endFill();
-    overlay.addChild(mask);
-    overlay.mask = mask;
-
-    overlay._dynamicTexture = texture;
-    overlay._anims = [
-        gsap.to(sprite, {
-            alpha: 0.6,
-            duration: 1.2,
-            repeat: -1,
-            yoyo: true,
-            ease: "sine.inOut"
-        }),
-        gsap.to(sprite, {
-            x: -18,
-            duration: 2.6,
-            repeat: -1,
-            yoyo: true,
-            ease: "sine.inOut"
-        })
-    ];
-
-    return overlay;
-}
-
-function clearChameleonFieldOverlay() {
-    if (!chameleonFieldOverlay) return;
-
-    chameleonFieldOverlay._anims?.forEach(anim => anim.kill());
-    if (chameleonFieldOverlay.parent) {
-        chameleonFieldOverlay.parent.removeChild(chameleonFieldOverlay);
-    }
-    chameleonFieldOverlay._dynamicTexture?.destroy(true);
-    chameleonFieldOverlay.destroy({ children: true });
-    chameleonFieldOverlay = null;
-}
-
-function syncChameleonFieldOverlay() {
-    if (!playArea) return;
-
-    if (!isChameleonEffectActive()) {
-        clearChameleonFieldOverlay();
-        return;
-    }
-
-    const radius = playArea._fieldRadius ?? BORDER_RADIUS;
-    const needsRebuild =
-        !chameleonFieldOverlay ||
-        chameleonFieldOverlay.parent !== playArea ||
-        Math.round(chameleonFieldOverlay.width) !== Math.round(playArea._fieldWidth ?? playArea.width) ||
-        Math.round(chameleonFieldOverlay.height) !== Math.round(playArea._fieldHeight ?? playArea.height);
-
-    if (needsRebuild) {
-        clearChameleonFieldOverlay();
-        chameleonFieldOverlay = buildChameleonFieldOverlay(
-            playArea._fieldWidth ?? playArea.width,
-            playArea._fieldHeight ?? playArea.height,
-            radius
-        );
-        playArea.addChildAt(chameleonFieldOverlay, Math.min(1, playArea.children.length));
-    }
-
-    drawChameleonTimerBorder();
-}
-
-function syncFrozenTimerBorder() {
-    if (!playArea) return;
-
-    if (!isFrozenEffectActive()) {
-        stopFrozenTimerBorder();
-        return;
-    }
-
-    drawFrozenTimerBorder();
-}
-
-function finishFrozenEffect() {
-    const now = Date.now();
-
-    if (!isPaused) {
-        activeObjects.forEach(obj => syncObjectLifetime(obj, now));
-    }
-
-    frozenEffectStartedAt = 0;
-    frozenEffectEndsAt = 0;
-    setFrozenMusicEffect(false);
-
-    if (frozenEffectTimer) {
-        clearTimeout(frozenEffectTimer);
-        frozenEffectTimer = null;
-    }
-    stopFrozenTimerBorder();
-
-    if (!isPaused) {
-        activeObjects.forEach(obj => applyObjectAnimationTimeScale(obj, now));
-    }
-}
+function finishFrozenEffect() { frozenEffectStartedAt = 0; frozenEffectEndsAt = 0; setFrozenMusicEffect(false); }
 
 function activateFrozenEffect() {
-    const now = Date.now();
-
-    if (isFrozenEffectActive(now) && !isPaused) {
-        activeObjects.forEach(obj => syncObjectLifetime(obj, now));
-    }
-
-    frozenEffectStartedAt = now;
-    frozenEffectEndsAt = now + FROZEN_EFFECT_DURATION_MS;
+    frozenEffectStartedAt = gameTimeMs;
+    frozenEffectEndsAt = gameTimeMs + FROZEN_EFFECT_DURATION_MS;
     setFrozenMusicEffect(true);
-
-    if (frozenEffectTimer) {
-        clearTimeout(frozenEffectTimer);
-    }
-
-    frozenEffectTimer = setTimeout(finishFrozenEffect, FROZEN_EFFECT_DURATION_MS);
-    activeObjects.forEach(obj => applyObjectAnimationTimeScale(obj, now));
-    startFrozenTimerBorder();
+    updateUI();
 }
 
-function finishChameleonEffect() {
-    chameleonEffectStartedAt = 0;
-    chameleonEffectEndsAt = 0;
-    stopChameleonMusicEffect();
-
-    if (chameleonEffectTimer) {
-        clearTimeout(chameleonEffectTimer);
-        chameleonEffectTimer = null;
-    }
-
-    stopChameleonTimerBorder();
-    clearChameleonFieldOverlay();
-}
+function finishChameleonEffect() { chameleonEffectStartedAt = 0; chameleonEffectEndsAt = 0; stopChameleonMusicEffect(); }
 
 function activateChameleonEffect() {
-    const now = Date.now();
-
-    chameleonEffectStartedAt = now;
-    chameleonEffectEndsAt = now + CHAMELEON_EFFECT_DURATION_MS;
+    chameleonEffectStartedAt = gameTimeMs;
+    chameleonEffectEndsAt = gameTimeMs + CHAMELEON_EFFECT_DURATION_MS;
     startChameleonMusicEffect();
     clearActiveColor();
-    syncChameleonFieldOverlay();
-    startChameleonTimerBorder();
-
-    if (chameleonEffectTimer) {
-        clearTimeout(chameleonEffectTimer);
-    }
-
-    chameleonEffectTimer = setTimeout(finishChameleonEffect, CHAMELEON_EFFECT_DURATION_MS);
 }
 
-
-
 function freezeActiveObjects() {
-  activeObjects.forEach(obj => {
-    // останавливаем проверки жизни
-    if (obj.lifetimeCheckTimeout) {
-      clearTimeout(obj.lifetimeCheckTimeout);
-      obj.lifetimeCheckTimeout = null;
-    }
-    // ставим на паузу анимации
-    if (obj.animations) {
-      obj.animations.forEach(anim => anim.pause && anim.pause());
-    }
-    // режем интеракцию
-    obj.interactive = false;
-    obj.buttonMode = false;
-  });
+    clearActiveColor();
+    activeObjects.forEach(obj => { obj.animations.forEach(a => a.pause()); obj.interactive = false; });
 }
         
         // Remove all active objects silently (no life penalties, no score changes)
-        function removeAllActiveObjectsSilent() {
-          // Work on a copy because we'll mutate activeObjects during removal
-          const toRemove = [...activeObjects];
-          toRemove.forEach(obj => {
-            // stop lifetime checks
-            if (obj.lifetimeCheckTimeout) {
-              clearTimeout(obj.lifetimeCheckTimeout);
-              obj.lifetimeCheckTimeout = null;
-            }
-            // stop/kill animations
-            if (obj.animations) {
-              obj.animations.forEach(anim => {
-                if (typeof anim.pause === 'function') anim.pause();
-                if (typeof anim.kill === 'function') anim.kill();
-              });
-            }
-            // disable interactions
-            obj.interactive = false;
-            obj.buttonMode = false;
-            // quick fade/slide out
-            gsap.to(obj, {
-              y: obj.y + 80,
-              alpha: 0,
-              duration: 0.25,
-              ease: "power1.in",
-              onComplete: () => {
-                if (obj.parent) obj.parent.removeChild(obj);
-                removeObjectFromActiveList(obj);
-              }
-            });
-          });
-        }
+        function removeAllActiveObjectsSilent() { removeAllActiveObjectsImmediate(); }
 
         // Мгновенное удаление всех активных объектов (без анимаций) - для перехода между уровнями
         function removeAllActiveObjectsImmediate() {
-          // Work on a copy because we'll mutate activeObjects during removal
-          const toRemove = [...activeObjects];
-          toRemove.forEach(obj => {
-            // stop lifetime checks
-            if (obj.lifetimeCheckTimeout) {
-              clearTimeout(obj.lifetimeCheckTimeout);
-              obj.lifetimeCheckTimeout = null;
-            }
-            // stop/kill animations immediately
-            if (obj.animations) {
-              obj.animations.forEach(anim => {
-                if (typeof anim.kill === 'function') anim.kill();
-                if (typeof anim.pause === 'function') anim.pause();
-              });
-              obj.animations = [];
-            }
-            // disable interactions
-            obj.interactive = false;
-            obj.buttonMode = false;
-            // remove immediately without animation
-            if (obj.parent) {
-              obj.parent.removeChild(obj);
-            }
-          });
-          activeObjects = [];
-        }
+    for (const obj of [...activeObjects]) resolveFoodBug(obj, false);
+    activeObjects = [];
+}
 
 // Update keyboard handlers to support both layouts
 function clearActiveColor() {
@@ -2176,7 +1106,7 @@ function getVerticalStackLayout({
 }
 
 window.addEventListener('keydown', (e) => {
-    if (isPaused) return; // Don't handle keys during pause
+    if (isPaused || introActive || levelEnded || orientationPauseActive || !app.stage.children.includes(gameContainer)) return;
     
     const key = e.key.toLowerCase();
     // Convert Russian key to English if needed
@@ -2220,51 +1150,6 @@ document.addEventListener('visibilitychange', () => {
 
 // ==== Стартовый экран ====
 
-const titleStyle = new PIXI.TextStyle({
-    fontSize: 72,
-    fill: THEME.primary,
-    fontWeight: 'bold',
-    fontFamily: 'Arial',
-    stroke: THEME.borderDark,
-    strokeThickness: 8,
-    align: 'center'
-});
-
-const title = new PIXI.Text("ЖУКОДАВ", titleStyle);
-title.anchor.set(0.5);
-title.x = app.screen.width / 2;
-title.y = app.screen.height / 2 - 150;
-startContainer.addChild(title);
-
-// Кнопка PLAY
-const playButton = new PIXI.Graphics();
-const btnWidth = 200;
-const btnHeight = 70;
-playButton.beginFill(THEME.primary); // фон кнопки
-playButton.lineStyle(6, THEME.borderDark); // обводка
-playButton.drawRoundedRect(-btnWidth / 2, -btnHeight / 2, btnWidth, btnHeight, 30);
-playButton.endFill();
-playButton.x = app.screen.width / 2;
-playButton.y = app.screen.height / 2 + 50;
-playButton.interactive = true;
-playButton.buttonMode = true;
-playButton.on('pointerdown', () => {
-    playUiClick();
-    showProgressScreen();
-});
-startContainer.addChild(playButton);
-
-// Текст PLAY
-const playText = new PIXI.Text("PLAY", {
-    fontSize: 36,
-    fill: THEME.white,
-    fontWeight: 'bold',
-    fontFamily: 'Arial'
-});
-playText.anchor.set(0.5);
-playButton.addChild(playText);
-
-// ==== Экран выбора уровня ====
 function removeProgressScreenFromStage() {
     if (progressContainer && app.stage.children.includes(progressContainer)) {
         app.stage.removeChild(progressContainer);
@@ -2347,6 +1232,9 @@ function continueGameFromProgress() {
 }
 
 function showProgressScreen() {
+    clearSessionCallbacks();
+    removeAllActiveObjectsImmediate();
+    clearSpawnResumeDelay();
     stopLevelCountdown();
     clearSpawnTimer();
     clearGameplayMusicEffects();
@@ -2361,9 +1249,6 @@ function showProgressScreen() {
     clearActiveColor();
     objectQueue = [];
 
-    if (app.stage.children.includes(startContainer)) {
-        app.stage.removeChild(startContainer);
-    }
     if (app.stage.children.includes(levelSelectContainer)) {
         app.stage.removeChild(levelSelectContainer);
     }
@@ -2372,25 +1257,17 @@ function showProgressScreen() {
     }
     gameContainer.removeChildren();
 
-    const completed = getCompletedLevels();
     clearProgressPopup();
     if (!progressContainer) {
-        progressContainer = createProgressScreen({
-            backgroundTexture: TEXTURES.bg_game,
-            playTexture: TEXTURES.progress_play,
-            completedLevels: completed,
-            onPlay: continueGameFromProgress,
-            onLevelSelect: showLevelSelect
-        });
-    } else {
-        updateProgressScreen(progressContainer, completed);
+        progressContainer = new PIXI.Container();
+        progressContainer.name = 'homeScreen';
+        progressContainer.addChild(createHomeScreen(TEXTURES, {
+            onPlay: () => { playUiClick(); continueGameFromProgress(); },
+            onSettings: () => showPausePopup(true)
+        }));
     }
-
-    layoutProgressScreen(progressContainer, {
-        width: app.screen.width,
-        height: app.screen.height
-    });
-
+    app.renderer.backgroundColor = 0xE5E8E6;
+    layoutHomeScreen(progressContainer.getChildByName('homeContainer'), app.screen);
     if (!app.stage.children.includes(progressContainer)) {
         app.stage.addChild(progressContainer);
     }
@@ -2410,7 +1287,6 @@ function showLevelSelect() {
     clearActiveColor();
     objectQueue = [];
 
-    app.stage.removeChild(startContainer);
     removeProgressScreenFromStage();
     app.stage.addChild(levelSelectContainer);
 
@@ -2840,6 +1716,7 @@ function showLevelEntryPopup(levelIndex) {
 
 // запускаем уровень
 function startLevel(index) {
+    clearSessionCallbacks();
     stopLevelCountdown();
   // Очищаем предыдущий уровень: останавливаем интервалы и таймеры
   cleanupLevelSelectScroll();
@@ -2875,7 +1752,9 @@ function startLevel(index) {
 
   score = 0;
   life = levelData.lifeCount;
-  levelTimeRemainingMs = levelData.durationSeconds * 1000;
+  gameTimeMs = 0;
+  spawnSides = [];
+  levelTimeRemainingMs = levelDurationMs(levelData);
 
   const { fieldWrapper, playField } = setupPlayArea();
   playArea = playField;
@@ -2903,164 +1782,32 @@ function startLevel(index) {
 
 }
 
-
-
-
 // игровое поле
 function setupPlayArea() {
-    gameLayout = getGameLayout();
-    rootUI.removeChildren();
-    currentGameUI = { hearts: [] };
-    colorButtonsMap = {};
-
-    const coloredTypes = Object.keys(levelData.params.spawnWeights || {}).filter(type =>
-        type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_')
-    );
-
-    const result = gameLayout.mode === 'mobile-landscape'
-        ? setupMobileLandscapePlayArea(gameLayout, coloredTypes)
-        : setupDesktopPlayArea(gameLayout, coloredTypes);
-    const field = result.playField;
-    const timer = new PIXI.Text('', {
-        fontFamily: 'Arial', fontWeight: '900', fontSize: 100,
-        fill: 0xFFFFFF, stroke: 0x78543D, strokeThickness: 2
+    for (const child of rootUI.removeChildren()) child.destroy({ children: true });
+    const enabledColors = getUsedLevelColors();
+    currentGameUI = buildGameplayScene(TEXTURES, {
+        enabledColors,
+        onHold: (color, event) => {
+            if (isPaused || introActive || orientationPauseActive || levelEnded) return;
+            playUiClick();
+            activePointerColors.set(getPointerColorKey(getPointerId(event)), color);
+            syncAllColorButtonStates();
+        },
+        onRelease: (color, event) => {
+            const key = getPointerColorKey(getPointerId(event));
+            if (activePointerColors.get(key) === color) activePointerColors.delete(key);
+            syncAllColorButtonStates();
+        },
+        onSettings: () => showPausePopup()
     });
-    timer.name = 'fieldCountdown';
-    timer.anchor.set(0.5);
-    timer.position.set(field.width / 2, field.height / 2);
-    timer.alpha = 0.4;
-    timer.interactive = false;
-    timer.eventMode = 'none';
-    timer._targetHeight = field.height * 0.25;
-    currentGameUI.fieldCountdown = timer;
-    updateFieldCountdown();
-    // The field background is already built; bugs are appended above this text.
-    field.addChild(timer);
-    return result;
-}
-
-function updateFieldCountdown() {
-    const timer = currentGameUI.fieldCountdown;
-    if (!timer) return;
-    timer.text = String(Math.ceil(levelTimeRemainingMs / 1000));
-    timer.scale.set(1);
-    timer.scale.set(timer._targetHeight / timer.height);
-}
-
-function setupDesktopPlayArea(layout, coloredTypes) {
-    const wideLayout = calculateGameLayout();
-    buildGameBackground(wideLayout);
-    buildTopHud(wideLayout, levelData);
-    const { fieldWrapper, playField } = buildPlayField(wideLayout);
-    buildSideColorPanels(coloredTypes, wideLayout);
-
-    return { fieldWrapper, playField };
-}
-
-function calculateGameLayout() {
-    const W = app.screen.width;
-    const H = app.screen.height;
-    const padding = Math.max(8, Math.min(W, H) * 0.015, CASUAL_UI.outerPadding);
-    const hudH = Math.max(82, Math.min(150, H * CASUAL_UI.topHudHeightRatio));
-    const gap = Math.max(8, W * CASUAL_UI.gapRatio);
-    const sideW = Math.max(96, Math.min(170, W * CASUAL_UI.sidePanelWidthRatio));
-    const contentY = padding + hudH + gap;
-    const contentH = Math.max(220, H - contentY - padding);
-    const playX = padding + sideW + gap;
-    const playY = contentY;
-    const playW = Math.max(320, W - padding * 2 - sideW * 2 - gap * 2);
-    const playH = contentH;
-    const buttonGap = Math.max(10, Math.min(24, playH * 0.045));
-    const buttonSize = Math.max(58, Math.min(sideW * 0.78, (playH - buttonGap) / 2, 118));
-
-    return {
-        mode: 'desktop-wide',
-        screenWidth: W,
-        screenHeight: H,
-        padding,
-        gap,
-        hud: {
-            x: padding,
-            y: padding,
-            width: W - padding * 2,
-            height: hudH,
-            radius: CASUAL_UI.panelRadius
-        },
-        content: {
-            y: contentY,
-            height: contentH
-        },
-        leftPanel: {
-            x: padding,
-            y: contentY,
-            width: sideW,
-            height: contentH,
-            radius: CASUAL_UI.panelRadius
-        },
-        rightPanel: {
-            x: W - padding - sideW,
-            y: contentY,
-            width: sideW,
-            height: contentH,
-            radius: CASUAL_UI.panelRadius
-        },
-        playField: {
-            x: playX,
-            y: playY,
-            width: playW,
-            height: playH,
-            radius: CASUAL_UI.playfieldRadius
-        },
-        buttons: {
-            size: buttonSize,
-            gap: buttonGap
-        }
-    };
-}
-
-function buildGameBackground(layout) {
-    if (TEXTURES.bg_game) {
-        rootUI.addChild(createCoverBackground('bg_game', layout.screenWidth, layout.screenHeight, 0xFFC55A));
-        return;
-    }
-
-    const bg = new PIXI.Graphics();
-    bg.beginFill(0xFFC55A);
-    bg.drawRect(0, 0, layout.screenWidth, layout.screenHeight);
-    bg.endFill();
-
-    const board = new PIXI.Graphics();
-    const inset = Math.max(4, Math.min(layout.screenWidth, layout.screenHeight) * 0.006);
-    const radius = Math.max(22, Math.min(34, layout.screenHeight * 0.055));
-    board.beginFill(0xFFE28B);
-    board.drawRoundedRect(inset, inset, layout.screenWidth - inset * 2, layout.screenHeight - inset * 2, radius);
-    board.endFill();
-    board.lineStyle(Math.max(3, inset * 0.8), 0xB86720, 0.55);
-    board.drawRoundedRect(inset, inset, layout.screenWidth - inset * 2, layout.screenHeight - inset * 2, radius);
-
-    const topGlow = new PIXI.Graphics();
-    topGlow.beginFill(0xFFF0B4, 0.58);
-    topGlow.drawRoundedRect(inset + 14, inset + 8, layout.screenWidth - inset * 2 - 28, layout.screenHeight * 0.18, radius - 8);
-    topGlow.endFill();
-
-    const bottomShade = new PIXI.Graphics();
-    bottomShade.beginFill(0xE9932E, 0.2);
-    bottomShade.drawRoundedRect(inset + 8, layout.screenHeight - inset - 22, layout.screenWidth - inset * 2 - 16, 14, 8);
-    bottomShade.endFill();
-
-    const sparkles = new PIXI.Graphics();
-    sparkles.beginFill(0xFFF5C8, 0.7);
-    sparkles.drawCircle(layout.screenWidth * 0.075, layout.screenHeight * 0.18, 4);
-    sparkles.drawCircle(layout.screenWidth * 0.94, layout.screenHeight * 0.56, 5);
-    sparkles.drawCircle(layout.screenWidth * 0.09, layout.screenHeight * 0.91, 5);
-    sparkles.drawCircle(layout.screenWidth * 0.965, layout.screenHeight * 0.92, 7);
-    sparkles.endFill();
-
-    rootUI.addChild(bg);
-    rootUI.addChild(board);
-    rootUI.addChild(topGlow);
-    rootUI.addChild(bottomShade);
-    rootUI.addChild(sparkles);
+    rootUI.addChild(currentGameUI.scene);
+    colorButtonsMap = currentGameUI.buttons;
+    dynamicColorKeyMap = Object.fromEntries(GAMEPLAY_STYLE.tools.filter(t => enabledColors.includes(t.color)).map(t => [t.key, t.color]));
+    fitGameplayScene(currentGameUI.scene, app.screen);
+    app.renderer.backgroundColor = 0x79A6AA;
+    updateUI();
+    return { fieldWrapper: currentGameUI.scene, playField: currentGameUI.field };
 }
 
 function createCandyPanel(width, height, radius, options = {}) {
@@ -3137,819 +1884,39 @@ function createGameFieldPopupPanel(width, height, radius = 34, borderColor = THE
     return panel;
 }
 
-function addSoftLeafDetails(container, width, height, inset = 24, alpha = 0.45) {
-    const details = new PIXI.Graphics();
-    details.lineStyle(2, 0xE8B568, alpha);
-    details.beginFill(0xFFE2A0, alpha * 0.8);
-    details.drawEllipse(inset, inset + 2, 12, 5);
-    details.drawEllipse(inset + 12, inset + 14, 10, 4);
-    details.drawEllipse(width - inset, inset + 2, 12, 5);
-    details.drawEllipse(width - inset - 12, inset + 14, 10, 4);
-    details.drawEllipse(inset, height - inset - 2, 12, 5);
-    details.drawEllipse(inset + 12, height - inset - 14, 10, 4);
-    details.drawEllipse(width - inset, height - inset - 2, 12, 5);
-    details.drawEllipse(width - inset - 12, height - inset - 14, 10, 4);
-    details.endFill();
-    container.addChild(details);
-}
-
-function buildTopHud(layout, level) {
-    hudContainer = new PIXI.Container();
-    hudContainer.name = 'topHudContainer';
-    hudContainer.x = layout.hud.x;
-    hudContainer.y = layout.hud.y;
-
-    const customHud = createUIAssetSprite('game_hud_panel', layout.hud.width, layout.hud.height, { fit: 'stretch' });
-    if (customHud) {
-        hudContainer.addChild(customHud);
-    } else {
-        const hudBg = createCandyPanel(layout.hud.width, layout.hud.height, layout.hud.radius, {
-            fill: 0xFFD16A,
-            innerFill: 0xFFE9A6,
-            border: 0xF4B04C,
-            darkBorder: 0xB96420,
-            borderWidth: 5,
-            inset: 14
-        });
-        hudContainer.addChild(hudBg);
-
-        const leftPatchW = Math.max(112, layout.hud.width * 0.12);
-        const leftPatch = new PIXI.Graphics();
-        leftPatch.beginFill(0xFFE9AD, 0.62);
-        leftPatch.drawRoundedRect(18, 16, leftPatchW, layout.hud.height - 28, Math.max(18, layout.hud.radius - 8));
-        leftPatch.endFill();
-        leftPatch.lineStyle(2, 0xFFF4C8, 0.65);
-        leftPatch.drawRoundedRect(18, 16, leftPatchW, layout.hud.height - 28, Math.max(18, layout.hud.radius - 8));
-        hudContainer.addChild(leftPatch);
-    }
-
-    const labelStyle = new PIXI.TextStyle({
-        fontSize: Math.max(24, Math.min(42, layout.hud.height * 0.34)),
-        fill: 0xFFF7E8,
-        fontWeight: '900',
-        fontFamily: 'Arial',
-        stroke: 0x9A5422,
-        strokeThickness: 5,
-        lineJoin: 'round'
-    });
-
-    const levelBadgeW = Math.max(96, Math.min(148, layout.hud.width * 0.115));
-    const levelBadgeH = Math.max(42, Math.min(64, layout.hud.height * 0.52));
-    const levelBadge = createRoundedLabel('', {
-        width: levelBadgeW,
-        height: levelBadgeH,
-        radius: Math.max(16, levelBadgeH * 0.35),
-        fill: 0xFFF6E8,
-        borderColor: 0xE8A24A,
-        borderWidth: 4
-    });
-    levelBadge.x = Math.max(18, layout.hud.width * 0.018);
-    levelBadge.y = Math.max(12, layout.hud.height * 0.12);
-
-    const levelBadgeText = new PIXI.Text(`УРОВЕНЬ\n${level.id}`, {
-        fontSize: Math.max(15, Math.min(24, levelBadgeH * 0.34)),
-        fill: 0x7A461F,
-        fontWeight: '900',
-        fontFamily: 'Arial',
-        stroke: 0xFFFFFF,
-        strokeThickness: 3,
-        align: 'center',
-        lineHeight: Math.max(16, Math.min(24, levelBadgeH * 0.36))
-    });
-    levelBadgeText.anchor.set(0.5);
-    levelBadgeText.x = levelBadgeW / 2;
-    levelBadgeText.y = levelBadgeH / 2;
-    levelBadge.addChild(levelBadgeText);
-    hudContainer.addChild(levelBadge);
-
-    const livesLabel = new PIXI.Text('\u0416\u0418\u0417\u041d\u0418', labelStyle);
-    livesLabel.anchor.set(0, 0.5);
-    livesLabel.x = Math.max(160, layout.hud.width * 0.21);
-    livesLabel.y = layout.hud.height * 0.52;
-    hudContainer.addChild(livesLabel);
-
-    const pauseSize = Math.max(56, Math.min(86, layout.hud.height * 0.74));
-    const pauseX = layout.hud.width - pauseSize - Math.max(18, layout.hud.width * 0.018);
-
-    const hearts = [];
-    const heartsRowX = livesLabel.x + livesLabel.width + 16;
-    const maxHeartsWidth = Math.max(0, pauseX - heartsRowX - 24);
-    let heartSize = Math.max(24, Math.min(44, layout.hud.height * 0.36));
-    const heartCount = Math.max(1, level.lifeCount);
-    const naturalHeartsWidth = level.lifeCount * heartSize + Math.max(0, level.lifeCount - 1) * HEART_GAP;
-    if (naturalHeartsWidth > maxHeartsWidth) {
-        heartSize = Math.max(16, Math.floor((maxHeartsWidth - Math.max(0, level.lifeCount - 1) * 3) / heartCount));
-    }
-    const heartGap = level.lifeCount > 1
-        ? Math.max(3, Math.min(HEART_GAP, (maxHeartsWidth - level.lifeCount * heartSize) / (level.lifeCount - 1)))
-        : 0;
-    const heartsRow = new PIXI.Container();
-    heartsRow.name = 'heartsRow';
-    heartsRow.x = heartsRowX;
-    heartsRow.y = layout.hud.height * 0.52 - heartSize / 2;
-
-    for (let i = 0; i < level.lifeCount; i++) {
-        let heart;
-        if (TEXTURES.heart) {
-            heart = new PIXI.Sprite(TEXTURES.heart);
-            heart.width = heartSize;
-            heart.height = heartSize;
-        } else {
-            heart = new PIXI.Text('\u2665', {
-                fontSize: heartSize,
-                fill: THEME.fail,
-                fontWeight: '900',
-                fontFamily: 'Arial',
-                stroke: 0x9A5422,
-                strokeThickness: 2
-            });
-        }
-        heart.x = i * (heartSize + heartGap);
-        heartsRow.addChild(heart);
-        hearts.push(heart);
-    }
-    hudContainer.addChild(heartsRow);
-
-    const pauseButton = createSettingsButton(pauseSize);
-    pauseButton.x = pauseX;
-    pauseButton.y = (layout.hud.height - pauseSize) / 2;
-    hudContainer.addChild(pauseButton);
-
-
-    currentGameUI = {
-        mode: 'desktop-wide',
-        header: hudContainer,
-
-        hearts
-    };
-    updateLevelHeader(score, life);
-
-    rootUI.addChild(hudContainer);
-    return hudContainer;
-}
-
-function createSettingsButton(size) {
-    const button = new PIXI.Container();
-    button.name = 'pauseButton';
-    button.interactive = true;
-    button.buttonMode = true;
-    button.on('pointerdown', showPausePopup);
-
-    const customBg = createUIAssetSprite('game_settings_button', size, size, { contain: false });
-    if (customBg) {
-        button.addChild(customBg);
-    } else {
-        button.addChild(createCandyPanel(size, size, Math.max(18, size * 0.24), {
-            fill: 0xFFB13B,
-            innerFill: 0xFFD067,
-            border: 0xF0781F,
-            darkBorder: 0xB45F1F,
-            borderWidth: Math.max(4, size * 0.06),
-            inset: Math.max(7, size * 0.12)
-        }));
-    }
-
-    if (TEXTURES.gear) {
-        const gear = new PIXI.Sprite(TEXTURES.gear);
-        gear.anchor.set(0.5);
-        const scale = Math.min((size * 0.58) / gear.texture.width, (size * 0.58) / gear.texture.height);
-        gear.scale.set(scale);
-        gear.x = size / 2;
-        gear.y = size / 2;
-        button.addChild(gear);
-    } else {
-        const icon = new PIXI.Text('\u2699', {
-            fontSize: Math.floor(size * 0.48),
-            fill: THEME.white,
-            fontWeight: '900',
-            fontFamily: 'Arial',
-            stroke: THEME.borderDark,
-            strokeThickness: 3
-        });
-        icon.anchor.set(0.5);
-        icon.x = size / 2;
-        icon.y = size / 2;
-        button.addChild(icon);
-    }
-
-    return button;
-}
-
-function buildPlayField(layout) {
-    playAreaFrame = new PIXI.Container();
-    playAreaFrame.name = 'playAreaFrame';
-    playAreaFrame.x = layout.playField.x;
-    playAreaFrame.y = layout.playField.y;
-    playAreaFrame.width = layout.playField.width;
-    playAreaFrame.height = layout.playField.height;
-
-    const playField = new PIXI.Container();
-    playField.name = 'playArea';
-    playField.width = layout.playField.width;
-    playField.height = layout.playField.height;
-    playField._fieldWidth = layout.playField.width;
-    playField._fieldHeight = layout.playField.height;
-    playField._fieldRadius = layout.playField.radius;
-
-    const customFrame = createUIAssetSprite('game_playfield_frame', layout.playField.width, layout.playField.height, { fit: 'stretch' });
-    const shell = customFrame || createCandyPanel(layout.playField.width, layout.playField.height, layout.playField.radius, {
-        fill: 0xFFF2D2,
-        innerFill: 0xFFF8EB,
-        border: 0xF2A13A,
-        darkBorder: 0xB86421,
-        borderWidth: 8,
-        inset: 13
-    });
-
-    const fieldInset = Math.max(18, Math.min(28, Math.min(layout.playField.width, layout.playField.height) * 0.045));
-    const innerRadius = Math.max(18, layout.playField.radius - 12);
-    const innerFieldWidth = layout.playField.width - fieldInset * 2;
-    const innerFieldHeight = layout.playField.height - fieldInset * 2;
-    playField._spawnBounds = {
-        left: fieldInset,
-        top: fieldInset,
-        right: fieldInset + innerFieldWidth,
-        bottom: fieldInset + innerFieldHeight,
-        width: innerFieldWidth,
-        height: innerFieldHeight
-    };
-    playField._activeBorderRect = {
-        x: fieldInset,
-        y: fieldInset,
-        width: innerFieldWidth,
-        height: innerFieldHeight,
-        radius: innerRadius
-    };
-    playField._timerBorderRect = {
-        x: 5,
-        y: 5,
-        width: layout.playField.width - 10,
-        height: layout.playField.height - 10,
-        radius: Math.max(12, layout.playField.radius - 4)
-    };
-    playField._activeBorderWidth = 6;
-    playField._timerBorderWidth = 8;
-
-    const fieldBg = new PIXI.Graphics();
-    fieldBg.beginFill(0xFFF9EF, 0.98);
-    fieldBg.drawRoundedRect(fieldInset, fieldInset, innerFieldWidth, innerFieldHeight, innerRadius);
-    fieldBg.endFill();
-    fieldBg.lineStyle(3, 0xE7A04A, 0.85);
-    fieldBg.drawRoundedRect(fieldInset, fieldInset, innerFieldWidth, innerFieldHeight, innerRadius);
-
-    const innerHighlight = new PIXI.Graphics();
-    innerHighlight.lineStyle(2, 0xFFFFFF, 0.78);
-    innerHighlight.drawRoundedRect(fieldInset + 5, fieldInset + 5, innerFieldWidth - 10, innerFieldHeight - 10, Math.max(14, innerRadius - 5));
-
-    const activeBorder = new PIXI.Graphics();
-    activeBorder.name = 'activeFieldBorder';
-    activeBorder.eventMode = 'none';
-    playField._activeBorder = activeBorder;
-    const frozenTimerBorder = new PIXI.Graphics();
-    frozenTimerBorder.name = 'frozenTimerBorder';
-    frozenTimerBorder.eventMode = 'none';
-    playField._frozenTimerBorder = frozenTimerBorder;
-    const chameleonTimerBorder = new PIXI.Graphics();
-    chameleonTimerBorder.name = 'chameleonTimerBorder';
-    chameleonTimerBorder.eventMode = 'none';
-    playField._chameleonTimerBorder = chameleonTimerBorder;
-
-    playField.addChild(shell, fieldBg, innerHighlight, activeBorder, frozenTimerBorder, chameleonTimerBorder);
-    addSoftLeafDetails(playField, layout.playField.width, layout.playField.height, fieldInset + 26, 0.38);
-    addSpawnZoneDebugOverlay(playField);
-    updatePlayAreaActiveBorder(playField);
-
-    playAreaFrame.addChild(playField);
-    rootUI.addChild(playAreaFrame);
-
-    return { fieldWrapper: playAreaFrame, playField };
-}
-
-function createPanelBackground(width, height, radius = CASUAL_UI.panelRadius) {
-    const customPanel = createUIAssetSprite('game_side_panel', width, height, { contain: false });
-    if (customPanel) {
-        const panel = new PIXI.Container();
-        panel.addChild(customPanel);
-        return panel;
-    }
-
-    const panel = createCandyPanel(width, height, radius, {
-        fill: 0xFFE1A0,
-        innerFill: 0xFFF0CB,
-        border: 0xF0A34A,
-        darkBorder: 0xB86720,
-        borderWidth: 5,
-        inset: 9
-    });
-
-    const dashed = new PIXI.Graphics();
-    dashed.lineStyle(2, 0xE9B86D, 0.55);
-    const dash = 10;
-    const gap = 8;
-    const x = 14;
-    const y = 16;
-    const w = width - 28;
-    const h = height - 32;
-    for (let px = x + 12; px < x + w - 12; px += dash + gap) {
-        dashed.moveTo(px, y);
-        dashed.lineTo(Math.min(px + dash, x + w - 12), y);
-        dashed.moveTo(px, y + h);
-        dashed.lineTo(Math.min(px + dash, x + w - 12), y + h);
-    }
-    for (let py = y + 12; py < y + h - 12; py += dash + gap) {
-        dashed.moveTo(x, py);
-        dashed.lineTo(x, Math.min(py + dash, y + h - 12));
-        dashed.moveTo(x + w, py);
-        dashed.lineTo(x + w, Math.min(py + dash, y + h - 12));
-    }
-    panel.addChild(dashed);
-    addSoftLeafDetails(panel, width, height, 22, 0.35);
-    return panel;
-}
-
-function createRoundedLabel(text, options) {
-    const {
-        width,
-        height,
-        radius = 18,
-        fill = THEME.cardBg,
-        borderColor = THEME.border,
-        borderWidth = 4
-    } = options;
-    const label = createRoundedPanel(width, height, radius, fill, borderColor, borderWidth);
-
-    if (text) {
-        const labelText = new PIXI.Text(text, {
-            fontSize: Math.floor(height * 0.42),
-            fill: THEME.textDark,
-            fontWeight: '900',
-            fontFamily: 'Arial'
-        });
-        labelText.anchor.set(0.5);
-        labelText.x = width / 2;
-        labelText.y = height / 2;
-        label.addChild(labelText);
-    }
-
-    return label;
-}
-
-function setupMobileLandscapePlayArea(layout, coloredTypes) {
-    rootUI.addChild(createCoverBackground('bg_game', layout.screenWidth, layout.screenHeight, 0xFFC55A));
-
-    const header = buildMobileLevelHeader(layout, levelData);
-    rootUI.addChild(header);
-
-    const customFrame = createUIAssetSprite('game_playfield_frame', layout.fieldShell.width, layout.fieldShell.height, { fit: 'stretch' });
-    const fieldShell = new PIXI.Container();
-    fieldShell.addChild(customFrame || createRoundedPanel(
-            layout.fieldShell.width,
-            layout.fieldShell.height,
-            layout.fieldShell.radius,
-            THEME.cardBg,
-            THEME.border,
-            6
-        ));
-    fieldShell.x = layout.fieldShell.x;
-    fieldShell.y = layout.fieldShell.y;
-    fieldShell.name = 'fieldShell';
-
-    const playField = new PIXI.Container();
-    playField.x = layout.fieldShell.padding;
-    playField.y = layout.fieldShell.padding;
-    playField.width = layout.playField.width;
-    playField.height = layout.playField.height;
-    playField._fieldWidth = layout.playField.width;
-    playField._fieldHeight = layout.playField.height;
-    playField._spawnBounds = {
-        left: 0,
-        top: 0,
-        right: layout.playField.width,
-        bottom: layout.playField.height,
-        width: layout.playField.width,
-        height: layout.playField.height
-    };
-    const innerIndicatorInset = Math.max(6, Math.min(12, Math.min(layout.playField.width, layout.playField.height) * 0.025));
-    playField._activeBorderRect = {
-        x: innerIndicatorInset,
-        y: innerIndicatorInset,
-        width: layout.playField.width - innerIndicatorInset * 2,
-        height: layout.playField.height - innerIndicatorInset * 2,
-        radius: Math.max(10, layout.playField.radius - innerIndicatorInset)
-    };
-    playField._timerBorderRect = {
-        x: 3,
-        y: 3,
-        width: layout.playField.width - 6,
-        height: layout.playField.height - 6,
-        radius: Math.max(10, layout.playField.radius - 3)
-    };
-    playField._activeBorderWidth = 6;
-    playField._timerBorderWidth = 7;
-
-    const fieldBg = new PIXI.Graphics();
-    fieldBg.beginFill(THEME.fieldBg);
-    fieldBg.drawRoundedRect(0, 0, layout.playField.width, layout.playField.height, layout.playField.radius);
-    fieldBg.endFill();
-
-    const fieldBorder = new PIXI.Graphics();
-    fieldBorder.lineStyle(4, 0xE6B05A, 0.85);
-    fieldBorder.drawRoundedRect(0, 0, layout.playField.width, layout.playField.height, layout.playField.radius);
-
-    playField.addChild(fieldBg);
-    playField.addChild(fieldBorder);
-    playField._fieldRadius = layout.playField.radius;
-    const activeBorder = new PIXI.Graphics();
-    activeBorder.name = 'activeFieldBorder';
-    activeBorder.eventMode = 'none';
-    playField._activeBorder = activeBorder;
-    playField.addChild(activeBorder);
-    const frozenTimerBorder = new PIXI.Graphics();
-    frozenTimerBorder.name = 'frozenTimerBorder';
-    frozenTimerBorder.eventMode = 'none';
-    playField._frozenTimerBorder = frozenTimerBorder;
-    playField.addChild(frozenTimerBorder);
-    const chameleonTimerBorder = new PIXI.Graphics();
-    chameleonTimerBorder.name = 'chameleonTimerBorder';
-    chameleonTimerBorder.eventMode = 'none';
-    playField._chameleonTimerBorder = chameleonTimerBorder;
-    playField.addChild(chameleonTimerBorder);
-    addSpawnZoneDebugOverlay(playField);
-    updatePlayAreaActiveBorder(playField);
-    fieldShell.addChild(playField);
-    rootUI.addChild(fieldShell);
-
-    buildSideColorColumns(coloredTypes, layout);
-    buildMobilePauseButton(layout);
-
-    return { fieldWrapper: fieldShell, playField };
-}
-
-function buildDesktopLevelHeader(wrapper, level, layout) {
-    const { header, ui } = buildDesktopLevelHeaderUI({
-        wrapper,
-        level,
-        layout,
-        theme: THEME,
-        heartSizeRatio: HEART_SIZE_PRC,
-        heartGap: HEART_GAP
-    });
-    currentGameUI = ui;
-    return header;
-}
-
-function buildMobileLevelHeader(layout, level) {
-    const mobileTextures = {
-        ...TEXTURES,
-        goal_panel: TEXTURES.game_goal_badge || TEXTURES.goal_panel
-    };
-    const { header, ui } = buildMobileLevelHeaderUI({
-        layout,
-        level,
-        theme: THEME,
-        textures: mobileTextures,
-        score
-    });
-
-    const customHud = createUIAssetSprite('game_hud_panel', layout.header.width, layout.header.height, { fit: 'stretch' });
-    if (customHud) {
-        header.addChildAt(customHud, 0);
-    }
-
-    currentGameUI = ui;
-    updateLevelHeader(score, life);
-    return header;
-}
-
-function buildSideColorPanels(coloredTypes, layout) {
-    sidePanelsContainer = new PIXI.Container();
-    sidePanelsContainer.name = 'sidePanelsContainer';
-    colorButtonsContainer = sidePanelsContainer;
-    colorButtonsMap = {};
-    dynamicColorKeyMap = {};
-
-    const usedColors = new Set(coloredTypes.map(type => type.split('_')[1]).filter(Boolean));
-
-    const buildPanel = (panelLayout, side) => {
-        const panel = new PIXI.Container();
-        panel.name = `${side}ColorPanel`;
-        panel.x = panelLayout.x;
-        panel.y = panelLayout.y;
-        panel.addChild(createPanelBackground(panelLayout.width, panelLayout.height, panelLayout.radius));
-
-        const slots = COLOR_BUTTON_SLOTS.filter((slot) => slot.side === side);
-        const totalButtonsH = slots.length * layout.buttons.size + (slots.length - 1) * layout.buttons.gap;
-        const startY = Math.max(18, (panelLayout.height - totalButtonsH) / 2);
-
-        slots.forEach((slot, index) => {
-            const isEnabled = usedColors.has(slot.color);
-            if (isEnabled) {
-                dynamicColorKeyMap[slot.key] = slot.color;
-            }
-
-            const button = createColorButton(slot.color, layout.buttons.size, slot.key, !IS_TOUCH, 'side');
-            button.x = (panelLayout.width - layout.buttons.size) / 2;
-            button.y = startY + index * (layout.buttons.size + layout.buttons.gap);
-            button.alpha = isEnabled ? 1 : 0.45;
-            button.interactive = isEnabled;
-            button.buttonMode = isEnabled;
-            panel.addChild(button);
-
-            if (!colorButtonsMap[slot.color]) {
-                colorButtonsMap[slot.color] = [];
-            }
-            colorButtonsMap[slot.color].push(button);
-        });
-
-        sidePanelsContainer.addChild(panel);
-    };
-
-    buildPanel(layout.leftPanel, 'left');
-    buildPanel(layout.rightPanel, 'right');
-    rootUI.addChild(sidePanelsContainer);
-}
-
-function buildSideColorColumns(coloredTypes, layout) {
-    colorButtonsContainer = rootUI;
-    const availableColors = new Set(getUsedLevelColors());
-    dynamicColorKeyMap = {};
-    colorButtonsMap = {};
-
-    const buildColumn = (columnLayout, slotColors, name) => {
-        const column = new PIXI.Container();
-        column.name = name;
-        column.x = columnLayout.x;
-        column.y = columnLayout.y;
-
-        const buttonWidth = layout.buttons.width;
-        const buttonHeight = layout.buttons.height;
-        const verticalGap = layout.buttons.gap;
-        const visibleColors = slotColors.filter((color) => availableColors.has(color));
-        const stackHeight = visibleColors.length * buttonHeight + Math.max(0, visibleColors.length - 1) * verticalGap;
-        const startY = Math.max(0, (columnLayout.height - stackHeight) / 2);
-        let visibleIndex = 0;
-
-        if (visibleColors.length) {
-            column.addChild(createPanelBackground(columnLayout.width, columnLayout.height, Math.max(20, columnLayout.width * 0.28)));
-        }
-
-        visibleColors.forEach((color) => {
-
-            const key = COLOR_BUTTON_SLOTS.find((slot) => slot.color === color)?.key || '';
-            if (key) {
-                dynamicColorKeyMap[key] = color;
-            }
-            const button = createColorButton(color, buttonWidth, key, false, 'mobile-tall', buttonHeight);
-            button.x = (columnLayout.width - buttonWidth) / 2;
-            button.y = startY + visibleIndex * (buttonHeight + verticalGap);
-            column.addChild(button);
-
-            if (!colorButtonsMap[color]) {
-                colorButtonsMap[color] = [];
-            }
-            colorButtonsMap[color].push(button);
-            visibleIndex++;
-        });
-
-        rootUI.addChild(column);
-    };
-
-    buildColumn(layout.leftButtons, MOBILE_FIXED_BUTTON_COLUMNS.left, 'leftColorColumn');
-    buildColumn(layout.rightButtons, MOBILE_FIXED_BUTTON_COLUMNS.right, 'rightColorColumn');
-}
-
-function buildMobilePauseButton(layout) {
-    const size = layout.pauseButton.size;
-    const button = new PIXI.Container();
-    button.name = 'pauseButton';
-    button.x = layout.pauseButton.x;
-    button.y = layout.pauseButton.y;
-    button.interactive = true;
-    button.buttonMode = true;
-    button.on('pointerdown', showPausePopup);
-
-    const customBg = createUIAssetSprite('game_settings_button', size, size, { fit: 'stretch' });
-    button.addChild(customBg || createRoundedPanel(size, size, 22, 0xFFE9C2, 0xD98B32, 5));
-
-    if (TEXTURES.gear) {
-        const gear = new PIXI.Sprite(TEXTURES.gear);
-        gear.anchor.set(0.5);
-        const scale = Math.min((size * 0.54) / gear.texture.width, (size * 0.54) / gear.texture.height);
-        gear.scale.set(scale);
-        gear.x = size / 2;
-        gear.y = size / 2;
-        button.addChild(gear);
-    } else {
-        const icon = new PIXI.Text('⚙', {
-            fontSize: Math.floor(size * 0.42),
-            fill: THEME.textDark,
-            fontWeight: '800',
-            fontFamily: 'Arial',
-        });
-        icon.anchor.set(0.5);
-        icon.x = size / 2;
-        icon.y = size / 2;
-        button.addChild(icon);
-    }
-
-    rootUI.addChild(button);
-}
-
-function updateLevelHeader(score, life) {
-    updateLevelHeaderUI({ currentGameUI, life, levelData, textures: TEXTURES, theme: THEME });
-    updateFieldCountdown();
-}
-
 // Функция для взвешенного случайного выбора
-function weightedRandomChoice(weights) {
-    // Получаем все ключи и их веса
-    const entries = Object.entries(weights);
-    if (entries.length === 0) return null;
 
-    // Вычисляем сумму всех весов
-    const totalWeight = entries.reduce((sum, [, weight]) => sum + weight, 0);
-    
-    // Генерируем случайное число от 0 до суммы весов
-    let random = Math.random() * totalWeight;
-    
-    // Выбираем объект на основе весов
-    for (const [key, weight] of entries) {
-        random -= weight;
-        if (random <= 0) return key;
-    }
-    
-    // На всякий случай возвращаем последний элемент
-    return entries[entries.length - 1][0];
-}
 
 // очередь объектов
 function prepareObjectQueue() {
     objectQueue = [];
-    const spawnWeights = levelData.params.spawnWeights || {};
-
-    const killableTypes = Object.keys(spawnWeights).filter(type =>
-        type !== 'bomb' &&
-        (type === 'bug' ||
-         type === 'healer' ||
-         type === 'frozen' ||
-         type === 'chameleon' ||
-         type === 'neat' ||
-         type === 'fat' ||
-         type.startsWith('coloredBug_') ||
-         type.startsWith('fatColoredBug_'))
-    );
-
-    const unkillableTypes = Object.keys(spawnWeights).filter(type => type === 'bomb');
-    const killableWeights = {};
-    const unkillableWeights = {};
-
-    for (const type of killableTypes) {
-        killableWeights[type] = spawnWeights[type];
-    }
-    for (const type of unkillableTypes) {
-        unkillableWeights[type] = spawnWeights[type];
-    }
-
-    const minKillableCount = 100; // Refillable batch; spawning lasts until the timer ends.
-    let killableCount = 0;
-
-    while (killableCount < minKillableCount) {
-        const type = weightedRandomChoice(killableWeights);
+    for (let i = 0; i < 64; i++) {
+        const type = weightedType(levelData.params.spawnWeights);
         if (!type) break;
-
-        const runtimeBalance = getRuntimeBugBalance(type);
-
-        // Final bug params are resolved at runtime from species base values and level multipliers.
-        const objectData = {
-            type,
-            lifetime: runtimeBalance.lifetime,
-            spawnInterval: runtimeBalance.spawnInterval,
-            scoreValue: runtimeBalance.scoreValue,
-            healAmount: runtimeBalance.healAmount,
-            spawnZone: runtimeBalance.spawnZone,
-        };
-
-        if (runtimeBalance.clicks > 1) {
-            objectData.clicks = runtimeBalance.clicks;
-        }
-        if (type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_')) {
-            objectData.color = type.split('_')[1];
-        }
-
-        objectQueue.push(objectData);
-        killableCount++;
-    }
-
-    const bombCount = Math.floor(killableCount * 0.2);
-    for (let i = 0; i < bombCount; i++) {
-        const type = weightedRandomChoice(unkillableWeights);
-        if (!type) continue;
-
-        const runtimeBalance = getRuntimeBugBalance(type);
-        objectQueue.push({
-            type,
-            lifetime: runtimeBalance.lifetime,
-            spawnInterval: runtimeBalance.spawnInterval,
-            scoreValue: runtimeBalance.scoreValue,
-            healAmount: runtimeBalance.healAmount,
-            spawnZone: runtimeBalance.spawnZone,
-        });
-    }
-
-    for (let i = objectQueue.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [objectQueue[i], objectQueue[j]] = [objectQueue[j], objectQueue[i]];
+        const balance = getRuntimeBugBalance(type);
+        objectQueue.push({ type, ...balance });
     }
 }
 
-const FIELD_PULSE_SCALE = 1.2;
-const DEFAULT_PULSE_DURATION = 0.2;
-const FAT_PULSE_DURATION = 0.7;
-const COLLISION_PADDING = 8;
-const BUG_TAP_AREA_SCALE = 1.15;
-const LIFETIME_BAR_HEIGHT = 5;
-const LIFETIME_BAR_OFFSET = 8;
-const LIFETIME_BAR_FILL_COLOR = 0x7BE495;
-
-function getCollisionRadius(obj) {
-    const footprint = (obj && obj._footprint) ? obj._footprint : Math.max(obj.width, obj.height);
-    return (footprint * FIELD_PULSE_SCALE) / 2;
-}
-
-function updateBugTapArea(container) {
-    const footprint = (container && container._footprint) ? container._footprint : Math.max(container.width, container.height);
-    const radius = (footprint * BUG_TAP_AREA_SCALE) / 2;
-    container.hitArea = new PIXI.Circle(0, 0, radius);
-}
-
-function checkCollision(obj1, obj2) {
-    const r1 = getCollisionRadius(obj1);
-    const r2 = getCollisionRadius(obj2);
-    const dx = (obj1.x) - (obj2.x);
-    const dy = (obj1.y) - (obj2.y);
-    const minDistance = r1 + r2 + COLLISION_PADDING;
-    return (dx * dx + dy * dy) < (minDistance * minDistance);
-}
 
 // Проверка, что объект полностью в пределах поля
-function isWithinBounds(obj, playArea) {
-    const bounds = playArea?._spawnBounds || {
-        left: 0,
-        top: 0,
-        right: playArea?.width ?? 0,
-        bottom: playArea?.height ?? 0
-    };
-    return (
-        obj.x - obj.width / 2 >= bounds.left &&
-        obj.x + obj.width / 2 <= bounds.right &&
-        obj.y - obj.height / 2 >= bounds.top &&
-        obj.y + obj.height / 2 <= bounds.bottom
-    );
+
+
+// Add this function before spawnObject
+function animateBugShake(obj) {
+    const body = obj.body;
+    obj.animations.forEach(a => a.kill());
+    body.rotation = 0;
+    body.scale.set(1);
+    obj.animations = [gsap.timeline().to(body, { rotation: 0.18, duration: 0.05, repeat: 3, yoyo: true }).to(body, { rotation: 0, duration: 0.05 })];
 }
 
 // Add this function before spawnObject
-function animateBugShake(container) {
-    // Store original rotation
-    const originalRotation = container.rotation;
-    
-    // Create a sequence of quick rotations
-    const shakeSequence = [];
-    for (let i = 0; i < 5; i++) {
-        // Convert degrees to radians (15 degrees = 0.2618 radians)
-        shakeSequence.push(
-            { rotation: originalRotation + 0.2618, duration: 0.05 },
-            { rotation: originalRotation - 0.2618, duration: 0.05 }
-        );
-    }
-    // Add final return to original rotation
-    shakeSequence.push({ rotation: originalRotation, duration: 0.05 });
-
-    // Create timeline for the sequence
-    const tl = gsap.timeline();
-    shakeSequence.forEach(step => {
-        tl.to(container, step);
-    });
-}
-
-// Add this function before spawnObject
-function animateFatBugSquish(container) {
-    // Store original scale
-    const originalScale = container.scale.x;
-    
-    // Create squish animation sequence
-    gsap.timeline()
-        .to(container.scale, {
-            x: originalScale * 0.8,
-            y: originalScale * 1.2, // Stretch vertically while squishing horizontally
-            duration: 0.1,
-            ease: "power2.out"
-        })
-        .to(container.scale, {
-            x: originalScale,
-            y: originalScale,
-            duration: 0.1,
-            ease: "elastic.out(1, 0.3)" // Add a slight bounce effect
-        });
+function animateFatBugSquish(obj) {
+    obj.animations.forEach(a => a.kill());
+    obj.body.rotation = 0;
+    obj.body.scale.set(1);
+    obj.animations = [gsap.timeline().to(obj.body.scale, { x: 0.9, y: 1.1, duration: 0.08 }).to(obj.body.scale, { x: 1, y: 1, duration: 0.12 })];
 }
 
 function addClicksCounter(container, clicks, {
@@ -3979,715 +1946,210 @@ function removeClicksCounter(container) {
     text.destroy();
 }
 
-function decrementClickCounter(container, data) {
-    if (container._isRemoving) return false;
-
-    if (typeof data.clicks !== 'number') {
-        container._isRemoving = true;
-        container.interactive = false;
-        container.buttonMode = false;
-        return true;
-    }
-
-    data.clicks = Math.max(0, data.clicks - 1);
-    const text = container.getChildByName('clickText');
-    if (data.clicks <= 0) {
-        removeClicksCounter(container);
-        container._isRemoving = true;
-        container.interactive = false;
-        container.buttonMode = false;
-        return true;
-    }
-
-    if (text) text.text = data.clicks;
-    return false;
-}
-
-function addFieldPulseAnimation(container, duration = DEFAULT_PULSE_DURATION) {
-    const pulseAnim = gsap.to(container.scale, {
-        x: FIELD_PULSE_SCALE,
-        y: FIELD_PULSE_SCALE,
-        duration,
-        yoyo: true,
-        repeat: -1,
-        ease: "sine.inOut"
-    });
-    container.animations.push(pulseAnim);
-}
-
-function drawLifetimeBarGraphic(graphic, width, height, color, alpha = 1) {
-    graphic.clear();
-    graphic.beginFill(color, alpha);
-    graphic.drawRoundedRect(0, 0, width, height, height / 2);
-    graphic.endFill();
-}
-
-function layoutLifetimeIndicator(container) {
-    const indicator = container?.getChildByName('lifetimeIndicator');
-    if (!indicator) return;
-
-    const footprint = container._footprint || Math.max(container.width, container.height);
-    const barWidth = Math.max(28, footprint * 0.58);
-    const isFatVisual = container.type === 'fat' || container.type.startsWith('fatColoredBug_');
-    const visual = container.getChildByName('bugVisual');
-    const visualHeight = visual?.height || footprint;
-    const visualBottom = (isFatVisual ? visualHeight : Math.min(visualHeight, footprint)) / 2;
-
-    indicator._barWidth = barWidth;
-    indicator._barHeight = LIFETIME_BAR_HEIGHT;
-    indicator.x = -barWidth / 2;
-    indicator.y = visualBottom + LIFETIME_BAR_OFFSET;
-
-    const fill = indicator.getChildByName('lifetimeBarFill');
-    if (fill) {
-        // Build the geometry only on creation/resize; animate its transform below.
-        drawLifetimeBarGraphic(fill, barWidth, indicator._barHeight, LIFETIME_BAR_FILL_COLOR, 0.95);
-        updateLifetimeIndicator(container);
-    }
-}
-
-function updateLifetimeIndicator(container) {
-    const indicator = container?.getChildByName('lifetimeIndicator');
-    if (!indicator) return;
-
-    const fill = indicator.getChildByName('lifetimeBarFill');
-    if (!fill) return;
-
-    const total = Math.max(1, container.totalLifetimeMs || container.remainingLifetimeMs || 1);
-    const progress = Math.max(0, Math.min(1, (container.remainingLifetimeMs || 0) / total));
-    const fullWidth = indicator._barWidth || 0;
-    const width = fullWidth * progress;
-    fill.x = (fullWidth - width) / 2;
-    fill.scale.x = progress;
-    fill.visible = progress > 0;
-}
-
-function removeLifetimeIndicator(container) {
-    if (!container?._lifetimeIndicatorTicker) return;
-
-    app.ticker.remove(container._lifetimeIndicatorTicker);
-    container._lifetimeIndicatorTicker = null;
-}
-
-function addLifetimeIndicator(container) {
-    const indicator = new PIXI.Container();
-    indicator.name = 'lifetimeIndicator';
-
-    const fill = new PIXI.Graphics();
-    fill.name = 'lifetimeBarFill';
-    indicator.addChild(fill);
-
-    container.addChild(indicator);
-    layoutLifetimeIndicator(container);
-
-    container._lifetimeIndicatorTicker = () => {
-        if (!activeObjects.includes(container) || container._isRemoving || container._isExpiring) {
-            removeLifetimeIndicator(container);
-            return;
-        }
-
-        if (isPaused || orientationPauseActive || !container.parent || container.parent !== playArea) {
-            updateLifetimeIndicator(container);
-            return;
-        }
-
-        const remainingTime = syncObjectLifetime(container);
-        if (remainingTime <= 0) {
-            removeExpiredObject(container);
-        }
-    };
-    app.ticker.add(container._lifetimeIndicatorTicker);
-}
-
 // --- Safe bounds helpers ---
 // Возвращает безопасные границы спавна с учётом рамки и небольшого запаса под анимации
 // Возвращает итоговый «след» объекта (размер коллизии) на этапе спавна.
 // Важно: здесь учитываем реальные габариты визуала (fat = x2, fatColored = x2, остальные = x1).
-function getSpawnFootprintSize(type, baseSize) {
-  if (type === 'fat' || (typeof type === 'string' && type.startsWith('fatColoredBug_'))) {
-    return baseSize * 2;
-  }
-  return baseSize;
-}
-
-function getResolvedObjectSize(type) {
-  const isFat = type === 'fat' || type.startsWith('fatColoredBug_');
-  const playAreaBaseSize = Math.min(playArea.width, playArea.height);
-  const baseSize = Math.min(
-      Math.max(
-          Math.floor(playAreaBaseSize * BUG_SIZE_PRC),
-          MIN_BUG_SIZE
-      ),
-      MAX_BUG_SIZE
-  );
-  const size = isFat ? baseSize * 2 / 1.5 : baseSize;
-  const footprint = getSpawnFootprintSize(type, size);
-
-  return { size, footprint, isFat };
-}
-
-function applyResolvedObjectSize(container) {
-  if (!container?.type || !playArea) return;
-
-  const { size, footprint } = getResolvedObjectSize(container.type);
-  container.width = footprint;
-  container.height = footprint;
-  container.pivot.set(footprint / 2);
-  container._footprint = footprint;
-  updateBugTapArea(container);
-
-  const visual = container.getChildByName('bugVisual') ||
-    container.children.find((child) => child instanceof PIXI.Sprite);
-
-  if (visual) {
-    const isFatVisual = container.type === 'fat' || container.type.startsWith('fatColoredBug_');
-    const visualSize = isFatVisual ? size * 2 : size;
-    visual.width = visualSize;
-    visual.height = visualSize;
-  }
-
-  const clickText = container.getChildByName('clickText');
-  if (clickText) {
-    const textScale = Math.max(0.9, Math.min(1.45, footprint / 120));
-    clickText.scale.set(textScale);
-  }
-
-  layoutLifetimeIndicator(container);
-}
-
-function getSafeSpawnBounds(objSize) {
-  // рамка + небольшой запас + 10% от размера под пульсации/сквиш
-  const bounds = playArea?._spawnBounds || {
-    left: 0,
-    top: 0,
-    right: playArea?.width ?? 0,
-    bottom: playArea?.height ?? 0
-  };
-  const pad = SAFE_PADDING_EXTRA + Math.ceil(objSize * 0.1);
-  const minX = bounds.left + pad + objSize / 2;
-  const maxX = bounds.right - pad - objSize / 2;
-  const minY = bounds.top + pad + objSize / 2;
-  const maxY = bounds.bottom - pad - objSize / 2;
-  return { minX, maxX, minY, maxY };
-}
 
 // Подтягивает объект внутрь безопасной зоны (при ресайзе/перестроении UI)
-function getSpawnRange(spawnZone, playArea) {
-  const bounds = playArea?._spawnBounds || {
-    left: 0,
-    right: playArea?.width ?? 0,
-    width: playArea?.width ?? 0
-  };
-  const fieldLeft = bounds.left;
-  const fieldRight = bounds.right;
-  const fieldWidth = bounds.width ?? (fieldRight - fieldLeft);
-  const third = fieldWidth / 3;
-
-  const leftZone = {
-    min: fieldLeft,
-    max: fieldLeft + third
-  };
-  const centerZone = {
-    min: fieldLeft + third,
-    max: fieldLeft + third * 2
-  };
-  const rightZone = {
-    min: fieldLeft + third * 2,
-    max: fieldRight
-  };
-
-  switch (spawnZone) {
-    case 'left':
-      return { minX: leftZone.min, maxX: centerZone.max };
-    case 'right':
-      return { minX: centerZone.min, maxX: rightZone.max };
-    case 'full':
-    default:
-      return { minX: fieldLeft, maxX: fieldRight };
-  }
-}
-
-function getConstrainedSpawnBounds(spawnZone, playArea, objSize) {
-  const safeBounds = getSafeSpawnBounds(objSize);
-  const zoneBounds = getSpawnRange(spawnZone, playArea);
-
-  return {
-    minX: Math.max(safeBounds.minX, zoneBounds.minX + objSize / 2),
-    maxX: Math.min(safeBounds.maxX, zoneBounds.maxX - objSize / 2),
-    minY: safeBounds.minY,
-    maxY: safeBounds.maxY
-  };
-}
-
-function addSpawnZoneDebugOverlay(playField) {
-  if (!DEBUG_SHOW_SPAWN_ZONES) return;
-
-  const overlay = new PIXI.Container();
-  overlay.name = 'spawnZoneDebugOverlay';
-  overlay.eventMode = 'none';
-
-  const bounds = playField._spawnBounds || {
-    left: 0,
-    top: 0,
-    width: playField.width,
-    height: playField.height
-  };
-  const third = bounds.width / 3;
-  const zones = [
-    { x: bounds.left, width: third, color: 0x4D96FF },
-    { x: bounds.left + third, width: third, color: 0x7BC67B },
-    { x: bounds.left + third * 2, width: bounds.width - third * 2, color: 0xFF9F43 }
-  ];
-
-  zones.forEach((zone) => {
-    const rect = new PIXI.Graphics();
-    rect.beginFill(zone.color, 0.15);
-    rect.drawRect(zone.x, bounds.top, zone.width, bounds.height);
-    rect.endFill();
-    overlay.addChild(rect);
-  });
-
-  playField.addChild(overlay);
-}
-
-function clampToSafeArea(obj) {
-  const size = obj._footprint || Math.max(obj.width, obj.height);
-  const spawnZone = obj.spawnZone ?? getBugSpawnZone(obj.type);
-  const { minX, maxX, minY, maxY } = getConstrainedSpawnBounds(spawnZone, playArea, size);
-  if (minX <= maxX) obj.x = Math.min(Math.max(obj.x, minX), maxX);
-  if (minY <= maxY) obj.y = Math.min(Math.max(obj.y, minY), maxY);
-}
 
 // генерация объекта
+// Integrated into game.js; movement and simulation use logical scene coordinates.
 function spawnObject() {
-    // Runtime spawn uses the queued bug config instead of hardcoded level spawn values.
-    if (introActive || levelEnded) {
-        debugSpawn('spawnObject aborted by state');
+    if (isPaused || introActive || orientationPauseActive || levelEnded || document.hidden) return;
+    if (activeObjects.filter(obj => obj.state !== 'resolved').length >= levelData.params.maxObjects) {
+        scheduleNextSpawn(FOOD_RULES.retrySpawnMs);
         return;
     }
-
-    if (activeObjects.length >= levelData.params.maxObjects) {
-        debugSpawn('spawnObject deferred because maxObjects reached', { maxObjects: levelData.params.maxObjects });
-        scheduleNextSpawn(100);
-        return;
-    }
-    if (objectQueue.length === 0) {
-        debugSpawn('spawnObject aborted because queue is empty');
-        return;
-    }
-
-    const data = objectQueue.shift();
-    const type = data.type;
-    debugSpawn('spawnObject picked object', {
-        type,
-        lifetime: data.lifetime,
-        spawnInterval: data.spawnInterval
-    });
-    
-    // Calculate actual size based on bug type
-    const { size, footprint, isFat } = getResolvedObjectSize(type);
+    if (!objectQueue.length) prepareObjectQueue();
+    const data = objectQueue[0];
+    if (!data) return;
+    const fat = data.type === 'fat' || data.type.startsWith('fatColoredBug_');
+    const size = FOOD_RULES.bugSize * (fat ? FOOD_RULES.fatSizeMultiplier : 1);
+    const radius = size / 2;
+    const rect = GAMEPLAY_STYLE.playRect;
+    const allowed = side => !(data.spawnZone === 'left' && side === 'right') && !(data.spawnZone === 'right' && side === 'left');
+    if (!spawnSides.some(allowed)) spawnSides = shuffledSides();
+    const sideIndex = spawnSides.findIndex(allowed);
+    const side = spawnSides[sideIndex];
+    const position = chooseEntry(rect, side, radius, activeObjects, Math.random, data.spawnZone);
+    if (!position) { scheduleNextSpawn(FOOD_RULES.retrySpawnMs); return; }
+    spawnSides.splice(sideIndex, 1);
+    objectQueue.shift();
+    const food = {
+        x: GAMEPLAY_STYLE.food.x + GAMEPLAY_STYLE.food.size / 2 - rect.x,
+        y: GAMEPLAY_STYLE.food.y + GAMEPLAY_STYLE.food.size / 2 - rect.y,
+        radius: GAMEPLAY_STYLE.food.radius
+    };
     const container = new PIXI.Container();
-    container.width = footprint;
-    container.height = footprint;
-    container.pivot.set(footprint / 2);
-    container._footprint = footprint;
-    updateBugTapArea(container);
-    container.interactive = true;
-    container.buttonMode = true;
+    Object.assign(container, createApproach(position, food, radius, data.lifetime, levelData.params.foodReactionMs ?? FOOD_RULES.reactionMs));
+    container.type = data.type;
+    container.data = data;
+    container.scoreValue = data.scoreValue;
+    container.interactive = container.buttonMode = true;
+    container.hitArea = new PIXI.Circle(0, 0, size * FOOD_RULES.tapRadiusMultiplier);
     container.animations = [];
-    container.spawnZone = data.spawnZone ?? getBugSpawnZone(type);
-    container.type = type; // ✅ важно для корректной логики в resumeGame()
-
-    // Calculate safe spawn boundaries (accounting for border and animations)
-    const spawnZone = data.spawnZone ?? getBugSpawnZone(type);
-    const { minX, maxX, minY, maxY } = getConstrainedSpawnBounds(spawnZone, playArea, footprint);
-
-    // Если безопасная область не вмещает объект — отложим спавн
-    if (minX > maxX || minY > maxY) {
-        debugSpawn('spawnObject deferred because safe bounds are invalid', { type, minX, maxX, minY, maxY });
-        objectQueue.unshift(data);
-        scheduleNextSpawn(100);
-        return;
-    }
-
-    let attempts = 0;
-    const maxAttempts = 50;
-    let positionFound = false;
-
-    while (!positionFound && attempts < maxAttempts) {
-        const x = Math.random() * (maxX - minX) + minX;
-        const y = Math.random() * (maxY - minY) + minY;
-        container.x = x;
-        container.y = y;
-
-        // Проверка на пересечение с другими объектами
-        let hasCollision = false;
-        for (const child of activeObjects) {
-            if (child !== container && checkCollision(container, child)) {
-                hasCollision = true;
-                break;
-            }
-        }
-
-        if (!hasCollision) {
-            positionFound = true;
-        } else {
-            attempts++;
-        }
-    }
-
-    // Если не найдена позиция, возвращаем объект в очередь
-    if (!positionFound) {
-        debugSpawn('spawnObject deferred because no free position was found', { type, attempts: maxAttempts });
-        objectQueue.unshift(data);
-        scheduleNextSpawn(100);
-        return;
-    }
-
-    // Визуальный элемент
-    let visual;
-    if (type.startsWith('fatColoredBug_')) {
-        const color = type.split('_')[1];
-        visual = new PIXI.Sprite(TEXTURES[`coloredBug_${color}`]);
-        visual.name = 'bugVisual';
-        visual.anchor.set(0.5);
-        visual.width = size * 2;
-        visual.height = size * 2;
-        container.addChild(visual);
-
-        // White text with remaining clicks
-        addClicksCounter(container, data.clicks, {
-            fontSize: 28,
-            fontFamily: 'Roboto',
-            strokeThickness: 6
-        });
-    } else if (type.startsWith('coloredBug_')) {
-        const color = type.split('_')[1];
-        visual = new PIXI.Sprite(TEXTURES[`coloredBug_${color}`]);
-        visual.name = 'bugVisual';
-        visual.anchor.set(0.5);
-        visual.width = size;
-        visual.height = size;
-        container.addChild(visual);
-    } else if (type === 'fat') {
-        visual = new PIXI.Sprite(TEXTURES['bug']);
-        visual.name = 'bugVisual';
-        visual.anchor.set(0.5);
-        visual.width = size * 2;
-        visual.height = size * 2;
-        container.addChild(visual);
-    
-        // Белый текст с оставшимися кликами
-        addClicksCounter(container, data.clicks, {
-            fontSize: 28,
-            fontFamily: 'Arial',
-            strokeThickness: 4
-        });
-    } else if (type === 'frozen') {
-        visual = new PIXI.Sprite(TEXTURES['frozen'] || TEXTURES['bug']);
-        visual.name = 'bugVisual';
-        visual.anchor.set(0.5);
-        visual.width = size;
-        visual.height = size;
-        container.addChild(visual);
-    } else if (type === 'chameleon') {
-        visual = new PIXI.Sprite(TEXTURES['chameleon'] || TEXTURES['bug']);
-        visual.name = 'bugVisual';
-        visual.anchor.set(0.5);
-        visual.width = size;
-        visual.height = size;
-        container.addChild(visual);
-    } else if (type === 'neat') {
-        visual = new PIXI.Sprite(TEXTURES['neat'] || TEXTURES['bug']);
-        visual.name = 'bugVisual';
-        visual.anchor.set(0.5);
-        visual.width = size;
-        visual.height = size;
-        container.addChild(visual);
-    } else if (type === 'healer') {
-        visual = new PIXI.Sprite(TEXTURES['healer'] || TEXTURES['bug']);
-        visual.name = 'bugVisual';
-        visual.anchor.set(0.5);
-        visual.width = size;
-        visual.height = size;
-        container.addChild(visual);
-    } else {
-        visual = new PIXI.Sprite(TEXTURES[type]);
-        visual.name = 'bugVisual';
-        visual.anchor.set(0.5);
-        visual.width = size;
-        visual.height = size;
-        container.addChild(visual);
-    }
-
-    if (data.clicks > 1 && !container.getChildByName('clickText')) {
-        addClicksCounter(container, data.clicks);
-    }
-
-    // Lifetime is tracked as remaining time so temporary effects can scale it at runtime.
-    container.totalLifetimeMs = data.lifetime;
-    container.remainingLifetimeMs = data.lifetime;
-    container.lastLifetimeSyncAt = Date.now();
-    addLifetimeIndicator(container);
-
-    // Every bug gets the same field pulse; fat bugs pulse slower.
-    const pulseDuration = isFat ? FAT_PULSE_DURATION : DEFAULT_PULSE_DURATION;
-    addFieldPulseAnimation(container, pulseDuration);
-    applyObjectAnimationTimeScale(container);
-
-    // Click handling
-    container.on('pointerdown', () => {
-        if (isPaused || levelEnded) return; // Don't handle clicks while paused
-
-        const isColoredBug = type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_');
-        const heldColorMatchesBug = isColoredBug && isColorHeld(type.split('_')[1]);
-        const wrongPlainBugWithColor = hasAnyActiveColor() && !isChameleonEffectActive() && !isColoredBug && type !== 'bomb';
-        const wrongColoredBugWithoutColor = isColoredBug && !isChameleonEffectActive() && !heldColorMatchesBug;
-        if (type === 'bomb') {
-            playBombClick();
-        } else if (wrongPlainBugWithColor || wrongColoredBugWithoutColor) {
-            playWrongBugClick();
-        } else {
-            playBugClick();
-        }
-
-        // If any color is active, only colored bugs and bombs can be clicked
-        if (hasAnyActiveColor() && !isChameleonEffectActive() && !type.startsWith('coloredBug_') && !type.startsWith('fatColoredBug_') && type !== 'bomb') {
-            if (type === 'fat') {
-                animateFatBugSquish(container);
-            } else {
-                animateBugShake(container);
-            }
-            return;
-        }
-
-        if (type.startsWith('fatColoredBug_')) {
-            const color = type.split('_')[1];
-            if (isColorHeld(color) || isChameleonEffectActive()) {
-                if (decrementClickCounter(container, data)) {
-                    // Correct final click - remove
-                    score += getObjectScoreValue(data);
-                    animateRemoveObject(container, () => {
-                        updateUI();
-                        if (life <= 0) {
-                            endGame(false);
-                        }
-                    });
-                } else {
-                    // Not enough clicks yet - show squish animation
-                    animateFatBugSquish(container);
-                }
-            } else {
-                // Wrong color or no color - show shake animation
-                animateBugShake(container);
-            }
-        } else if (type.startsWith('coloredBug_')) {
-            const color = type.split('_')[1];
-            if (isColorHeld(color) || isChameleonEffectActive()) {
-                if (decrementClickCounter(container, data)) {
-                    score += getObjectScoreValue(data);
-                    animateRemoveObject(container, () => {
-                        updateUI();
-                        if (life <= 0) {
-                            endGame(false);
-                        }
-                    });
-                } else {
-                    animateBugShake(container);
-                }
-            } else {
-                // Shake animation for wrong color or no color
-                animateBugShake(container);
-            }
-        } else if (type === 'bomb') {
-                if (levelEnded) {
-                    console.log('Bomb clicked after win — no life loss');
-                    showExplosion(container.x, container.y); // можно убрать, если не хочешь эффект
-                    animateRemoveObject(container, () => {
-                        updateUI();
-                    });
-                    return;
-                }
-            console.log('Bomb clicked at:', container.x, container.y);
-            showExplosion(container.x, container.y);
-            life--;
-            console.log('Life decreased, current life:', life);
-            animateRemoveObject(container, () => {
-                updateUI();
-                if (life <= 0) endGame(false);
-            });
-            
-        } else if (type === 'fat') {
-            if (decrementClickCounter(container, data)) {
-                // Correct final click - remove
-                score += getObjectScoreValue(data);
-                animateRemoveObject(container, () => {
-                    updateUI();
-                    if (life <= 0) {
-                        endGame(false);
-                    }
-                });
-            } else {
-                // Not enough clicks yet - show squish animation
-                animateFatBugSquish(container);
-            }
-        } else if (type === 'frozen') {
-            if (!decrementClickCounter(container, data)) {
-                animateBugShake(container);
-                return;
-            }
-            score += getObjectScoreValue(data);
-            container.interactive = false;
-            container.buttonMode = false;
-            showFrozenWave(container.x, container.y);
-            activateFrozenEffect();
-            gsap.delayedCall(0.12, () => {
-                animateRemoveObject(container, () => {
-                    updateUI();
-                    if (life <= 0) {
-                        endGame(false);
-                    }
-                });
-            });
-        } else if (type === 'chameleon') {
-            if (!decrementClickCounter(container, data)) {
-                animateBugShake(container);
-                return;
-            }
-            score += getObjectScoreValue(data);
-            container.interactive = false;
-            container.buttonMode = false;
-            showChameleonWave(container.x, container.y);
-            activateChameleonEffect();
-            gsap.delayedCall(0.12, () => {
-                animateRemoveObject(container, () => {
-                    updateUI();
-                    if (life <= 0) {
-                        endGame(false);
-                    }
-                });
-            });
-        } else if (type === 'neat') {
-            if (!decrementClickCounter(container, data)) {
-                animateBugShake(container);
-                return;
-            }
-            score += getObjectScoreValue(data);
-            container.interactive = false;
-            container.buttonMode = false;
-            showNeatWave(container.x, container.y);
-            clearFieldWithNeat(container);
-            updateUI();
-            if (life <= 0) {
-                endGame(false);
-            }
-        } else if (type === 'healer') {
-            if (!decrementClickCounter(container, data)) {
-                animateBugShake(container);
-                return;
-            }
-            score += getObjectScoreValue(data);
-            container.interactive = false;
-            container.buttonMode = false;
-
-            const maxLives = levelData?.lifeCount ?? life;
-            const nextLife = Math.min(maxLives, life + Math.max(0, Math.round(data.healAmount ?? 0)));
-            const healTargetPoint = getHealTargetGlobalPosition(nextLife);
-            playHealerMusicEffect();
-
-            animateHealingHeart(container, healTargetPoint, () => {
-                healPlayer(data.healAmount);
-                updateUI();
-                if (life <= 0) {
-                    endGame(false);
-                }
-            });
-
-            animateRemoveObject(container);
-        } else {
-            // Regular bug
-            if (decrementClickCounter(container, data)) {
-                score += getObjectScoreValue(data);
-                animateRemoveObject(container, () => {
-                    updateUI();
-                    if (life <= 0) {
-                        endGame(false);
-                    }
-                });
-            } else {
-                animateBugShake(container);
-            }
-        }
-    });
-
-    // Animate from a short offset above the validated spawn point without changing it.
-    const targetY = container.y;
-    const spawnStartY = Math.max(minY, targetY - 80);
-    container.y = spawnStartY;
-
-    // Update spawn animation
-    container.alpha = 0.4;
-    container.scale.set(1);
-    const spawnAnim = gsap.to(container, {
-        y: targetY,
-        ease: "bounce.out",
-        duration: 0.6,
-    });
-    container.animations.push(spawnAnim);
-
-    const fadeAnim = gsap.to(container, {
-        alpha: 1,
-        duration: 0.3,
-        delay: 0.1
-    });
-    container.animations.push(fadeAnim);
-    applyObjectAnimationTimeScale(container);
-
+    const heading = new PIXI.Container();
+    heading.rotation = container.angle - FOOD_RULES.textureForwardAngle;
+    container.addChild(heading);
+    const body = new PIXI.Container();
+    body.name = 'bugBody';
+    heading.addChild(body);
+    container.body = body;
+    const visual = new PIXI.Sprite(getTextureForType(data.type));
+    visual.anchor.set(0.5);
+    visual.scale.set(size / Math.max(visual.texture.width, visual.texture.height));
+    body.addChild(visual);
+    if (data.clicks > 1) addClicksCounter(container, data.clicks);
+    container.on('pointerdown', () => hitFoodBug(container));
     playArea.addChild(container);
     activeObjects.push(container);
-    debugSpawn('spawnObject committed object', {
-        type,
-        x: container.x,
-        y: container.y,
-        playAreaWidth: playArea.width,
-        playAreaHeight: playArea.height
-    });
-
-    // Spawned bugs start their lifetime checks from remaining lifetime state.
-    startLifetimeCheck(container);
-
-    // Schedule the next spawn using this bug type's resolved spawn interval.
     scheduleNextSpawn(data.spawnInterval);
 }
 
-// взрыв
-function showExplosion(x, y) {
-    console.log('Creating explosion at:', x, y);
-    
-    // Создаем контейнер для взрыва
-    const explosionContainer = new PIXI.Container();
-    explosionContainer.x = x;
-    explosionContainer.y = y;
-    
-    // Создаем спрайт взрыва
-    const boom = new PIXI.Sprite(TEXTURES['bomb_explosion']);
-    boom.anchor.set(0.5);
-    boom.width = 100;
-    boom.height = 100;
-    
-    // Добавляем спрайт в контейнер
-    explosionContainer.addChild(boom);
-    playArea.addChild(explosionContainer);
-    
-    console.log('Explosion sprite created:', boom);
-    
-    // Удаляем взрыв через 800мс
-    setTimeout(() => {
-        if (playArea.children.includes(explosionContainer)) {
-            playArea.removeChild(explosionContainer);
-            console.log('Explosion removed');
+function hitFoodBug(obj) {
+    if (isPaused || introActive || orientationPauseActive || levelEnded || obj.state === 'resolved' || document.hidden) return;
+    const type = obj.type;
+    const colored = type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_');
+    const wrong = type !== 'bomb' && !isChameleonEffectActive() && (colored ? !isColorHeld(type.split('_')[1]) : hasAnyActiveColor());
+    if (wrong) {
+        playWrongBugClick();
+        currentGameUI.feedback('wrong');
+        animateBugShake(obj);
+        return;
+    }
+    if (type === 'bomb') {
+        playBombClick();
+        showExplosion(obj.x, obj.y);
+        resolveFoodBug(obj);
+        changeFoodHealth(-1);
+        return;
+    }
+    playBugClick();
+    obj.data.clicks = Math.max(0, (obj.data.clicks ?? 1) - 1);
+    const count = obj.getChildByName('clickText');
+    if (count) count.text = String(obj.data.clicks);
+    if (obj.data.clicks > 0) { animateFatBugSquish(obj); return; }
+    score += getObjectScoreValue(obj.data);
+    // Resolve before any visual effect, so a click during the warning cannot damage food.
+    resolveFoodBug(obj);
+    if (type === 'healer') {
+        changeFoodHealth(Math.max(0, obj.data.healAmount ?? 0));
+        playHealerMusicEffect();
+    } else if (type === 'frozen') {
+        activateFrozenEffect();
+    } else if (type === 'chameleon') {
+        activateChameleonEffect();
+    } else if (type === 'neat') {
+        clearSpawnTimer();
+        startSpawnResumeDelay(NEAT_SPAWN_DELAY_MS);
+        playNeatMusicEffect();
+        for (const other of [...activeObjects]) {
+            if (other.state === 'resolved') continue;
+            score += getObjectScoreValue(other.data);
+            resolveFoodBug(other);
         }
-    }, 800);
+        currentGameUI.feedback('heal');
+    }
+    updateUI();
+}
+
+function changeFoodHealth(delta) {
+    if (levelEnded) return;
+    life = Math.max(0, Math.min(levelData.lifeCount, life + delta));
+    currentGameUI.feedback(delta < 0 ? 'damage' : 'heal');
+    updateUI();
+    if (life <= 0) endGame(false);
+}
+
+function resolveFoodBug(obj, animate = true) {
+    obj.state = 'resolved';
+    obj.interactive = obj.buttonMode = false;
+    obj.warning?.destroy({ children: true });
+    obj.warning = null;
+    obj.animations.forEach(animation => animation.kill());
+    obj.animations = [];
+    if (!animate) {
+        activeObjects = activeObjects.filter(other => other !== obj);
+        obj.destroy({ children: true });
+        return;
+    }
+    // Removal is advanced by the same clock as motion; no delayed callbacks survive a restart.
+    obj.removeRemainingMs = 180;
+}
+
+function showFoodWarning(obj) {
+    const warning = new PIXI.Container();
+    const text = new PIXI.Text('!', { fontFamily: 'Arial', fontSize: 28, fontWeight: '900', fill: 0xF65C70, stroke: 0x2D1738, strokeThickness: 3 });
+    text.anchor.set(0.5);
+    warning.addChild(text);
+    warning.position.set(obj.x, obj.y - obj.radius - 22);
+    const crowded = activeObjects.some(other => other !== obj && other.warning && Math.hypot(other.warning.x - warning.x, other.warning.y - warning.y) < 40);
+    text.visible = !crowded;
+    const pulse = new PIXI.Graphics();
+    pulse.lineStyle(4, 0xF65C70, 0.85);
+    const foodX = GAMEPLAY_STYLE.food.x + 250 - GAMEPLAY_STYLE.playRect.x;
+    const foodY = GAMEPLAY_STYLE.food.y + 250 - GAMEPLAY_STYLE.playRect.y;
+    const angle = Math.atan2(obj.y - foodY, obj.x - foodX);
+    pulse.arc(foodX - warning.x, foodY - warning.y, GAMEPLAY_STYLE.food.radius, angle - 0.12, angle + 0.12);
+    warning.addChild(pulse);
+    warning.interactiveChildren = false;
+    currentGameUI.effects.addChild(warning);
+    obj.warning = warning;
+}
+
+function advanceGameplay(dt) {
+    // Fixed maximum step preserves contact/timeout ordering at low and high FPS.
+    let remaining = Math.min(dt, levelTimeRemainingMs);
+    while (remaining > 0 && !levelEnded) {
+        const step = Math.min(FOOD_RULES.simulationStepMs, remaining);
+        gameTimeMs += step;
+        for (const effect of [...currentGameUI.effects.children]) {
+            if (effect.remainingMs == null) continue;
+            effect.remainingMs -= step;
+            effect.alpha = Math.max(0, effect.remainingMs / 250);
+            if (effect.remainingMs <= 0) effect.destroy({ children: true });
+        }
+        levelTimeRemainingMs = Math.max(0, levelTimeRemainingMs - step);
+        if (frozenEffectEndsAt && gameTimeMs >= frozenEffectEndsAt) finishFrozenEffect();
+        if (chameleonEffectEndsAt && gameTimeMs >= chameleonEffectEndsAt) finishChameleonEffect();
+        for (const obj of [...activeObjects]) {
+            if (levelEnded) break;
+            if (obj.state === 'resolved') {
+                obj.removeRemainingMs -= step;
+                if (obj.removeRemainingMs <= 0) resolveFoodBug(obj, false);
+                else { obj.alpha = obj.removeRemainingMs / 180; obj.body.scale.set(0.8 + 0.2 * obj.alpha); }
+                continue;
+            }
+            const event = advanceApproach(obj, step, GAMEPLAY_STYLE.playRect, isFrozenEffectActive() ? FROZEN_LIFETIME_RATE : 1);
+            if (event === 'warning') showFoodWarning(obj);
+            if (obj.warning) obj.warning.alpha = 0.65 + Math.sin(gameTimeMs * 0.025) * 0.35;
+            if (event === 'damage' || event === 'departed') {
+                resolveFoodBug(obj, false);
+                if (event === 'damage') changeFoodHealth(-1);
+            }
+        }
+        if (levelEnded) break;
+        if (spawnResumeDelayBlocked && gameTimeMs >= spawnResumeAt) {
+            spawnResumeDelayBlocked = false;
+            scheduleNextSpawn(0);
+        }
+        if (levelTimeRemainingMs > 0 && !spawnResumeDelayBlocked && spawnDueAt !== null && gameTimeMs >= spawnDueAt) {
+            spawnDueAt = null;
+            spawnObject();
+        }
+        remaining -= step;
+    }
+    updateUI(dt);
+}
+
+
+function showExplosion(x, y) {
+    const blast = new PIXI.Graphics();
+    blast.lineStyle(10, 0xF65C70).drawCircle(0, 0, 70);
+    blast.position.set(x, y);
+    currentGameUI.effects.addChild(blast);
+    blast.remainingMs = 250;
 }
 
 // обновление UI
@@ -4702,13 +2164,9 @@ function tickLevelCountdown(now = performance.now()) {
         levelCountdownLastAt = null;
         return;
     }
-    const previousSeconds = Math.ceil(levelTimeRemainingMs / 1000);
-    if (levelCountdownLastAt !== null) {
-        levelTimeRemainingMs = Math.max(0, levelTimeRemainingMs - Math.max(0, now - levelCountdownLastAt));
-    }
+    const dt = levelCountdownLastAt === null ? 0 : Math.max(0, now - levelCountdownLastAt);
     levelCountdownLastAt = now;
-    if (previousSeconds !== Math.ceil(levelTimeRemainingMs / 1000)) updateUI();
-    // Life takes priority, including damage whose removal animation is still running.
+    advanceGameplay(dt);
     if (life <= 0) endGame(false);
     else if (levelTimeRemainingMs === 0) endGame(true);
 }
@@ -4721,13 +2179,17 @@ function startLevelCountdown() {
     updateUI();
 }
 
-function updateUI() {
-    updateLevelHeader(score, life);
+function updateUI(dt = 0) {
+    if (!levelData || !currentGameUI.update) return;
+    currentGameUI.update({ life, maximum: levelData.lifeCount, remainingMs: levelTimeRemainingMs,
+        durationMs: levelDurationMs(levelData), activeColor: getActiveColor(),
+        special: isFrozenEffectActive() ? 'frozen' : isChameleonEffectActive() ? 'chameleon' : null, dt });
 }
 
 // конец игры
 function endGame(won) {
     if (levelEnded) return;
+    clearSessionCallbacks();
     stopLevelCountdown();
     clearSpawnTimer();
     clearSpawnResumeDelay();
@@ -4737,7 +2199,7 @@ function endGame(won) {
     levelEnded = true;
     stopLevelMusic();
     playSound(won ? 'victory' : 'defeat');
-    setTimeout(() => {
+    sessionDelay(() => {
         if (levelEnded && !document.hidden) startMenuMusic();
     }, 900);
     debugSpawn('endGame called', { won, score, life });
@@ -4746,6 +2208,7 @@ function endGame(won) {
 
     // Remove remaining objects without penalties
     removeAllActiveObjectsSilent();
+    for (const effect of currentGameUI.effects.removeChildren()) effect.destroy({ children: true });
 
     // --- backend: прогресс, события, лидерборд (fire-and-forget) ---
     saveProgress(levelData.id, score, won).catch(() => {});
@@ -4808,7 +2271,7 @@ function beginLevelAttempt() {
     const spawnWeights = getLevelSpawnWeights(levelData);
     currentAttemptPromise = createLevelAttempt({
         levelId: levelData.id,
-        targetsRequired: levelData.durationSeconds,
+        targetsRequired: levelDurationMs(levelData) / 1000,
         objectiveType: 'survival',
         bugsRepelled: score,
         lifeLeft: levelData.lifeCount,
@@ -4842,7 +2305,7 @@ function closeLevelAttempt(status, exitReason = null) {
     const result = {
         status,
         exitReason,
-        targetsCompleted: (levelData.durationSeconds * 1000 - levelTimeRemainingMs) / 1000,
+        targetsCompleted: (levelDurationMs(levelData) - levelTimeRemainingMs) / 1000,
         targetsRequired: levelData.durationSeconds,
         objectiveType: 'survival',
         bugsRepelled: score,
@@ -4871,56 +2334,8 @@ function closeLevelAttempt(status, exitReason = null) {
 }
 
 function rebuildUI() {
-    if (!levelData) return;
-    const prevPlayAreaWidth = playArea?.width ?? 0;
-    const prevPlayAreaHeight = playArea?.height ?? 0;
-
-    // Save state
-    const prevScore = score;
-    const prevLife = life;
-    const prevLevelIndex = levelData.id - 1;
-    const prevObjectQueue = [...objectQueue];
-    const prevActiveObjects = [...activeObjects];
-    const prevActiveKeyboardColor = activeKeyboardColor;
-    const prevActivePointerColors = new Map(activePointerColors);
-    const prevColorPressStart = colorPressStart;
-
-    // Clear rootUI
-    rootUI.removeChildren();
-
-    // Rebuild UI
-    const { fieldWrapper, playField } = setupPlayArea();
-    playArea = playField;
-    syncChameleonFieldOverlay();
-    syncFrozenTimerBorder();
-    
-    // Restore state
-    score = prevScore;
-    life = prevLife;
-    levelData = levels[prevLevelIndex];
-    activeKeyboardColor = prevActiveKeyboardColor;
-    activePointerColors = prevActivePointerColors;
-    colorPressStart = prevColorPressStart;
-    syncAllColorButtonStates();
+    if (currentGameUI.scene) fitGameplayScene(currentGameUI.scene, app.screen);
     updateUI();
-
-    // Redraw all active objects
-    prevActiveObjects.forEach(obj => {
-        if (prevPlayAreaWidth > 0) {
-            obj.x = (obj.x / prevPlayAreaWidth) * playField.width;
-        }
-        if (prevPlayAreaHeight > 0) {
-            obj.y = (obj.y / prevPlayAreaHeight) * playField.height;
-        }
-        applyResolvedObjectSize(obj);
-        clampToSafeArea(obj);
-        playField.addChild(obj);
-    });
-
-    objectQueue = prevObjectQueue;
-    activeObjects = prevActiveObjects;
-    updateMobilePortraitOverlay();
-    ensureSpawnTimerAfterUiChange();
 }
 
 function scheduleResponsiveResize() {
@@ -4953,20 +2368,13 @@ function resizeGame() {
     const viewportMode = getViewportMode();
     const isGameScreen = app.stage.children.includes(gameContainer);
 
-    // Стартовый экран
-    if (app.stage.children.includes(startContainer)) {
-        title.x = app.screen.width / 2;
-        title.y = app.screen.height / 2 - 150;
-        playButton.x = app.screen.width / 2;
-        playButton.y = app.screen.height / 2 + 50;
-    }
-
     if (progressContainer && app.stage.children.includes(progressContainer)) {
-        layoutProgressScreen(progressContainer, {
-            width: app.screen.width,
-            height: app.screen.height
-        });
-        updateProgressScreen(progressContainer, getCompletedLevels());
+        layoutHomeScreen(progressContainer.getChildByName('homeContainer'), app.screen);
+        if (progressContainer.getChildByName('allLevelsCompletedPopup')) showAllLevelsCompletedPopup();
+        if (progressContainer.getChildByName('pausePopup')) {
+            for (const name of ['pausePopup', 'pauseOverlay']) progressContainer.getChildByName(name)?.destroy({ children: true });
+            showPausePopup(true);
+        }
     }
 
     // Экран выбора уровня
@@ -5242,8 +2650,6 @@ function showIntroPopup(cfg, onClose) {
   ok.on('pointerdown', close);
 }
 
-
-
 // Победа: затемняем фон, показываем «Победа!», через 1s — попап победы
 function showWinOverlayThenPopup(currentLevelIndex) {
   clearAllPopups();
@@ -5274,7 +2680,7 @@ function showWinOverlayThenPopup(currentLevelIndex) {
   overlay.addChild(txt);
   animateAppear(txt, 500);
 
-  setTimeout(() => {
+  sessionDelay(() => {
     showWinPopup(currentLevelIndex); // попап поверх overlay
   }, 1000);
 }
@@ -5308,7 +2714,7 @@ function showLoseOverlayThenPopup(currentLevelIndex) {
   overlay.addChild(txt);
   animateAppear(txt, 500);
 
-  setTimeout(() => {
+  sessionDelay(() => {
     showLosePopup(currentLevelIndex);
   }, 1000);
 }
@@ -5568,35 +2974,18 @@ function showLosePopup(currentLevelIndex) {
     gameContainer.addChild(popup);
 }
 
-function showPausePopup() {
-    if (isPaused) return; // Prevent multiple popups
+function showPausePopup(homeSettings = false) {
+    homeSettings = homeSettings === true;
+    const popupHost = homeSettings ? progressContainer : gameContainer;
+    if (popupHost.getChildByName('pausePopup')) return;
+    if (!homeSettings && isPaused) return; // Prevent multiple popups
     playUiClick();
-    levelCountdownLastAt = null;
-    isPaused = true;
-    pauseLevelMusic();
-    
-    // Clear the spawn interval
-    clearSpawnTimer();
-
-    // Pause all active objects
-    activeObjects.forEach(obj => {
-        // Store the remaining lifetime
-        obj.pausedLifetime = syncObjectLifetime(obj);
-        
-        // Clear existing lifetime check timeout
-        if (obj.lifetimeCheckTimeout) {
-            clearTimeout(obj.lifetimeCheckTimeout);
-        }
-        
-        // Pause any active animations
-        if (obj.animations) {
-            obj.animations.forEach(anim => anim.pause());
-        }
-        
-        // Disable interaction
-        obj.interactive = false;
-        obj.buttonMode = false;
-    });
+    if (!homeSettings) {
+        levelCountdownLastAt = null;
+        isPaused = true;
+        pauseLevelMusic();
+        freezeActiveObjects();
+    }
 
     // Add semi-transparent overlay FIRST
     const overlay = new PIXI.Graphics();
@@ -5605,7 +2994,7 @@ function showPausePopup() {
     overlay.endFill();
     overlay.name = 'pauseOverlay';
     overlay.interactive = true; // Prevent clicks through overlay
-    gameContainer.addChild(overlay);
+    popupHost.addChild(overlay);
 
     // Create popup container
     const popupBounds = getCenteredPopupBounds({
@@ -5633,7 +3022,7 @@ function showPausePopup() {
     popup.addChild(border);
 
     // Title
-    const title = new PIXI.Text('ПАУЗА', {
+    const title = new PIXI.Text(homeSettings ? 'НАСТРОЙКИ' : 'ПАУЗА', {
         fontSize: Math.max(28, Math.min(48, Math.round(Math.min(popupWidth * 0.1, popupHeight * 0.12)))),
         fill: THEME.textDark,
         fontWeight: 'bold',
@@ -5721,6 +3110,17 @@ function showPausePopup() {
         updateSoundIcons(soundIcon, musicIcon, isSoundEnabled, isMusicEnabled);
     });
 
+    if (homeSettings) {
+        const close = createButton(popupWidth * 0.8, 60, 'ЗАКРЫТЬ', () => {
+            overlay.destroy({ children: true });
+            popup.destroy({ children: true });
+        }, 'secondary', 26);
+        close.position.set(popupWidth / 2, popupHeight - 60);
+        popup.addChild(close);
+        popupHost.addChild(popup);
+        return;
+    }
+
     const btnW = popupWidth * 0.8;
     const buttonLayout = getVerticalStackLayout({
         popupHeight,
@@ -5785,7 +3185,7 @@ function showPausePopup() {
     buttonsContainer.addChild(menuBtn);
 
     popup.addChild(buttonsContainer);
-    gameContainer.addChild(popup);
+    popupHost.addChild(popup);
 }
 
 function createButton(width, height, text, onClick, variant = 'primary', fontSize = 32) {
@@ -5829,349 +3229,19 @@ function updateSoundIcons(soundIcon, musicIcon, isSoundEnabled, isMusicEnabled) 
 }
 
 // Вынести удаление объекта с анимацией
-function animateRemoveObject(container, onAfterRemove) {
-    const size = container.width;
-    const maxY = playArea.height + size;
-    
-    gsap.to(container.scale, {
-        x: 0.95,
-        y: 0.65,
-        duration: 0.15,
-        ease: "power2.in",
-        onComplete: () => {
-            gsap.to(container.scale, {
-                x: 0,
-                y: 0,
-                duration: 0.1,
-                ease: "back.in",
-                onComplete: () => {
-                    if (container.parent) container.parent.removeChild(container);
-                    removeObjectFromActiveList(container);
-                    if (onAfterRemove) onAfterRemove();
-                }
-            });
-        }
-    });
-}
+
 
 function resumeGame() {
     levelCountdownLastAt = performance.now();
     startLevelMusic();
-
-    // Resume spawn timer using the next queued bug balance.
-    scheduleNextSpawn();
-
-    // Resume all active objects
-    const currentTime = Date.now();
+    if (!levelCountdownTicker && !levelEnded) startLevelCountdown();
+    if (spawnDueAt === null) scheduleNextSpawn();
     activeObjects.forEach(obj => {
-        if (obj.pausedLifetime) {
-            obj.remainingLifetimeMs = obj.pausedLifetime;
-            obj.lastLifetimeSyncAt = currentTime;
-            delete obj.pausedLifetime;
-            startLifetimeCheck(obj);
-        }
-
-        if (obj.animations) {
-            applyObjectAnimationTimeScale(obj, currentTime);
-            obj.animations.forEach(anim => anim.resume());
-        }
-
-        obj.interactive = true;
-        obj.buttonMode = true;
+        obj.animations.forEach(a => a.resume());
+        obj.interactive = obj.buttonMode = obj.state !== 'resolved';
     });
 }
 
-function buildBottomBar(coloredTypes) {
-    const barH = Math.max(app.screen.height * BAR_H_PRC, MIN_BAR_H);
-    const btnSz = Math.floor(barH * 0.72);
-    const gap = GAP_HORZ;
-    const fieldWrapper = playArea?.parent;
-    const barWidth = fieldWrapper?.width ?? app.screen.width;
-    const barX = fieldWrapper?.x ?? 0;
-
-    if (!bottomBar) bottomBar = new PIXI.Container();
-    if (!bottomBar.parent) rootUI.addChild(bottomBar);
-    rootUI.setChildIndex(bottomBar, rootUI.children.length - 1);
-
-    bottomBar.removeChildren();
-    colorButtonsMap = {};
-
-    bottomBar.x = barX;
-    bottomBar.y = app.screen.height - barH;
-
-    const bg = new PIXI.Graphics();
-    bg.beginFill(THEME.cardBg);
-    bg.drawRoundedRect(0, 0, barWidth, barH, 24);
-    bg.endFill();
-
-    const border = new PIXI.Graphics();
-    border.lineStyle(4, THEME.border, 1);
-    border.drawRoundedRect(0, 0, barWidth, barH, 24);
-
-    bg.interactive = true;
-    bg.hitArea = new PIXI.Rectangle(0, 0, barWidth, barH);
-
-    bottomBar.addChild(bg);
-    bottomBar.addChild(border);
-
-    dynamicColorKeyMap = {};
-    colorButtonsContainer = bottomBar;
-
-    const usedColors = new Set(
-        coloredTypes.map(type => type.split('_')[1]).filter(Boolean)
-    );
-
-    const pauseX = barWidth - gap - btnSz;
-    const y = (barH - btnSz) / 2;
-
-    const slotCount = COLOR_BUTTON_SLOTS.length;
-    const colorGroupW = slotCount * btnSz + (slotCount - 1) * gap;
-    const maxRight = pauseX - gap;
-    let startX = (barWidth - colorGroupW) / 2;
-    if (startX + colorGroupW > maxRight) {
-        startX = Math.max(gap, maxRight - colorGroupW);
-    }
-
-    COLOR_BUTTON_SLOTS.forEach((slot, index) => {
-        if (!usedColors.has(slot.color)) return;
-        dynamicColorKeyMap[slot.key] = slot.color;
-
-        const btn = createColorButton(slot.color, btnSz, slot.key, !IS_TOUCH, 'desktop');
-        btn.x = startX + index * (btnSz + gap);
-        btn.y = y;
-        bottomBar.addChild(btn);
-        colorButtonsMap[slot.color] = [btn];
-    });
-
-    let pauseButton = bottomBar.getChildByName('pauseButton');
-    if (!pauseButton) {
-        pauseButton = new PIXI.Container();
-        pauseButton.name = 'pauseButton';
-
-        const pbg = new PIXI.Graphics();
-        pbg.lineStyle(3, 0x5E4AE0, 1);
-        pbg.beginFill(0x8E7CFF);
-        pbg.drawRoundedRect(0, 0, btnSz, btnSz, 18);
-        pbg.endFill();
-
-        const icon = new PIXI.Text('⏸', {
-            fontSize: Math.floor(btnSz * 0.5),
-            fill: 0xFFFFFF,
-            fontWeight: 'bold',
-        });
-        icon.anchor.set(0.5);
-        icon.x = btnSz / 2;
-        icon.y = btnSz / 2;
-
-        pauseButton.addChild(pbg);
-        pauseButton.addChild(icon);
-        pauseButton.interactive = true;
-        pauseButton.buttonMode = true;
-        pauseButton.on('pointerdown', showPausePopup);
-    }
-
-    pauseButton.x = pauseX;
-    pauseButton.y = y;
-    bottomBar.addChild(pauseButton);
-}
-
-function createColorButton(color, size, key, showKey = true, variant = 'desktop', height = size) {
-    const button = new PIXI.Container();
-    button.name = `colorButton_${color}`;
-    button.interactive = true;
-    button.buttonMode = true;
-
-    const width = size;
-    const buttonHeight = height;
-    const minDimension = Math.min(width, buttonHeight);
-    const isTallMobile = variant === 'mobile-tall';
-    const isSideButton = variant === 'side';
-    const iconSize = variant === 'mobile'
-        ? width * 0.82
-        : isTallMobile
-            ? minDimension * 0.78
-            : width * (isSideButton ? 0.78 : 0.9);
-
-    if (isTallMobile) {
-        const shell = createRoundedPanel(
-            width,
-            buttonHeight,
-            Math.max(18, Math.min(width, buttonHeight) * 0.22),
-            0xFFF8EC,
-            0xE6B05A,
-            4
-        );
-        button.addChild(shell);
-    } else {
-        const shadow = new PIXI.Graphics();
-        shadow.beginFill(THEME.shadow, 0.18);
-        shadow.drawEllipse(width / 2, buttonHeight * 0.82, width * 0.32, minDimension * 0.15);
-        shadow.endFill();
-        button.addChild(shadow);
-    }
-
-    const textureName = getButtonTextureName(color);
-    if (TEXTURES[textureName]) {
-        const sprite = new PIXI.Sprite(TEXTURES[textureName]);
-        const isCustomButtonArt = textureName.startsWith('custom_button_');
-        if (isCustomButtonArt) {
-            const scale = Math.min((width * 0.98) / sprite.texture.width, (buttonHeight * 0.98) / sprite.texture.height);
-            sprite.scale.set(scale);
-            sprite.x = (width - sprite.width) / 2;
-            sprite.y = (buttonHeight - sprite.height) / 2;
-        } else {
-            sprite.x = (width - iconSize) / 2;
-            sprite.y = isTallMobile ? (buttonHeight - iconSize) / 2 : (width - iconSize) / 2;
-            sprite.width = iconSize;
-            sprite.height = iconSize;
-        }
-        sprite._usesCustomButtonArt = isCustomButtonArt;
-        button.addChild(sprite);
-    } else {
-        const fallback = new PIXI.Graphics();
-        const cy = isTallMobile ? buttonHeight / 2 : width / 2;
-        fallback.beginFill(0xFFFFFF, 0.95);
-        fallback.drawCircle(width / 2, cy, iconSize / 2 + 6);
-        fallback.endFill();
-        fallback.beginFill(COLORS[color] || THEME.primary);
-        fallback.drawCircle(width / 2, cy, iconSize / 2);
-        fallback.endFill();
-        fallback.beginFill(0xFFFFFF, 0.3);
-        fallback.drawEllipse(width * 0.4, cy - iconSize * 0.16, iconSize * 0.22, iconSize * 0.12);
-        fallback.endFill();
-        button.addChild(fallback);
-        button.addChild(createButtonFallbackIcon(color, width / 2, cy, iconSize * 0.28));
-    }
-
-    const usesCustomButtonArt = button.children.some((child) => child._usesCustomButtonArt);
-    if (!isTallMobile && !usesCustomButtonArt) {
-        const rim = new PIXI.Graphics();
-        rim.lineStyle(Math.max(3, width * 0.055), 0xFFF7E8, 0.88);
-        rim.drawCircle(width / 2, width / 2, iconSize * 0.5);
-        button.addChild(rim);
-
-        const shine = new PIXI.Graphics();
-        shine.beginFill(0xFFFFFF, 0.34);
-        shine.drawEllipse(width * 0.38, width * 0.32, iconSize * 0.2, iconSize * 0.1);
-        shine.endFill();
-        button.addChild(shine);
-    }
-
-    const activeIndicator = new PIXI.Graphics();
-    activeIndicator.beginFill(0xFFF7E8, variant === 'mobile' || isTallMobile ? 0.26 : 0.3);
-    activeIndicator.drawCircle(width / 2, isTallMobile ? buttonHeight / 2 : width / 2, iconSize * 0.52);
-    activeIndicator.endFill();
-
-    activeIndicator.name = 'activeIndicator';
-    activeIndicator.visible = false;
-    button.addChild(activeIndicator);
-
-    if (showKey) {
-        const label = new PIXI.Text(key.toUpperCase(), {
-            fontSize: width * 0.22,
-            fill: THEME.white,
-            fontWeight: '700',
-            fontFamily: 'Arial',
-            stroke: THEME.borderDark,
-            strokeThickness: 3
-        });
-        label.anchor.set(0.5);
-        label.x = width / 2;
-        label.y = isTallMobile ? buttonHeight * 0.84 : width * 0.84;
-        button.addChild(label);
-    }
-
-    button.originalScale = 1;
-
-    button.on('pointerdown', (event) => {
-        playUiClick();
-        const pointerId = getPointerId(event);
-        const pointerKey = getPointerColorKey(pointerId);
-
-        activePointerColors.set(pointerKey, color);
-        colorPressStart = Date.now();
-        syncAllColorButtonStates();
-    });
-
-    const release = (event) => {
-        const pointerId = getPointerId(event);
-        const pointerKey = getPointerColorKey(pointerId);
-
-        if (activePointerColors.get(pointerKey) === color) {
-            activePointerColors.delete(pointerKey);
-            syncAllColorButtonStates();
-        }
-    };
-
-    button.on('pointerup', release);
-    button.on('pointerupoutside', release);
-    button.on('pointercancel', release);
-
-    button.on('pointerover', () => {
-        if (IS_TOUCH) return;
-        if (!isColorHeld(color)) {
-            gsap.to(button.scale, {
-                x: button.originalScale * 1.06,
-                y: button.originalScale * 1.06,
-                duration: 0.12
-            });
-        }
-    });
-
-    button.on('pointerout', () => {
-        if (IS_TOUCH) return;
-        if (!isColorHeld(color)) {
-            if (button._holdAnim) {
-                button._holdAnim.kill();
-                button._holdAnim = null;
-            }
-            gsap.to(button.scale, {
-                x: button.originalScale,
-                y: button.originalScale,
-                duration: 0.12
-            });
-        }
-    });
-
-    return button;
-}
-
-function createButtonFallbackIcon(color, x, y, size) {
-    const icon = new PIXI.Graphics();
-    icon.beginFill(0xFFFFFF, 0.88);
-
-    if (color === 'red') {
-        icon.drawCircle(x - size * 0.32, y - size * 0.18, size * 0.32);
-        icon.drawCircle(x + size * 0.32, y - size * 0.18, size * 0.32);
-        icon.drawPolygon([
-            x - size * 0.62, y,
-            x, y + size * 0.72,
-            x + size * 0.62, y
-        ]);
-    } else if (color === 'blue') {
-        icon.moveTo(x, y - size * 0.72);
-        icon.bezierCurveTo(x + size * 0.58, y - size * 0.12, x + size * 0.52, y + size * 0.62, x, y + size * 0.68);
-        icon.bezierCurveTo(x - size * 0.52, y + size * 0.62, x - size * 0.58, y - size * 0.12, x, y - size * 0.72);
-    } else if (color === 'yellow') {
-        const points = [];
-        for (let i = 0; i < 10; i++) {
-            const angle = -Math.PI / 2 + i * Math.PI / 5;
-            const radius = i % 2 === 0 ? size * 0.72 : size * 0.32;
-            points.push(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
-        }
-        icon.drawPolygon(points);
-    } else {
-        icon.drawEllipse(x, y, size * 0.42, size * 0.72);
-        icon.endFill();
-        icon.lineStyle(Math.max(2, size * 0.08), COLORS[color] || 0x68B84D, 0.55);
-        icon.moveTo(x, y - size * 0.45);
-        icon.lineTo(x, y + size * 0.46);
-        return icon;
-    }
-
-    icon.endFill();
-    return icon;
-}
 export default levels;
 
 

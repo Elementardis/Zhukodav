@@ -1,0 +1,144 @@
+{
+  "canvas": [
+    1920,
+    1080
+  ],
+  "anchor": [
+    0,
+    0
+  ],
+  "units": "logical pixels",
+  "elements": [
+    {
+      "id": "background",
+      "file": "background/tabletop_1920x1080.png",
+      "rect": [
+        0,
+        0,
+        1920,
+        1080
+      ],
+      "z": 0
+    },
+    {
+      "id": "food",
+      "file": "food/plate_empty.png",
+      "rect": [
+        710,
+        320,
+        500,
+        500
+      ],
+      "z": 10
+    },
+    {
+      "id": "hp",
+      "file": "hp/hp_frame.png",
+      "rect": [
+        660,
+        38,
+        700,
+        96
+      ],
+      "z": 30
+    },
+    {
+      "id": "settings",
+      "file": "ui/settings_button.png",
+      "rect": [
+        1500,
+        30,
+        120,
+        112
+      ],
+      "z": 40
+    }
+  ],
+  "buttons": [
+    {
+      "id": "swatter",
+      "icon": "icons/fly_swatter.png",
+      "rect": [
+        4,
+        6,
+        278,
+        528
+      ],
+      "fill": "#F65C70",
+      "z": 35
+    },
+    {
+      "id": "trap",
+      "icon": "icons/insect_trap.png",
+      "rect": [
+        4,
+        546,
+        278,
+        528
+      ],
+      "fill": "#F4D447",
+      "z": 35
+    },
+    {
+      "id": "spray",
+      "icon": "icons/insecticide_spray.png",
+      "rect": [
+        1638,
+        6,
+        278,
+        528
+      ],
+      "fill": "#B956E8",
+      "z": 35
+    },
+    {
+      "id": "tape",
+      "icon": "icons/sticky_tape.png",
+      "rect": [
+        1638,
+        546,
+        278,
+        528
+      ],
+      "fill": "#9ED52A",
+      "z": 35
+    }
+  ],
+  "hp": {
+    "segments": 7,
+    "frame_size": [
+      700,
+      96
+    ],
+    "segment_size": [
+      85,
+      60
+    ],
+    "segment_origin": [
+      34,
+      18
+    ],
+    "segment_step": [
+      91,
+      0
+    ],
+    "dirty_direction": "right-to-left"
+  },
+  "food": {
+    "plate_canvas": [
+      640,
+      640
+    ],
+    "pizza_canvas": [
+      560,
+      560
+    ],
+    "pizza_offset": [
+      40,
+      40
+    ],
+    "slice_count": 8,
+    "slice_order": "clockwise from 12 oclock",
+    "first_removed_slice": 3
+  }
+}
