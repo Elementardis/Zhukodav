@@ -1,3 +1,5 @@
+import { POPUP_REFERENCE, fitPopup } from './js/popup-layout.js';
+import { getFoodDefinition, getFoodMaxLives } from './js/food-config.js';
 import { GAMEPLAY_ASSETS, GAMEPLAY_STYLE, buildGameplayScene, fitGameplayScene } from './js/gameplay-scene.js';
 import { FOOD_RULES, levelDurationMs, weightedType, shuffledSides, chooseEntry, createApproach, advanceApproach } from './js/food-rules.js';
 import levels from './levels.js';
@@ -16,6 +18,7 @@ import { HOME_ASSETS, createHomeScreen, layoutHomeScreen } from './js/home-ui.js
 const MOBILE_MAX_VIEWPORT = 1366;
 const MOBILE_LANDSCAPE_MIN_RATIO = 1.15;
 const MOBILE_OVERLAY_ID = 'mobile-orientation-overlay';
+const DEBUG_LEVEL_SELECT = new URLSearchParams(window.location.search).get('debug') === '1';
 
 // ==== Global Constants ====
 const FROZEN_EFFECT_DURATION_MS = 5000;
@@ -464,7 +467,7 @@ function showInterstitialAd() {
 }
 
 function giveExtraLives(amount) {
-    const maxLives = levelData?.lifeCount ?? life;
+    const maxLives = levelData ? getFoodMaxLives(levelData) : life;
     life = Math.min(life + amount, maxLives);
     levelEnded = false;
     clearAllPopups();
@@ -476,7 +479,7 @@ function healPlayer(amount) {
     const healAmount = Math.max(0, Math.round(amount ?? 0));
     if (!healAmount) return;
 
-    const maxLives = levelData?.lifeCount ?? life;
+    const maxLives = levelData ? getFoodMaxLives(levelData) : life;
     life = Math.min(life + healAmount, maxLives);
 }
 
@@ -642,6 +645,7 @@ function syncAllColorButtonStates() {
     ]);
 
     colors.forEach((color) => updateButtonState(color, isColorHeld(color)));
+    updateBugHighlights();
     updatePlayAreaActiveBorder();
     setAudioDucking(hasAnyActiveColor());
 }
@@ -690,6 +694,7 @@ const SPRITE_PATHS = [
     { name: 'bug', path: 'images/bugs/bug.png' },
     { name: 'healer', path: 'images/bugs/healer.png' },
     { name: 'bomb', path: 'images/bugs/bomb.png' },
+    { name: 'bomb_animation', path: 'images/bugs/bomb-animation.png' },
     { name: 'coloredBug_red', path: 'images/bugs/coloredBug_red.png' },
     { name: 'coloredBug_purple', path: 'images/bugs/coloredBug_purple.png' },
     { name: 'coloredBug_green', path: 'images/bugs/coloredBug_green.png' },
@@ -706,6 +711,7 @@ const SPRITE_PATHS = [
 
 // Store loaded textures
 const TEXTURES = {};
+let bombAnimationFrames = [];
 const THEME = {
     appBgCss: '#FFE39A',
     appBg: 0xFFD77A,
@@ -981,11 +987,18 @@ loader.load(async () => {
             TEXTURES[name] = texture;
         }
     });
+    bombAnimationFrames = Array.from({ length: 17 }, (_, index) => new PIXI.Texture(
+        TEXTURES.bomb_animation.baseTexture, new PIXI.Rectangle(index * 142, 0, 142, 200)
+    ));
     await Promise.all([audioReady, prepareLoadedTextures()]);
     updatePreloadProgress();
     hidePreloader();
     showProgressScreen();
     resizeGame();
+    if (DEBUG_LEVEL_SELECT) {
+        installDebugLevelButton();
+        openDebugLevelSelect();
+    }
 });
 
 // ...весь остальной код...
@@ -1062,23 +1075,12 @@ function getCenteredPopupBounds({
     maxWidth = 480,
     heightRatio = 0.72,
     maxHeight = 420,
-    minHeight = 240,
-    screenMargin = 12
+    minHeight = 240
 } = {}) {
-    const availableWidth = Math.max(220, app.screen.width - screenMargin * 2);
-    const availableHeight = Math.max(180, app.screen.height - screenMargin * 2);
-    const targetWidth = Math.max(Math.min(280, availableWidth), Math.round(app.screen.width * widthRatio));
-    const targetHeight = Math.max(Math.min(minHeight, availableHeight), Math.round(app.screen.height * heightRatio));
-
-    const width = Math.min(maxWidth, availableWidth, targetWidth);
-    const height = Math.min(maxHeight, availableHeight, targetHeight);
-
-    return {
-        width,
-        height,
-        x: Math.round((app.screen.width - width) / 2),
-        y: Math.round((app.screen.height - height) / 2)
-    };
+    // Stable design dimensions: resize the whole card, not individual text/buttons.
+    const width = Math.min(maxWidth, POPUP_REFERENCE.width * widthRatio);
+    const height = Math.min(maxHeight, Math.max(minHeight, POPUP_REFERENCE.height * heightRatio));
+    return { width, height };
 }
 
 function getVerticalStackLayout({
@@ -1272,6 +1274,32 @@ function showProgressScreen() {
         app.stage.addChild(progressContainer);
     }
     updateMobilePortraitOverlay();
+}
+
+function openDebugLevelSelect() {
+    if (!DEBUG_LEVEL_SELECT) return;
+    if (app.stage.children.includes(levelSelectContainer)) return;
+    if (app.stage.children.includes(gameContainer)) {
+        closeLevelAttempt('exit', 'debug_level_select');
+    }
+    const intro = gameContainer.getChildByName('introPopup');
+    if (intro?._resizeHandler) window.removeEventListener('resize', intro._resizeHandler);
+    showProgressScreen();
+    showLevelSelect();
+}
+
+function installDebugLevelButton() {
+    if (document.getElementById('debug-level-select')) return;
+    const button = document.createElement('button');
+    button.id = 'debug-level-select';
+    button.type = 'button';
+    button.textContent = 'Тест: выбор уровня';
+    button.style.cssText = 'position:fixed;bottom:8px;left:50%;transform:translateX(-50%);z-index:10001;padding:8px 14px;border:2px solid #2D1738;border-radius:12px;background:#F7F7F3;color:#2D1738;font:600 14px Arial;cursor:pointer;';
+    button.addEventListener('click', () => {
+        openDebugLevelSelect();
+        button.blur();
+    });
+    document.body.appendChild(button);
 }
 
 function showLevelSelect() {
@@ -1631,8 +1659,7 @@ function showLevelEntryPopup(levelIndex) {
     const popupHeight = popupBounds.height;
     const popup = new PIXI.Container();
     popup.name = 'levelEntryPopup';
-    popup.x = popupBounds.x;
-    popup.y = popupBounds.y;
+    fitPopup(popup, app.screen, popupWidth, popupHeight);
     popup.interactive = true;
     popup.hitArea = new PIXI.Rectangle(0, 0, popupWidth, popupHeight);
     popup.on('pointerdown', (event) => event.stopPropagation());
@@ -1751,7 +1778,7 @@ function startLevel(index) {
   maxSimultaneousObjects = levelData.params.maxObjects;
 
   score = 0;
-  life = levelData.lifeCount;
+  life = getFoodMaxLives(levelData);
   gameTimeMs = 0;
   spawnSides = [];
   levelTimeRemainingMs = levelDurationMs(levelData);
@@ -1788,6 +1815,7 @@ function setupPlayArea() {
     const enabledColors = getUsedLevelColors();
     currentGameUI = buildGameplayScene(TEXTURES, {
         enabledColors,
+        foodDefinition: getFoodDefinition(levelData),
         onHold: (color, event) => {
             if (isPaused || introActive || orientationPauseActive || levelEnded) return;
             playUiClick();
@@ -1996,6 +2024,16 @@ function spawnObject() {
     body.name = 'bugBody';
     heading.addChild(body);
     container.body = body;
+    const highlight = new PIXI.Graphics();
+    highlight.name = 'heldToolHighlight';
+    const tool = GAMEPLAY_STYLE.tools.find(t => data.type.endsWith('_' + t.color));
+    if (tool) {
+        highlight.beginFill(tool.fill, 0.22).drawCircle(0, 0, radius * 0.9).endFill();
+        highlight.lineStyle(4, tool.fill, 0.95).drawCircle(0, 0, radius * 0.9);
+    }
+    highlight.visible = false;
+    container.highlight = highlight;
+    container.addChildAt(highlight, 0);
     const visual = new PIXI.Sprite(getTextureForType(data.type));
     visual.anchor.set(0.5);
     visual.scale.set(size / Math.max(visual.texture.width, visual.texture.height));
@@ -2004,6 +2042,7 @@ function spawnObject() {
     container.on('pointerdown', () => hitFoodBug(container));
     playArea.addChild(container);
     activeObjects.push(container);
+    updateBugHighlights();
     scheduleNextSpawn(data.spawnInterval);
 }
 
@@ -2056,7 +2095,7 @@ function hitFoodBug(obj) {
 
 function changeFoodHealth(delta) {
     if (levelEnded) return;
-    life = Math.max(0, Math.min(levelData.lifeCount, life + delta));
+    life = Math.max(0, Math.min(getFoodMaxLives(levelData), life + delta));
     currentGameUI.feedback(delta < 0 ? 'damage' : 'heal');
     updateUI();
     if (life <= 0) endGame(false);
@@ -2064,6 +2103,7 @@ function changeFoodHealth(delta) {
 
 function resolveFoodBug(obj, animate = true) {
     obj.state = 'resolved';
+    if (obj.highlight) obj.highlight.visible = false;
     obj.interactive = obj.buttonMode = false;
     obj.warning?.destroy({ children: true });
     obj.warning = null;
@@ -2107,7 +2147,10 @@ function advanceGameplay(dt) {
         for (const effect of [...currentGameUI.effects.children]) {
             if (effect.remainingMs == null) continue;
             effect.remainingMs -= step;
-            effect.alpha = Math.max(0, effect.remainingMs / 250);
+            if (effect.animationFrames) {
+                const elapsed = effect.durationMs - effect.remainingMs;
+                effect.texture = effect.animationFrames[Math.min(effect.animationFrames.length - 1, Math.floor(elapsed / 100))];
+            } else effect.alpha = Math.max(0, effect.remainingMs / 250);
             if (effect.remainingMs <= 0) effect.destroy({ children: true });
         }
         levelTimeRemainingMs = Math.max(0, levelTimeRemainingMs - step);
@@ -2145,11 +2188,21 @@ function advanceGameplay(dt) {
 
 
 function showExplosion(x, y) {
-    const blast = new PIXI.Graphics();
-    blast.lineStyle(10, 0xF65C70).drawCircle(0, 0, 70);
+    const blast = new PIXI.Sprite(bombAnimationFrames[0]);
+    blast.name = 'bombExplosion';
+    blast.anchor.set(0.5);
     blast.position.set(x, y);
+    blast.animationFrames = bombAnimationFrames;
+    blast.durationMs = blast.remainingMs = bombAnimationFrames.length * 100;
     currentGameUI.effects.addChild(blast);
-    blast.remainingMs = 250;
+}
+
+function updateBugHighlights() {
+    for (const obj of activeObjects) {
+        if (!obj.highlight) continue;
+        const color = obj.type.split('_')[1];
+        obj.highlight.visible = obj.state !== 'resolved' && isColorHeld(color);
+    }
 }
 
 // обновление UI
@@ -2181,9 +2234,12 @@ function startLevelCountdown() {
 
 function updateUI(dt = 0) {
     if (!levelData || !currentGameUI.update) return;
-    currentGameUI.update({ life, maximum: levelData.lifeCount, remainingMs: levelTimeRemainingMs,
+    currentGameUI.update({ life, maximum: getFoodMaxLives(levelData), remainingMs: levelTimeRemainingMs,
         durationMs: levelDurationMs(levelData), activeColor: getActiveColor(),
-        special: isFrozenEffectActive() ? 'frozen' : isChameleonEffectActive() ? 'chameleon' : null, dt });
+        specialEffects: [
+            { type: 'frozen', remainingMs: frozenEffectEndsAt - gameTimeMs, durationMs: FROZEN_EFFECT_DURATION_MS },
+            { type: 'chameleon', remainingMs: chameleonEffectEndsAt - gameTimeMs, durationMs: CHAMELEON_EFFECT_DURATION_MS }
+        ].filter(effect => effect.remainingMs > 0), clockMs: gameTimeMs, dt });
 }
 
 // конец игры
@@ -2274,7 +2330,7 @@ function beginLevelAttempt() {
         targetsRequired: levelDurationMs(levelData) / 1000,
         objectiveType: 'survival',
         bugsRepelled: score,
-        lifeLeft: levelData.lifeCount,
+        lifeLeft: getFoodMaxLives(levelData),
         bugTypes: getLevelBugTypes(levelData),
         spawnWeights,
         levelParams: {
@@ -2371,15 +2427,14 @@ function resizeGame() {
     if (progressContainer && app.stage.children.includes(progressContainer)) {
         layoutHomeScreen(progressContainer.getChildByName('homeContainer'), app.screen);
         if (progressContainer.getChildByName('allLevelsCompletedPopup')) showAllLevelsCompletedPopup();
-        if (progressContainer.getChildByName('pausePopup')) {
-            for (const name of ['pausePopup', 'pauseOverlay']) progressContainer.getChildByName(name)?.destroy({ children: true });
-            showPausePopup(true);
-        }
+
     }
 
     // Экран выбора уровня
     if (app.stage.children.includes(levelSelectContainer)) {
+        const selected = selectedLevelIndex;
         showLevelSelect();
+        if (selected !== null) showLevelEntryPopup(selected);
     }
 
     // Игровой экран
@@ -2395,36 +2450,23 @@ function resizeGame() {
         }
     }
 
-    // Handle pause popup if it exists
-    const pausePopup = gameContainer.getChildByName('pausePopup');
-    if (pausePopup) {
-        const popupBounds = getCenteredPopupBounds({
-            widthRatio: 0.82,
-            maxWidth: 480,
-            heightRatio: 0.82,
-            maxHeight: 520,
-            minHeight: 300
-        });
-        pausePopup.x = popupBounds.x;
-        pausePopup.y = popupBounds.y;
+    for (const host of [gameContainer, progressContainer, levelSelectContainer]) {
+        if (!host) continue;
+        for (const child of host.children) {
+            if (child._popupLayout) fitPopup(child, app.screen);
+            if (['pauseOverlay', 'winOverlay', 'loseOverlay', 'introOverlay'].includes(child.name)) {
+                const opacity = child.name === 'introOverlay' ? 0.42 : child.name === 'pauseOverlay' ? 0.34 : 0.30;
+                // Redraw the backdrop instead of scaling its children (result titles).
+                child.scale.set(1);
+                child.clear().beginFill(THEME.overlay, opacity).drawRect(0, 0, app.screen.width, app.screen.height).endFill();
+            }
+            const title = child.getChildByName?.('resultTitle');
+            if (title) {
+                title.position.set(app.screen.width / 2, app.screen.height / 2);
+                title.scale.set(Math.min(app.screen.width / 1280, app.screen.height / 720));
+            }
+        }
     }
-    // Handle intro popup if it exists
-    const introPopup = gameContainer.getChildByName('introPopup');
-    if (introPopup) {
-        introPopup._resizeHandler?.();
-    }
-
-    // Handle pause overlay if it exists
-    const overlay = gameContainer.getChildByName('pauseOverlay');
-    if (overlay) {
-        overlay.width = app.screen.width;
-        overlay.height = app.screen.height;
-    }
-    // Доп. подстройка оверлеев/попапов, если открыты
-    ['pauseOverlay','winOverlay','loseOverlay','introOverlay'].forEach(n => {
-    const o = gameContainer.getChildByName(n);
-    if (o) { o.width = app.screen.width; o.height = app.screen.height; }
-    });
 
     updateMobilePortraitOverlay();
 }
@@ -2437,29 +2479,36 @@ function clearAllPopups() {
   const popups = ['winPopup','losePopup','pausePopup','pauseOverlay','winOverlay','loseOverlay','introPopup','introOverlay'];
   popups.forEach(name => {
     const node = gameContainer.getChildByName(name);
-    if (node) gameContainer.removeChild(node);
+    if (node) {
+        if (node._appearFrame) cancelAnimationFrame(node._appearFrame);
+        if (node._resizeHandler) window.removeEventListener('resize', node._resizeHandler);
+        gameContainer.removeChild(node);
+    }
   });
 }
 
 
-// Плавная анимация появления: масштаб 0.6 → 1.0, альфа 0 → 1
+// Fade in; dialog scale remains relative to the current viewport throughout.
 function animateAppear(obj, duration = 500) {
-  const startScale = 0.6, endScale = 1.0;
-  const t0 = performance.now();
-  const easeOutBack = t => {
-    const c1 = 1.70158, c3 = c1 + 1;
-    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-  };
-  obj.scale.set(startScale);
+  if (obj._appearFrame) cancelAnimationFrame(obj._appearFrame);
+  const start = performance.now();
   obj.alpha = 0;
-  function step(now) {
-    const p = Math.min((now - t0) / duration, 1);
-    const s = startScale + (endScale - startScale) * easeOutBack(p);
-    obj.scale.set(s);
-    obj.alpha = p;
-    if (p < 1) requestAnimationFrame(step);
+  if (obj._popupLayout) {
+      obj._appearance = 0.94;
+      fitPopup(obj, app.screen);
   }
-  requestAnimationFrame(step);
+  const step = now => {
+    obj._appearFrame = null;
+    if (obj.destroyed || !obj.parent) return;
+    const progress = Math.min(1, (now - start) / duration);
+    obj.alpha = progress;
+    if (obj._popupLayout) {
+        obj._appearance = 0.94 + 0.06 * (1 - Math.pow(1 - progress, 3));
+        fitPopup(obj, app.screen);
+    }
+    if (progress < 1) obj._appearFrame = requestAnimationFrame(step);
+  };
+  obj._appearFrame = requestAnimationFrame(step);
 }
 
 // Универсальная выдача текстуры по типу
@@ -2554,7 +2603,8 @@ function showIntroPopup(cfg, onClose) {
 
   // анимация появления
   const close = () => {
-    window.removeEventListener('resize', c._resizeHandler);
+    if (!c.parent) return;
+    if (c._appearFrame) cancelAnimationFrame(c._appearFrame);
     if (gameContainer.getChildByName('introOverlay')) gameContainer.removeChild(overlay);
     if (gameContainer.getChildByName('introPopup')) gameContainer.removeChild(c);
     introActive = false;
@@ -2566,11 +2616,8 @@ function showIntroPopup(cfg, onClose) {
   c.on('pointerdown', (event) => event.stopPropagation());
 
   const layoutIntroPopup = () => {
-    const fieldWrapper = playArea?.parent;
-    const popupWidth = Math.max(260, Math.min(fieldWrapper?.width ?? (app.screen.width - 24), app.screen.width - 24));
-    const popupHeight = Math.max(260, Math.min(fieldWrapper?.height ?? (app.screen.height - 24), app.screen.height - 24));
-    const popupX = fieldWrapper?.x ?? ((app.screen.width - popupWidth) / 2);
-    const popupY = fieldWrapper?.y ?? Math.max(12, (app.screen.height - popupHeight) / 2);
+    const popupWidth = 640;
+    const popupHeight = 560;
     const padX = Math.max(16, Math.round(popupWidth * 0.055));
     const padTop = Math.max(16, Math.round(popupHeight * 0.045));
     const padBottom = Math.max(18, Math.round(popupHeight * 0.055));
@@ -2582,8 +2629,7 @@ function showIntroPopup(cfg, onClose) {
     const descPadY = Math.max(8, Math.min(10, Math.round(popupHeight * 0.018)));
     const descBoxWidth = popupWidth - padX * 2;
 
-    c.x = popupX;
-    c.y = popupY;
+    fitPopup(c, app.screen, popupWidth, popupHeight);
     c.hitArea = new PIXI.Rectangle(0, 0, popupWidth, popupHeight);
 
     drawGameFieldPopupPanel(bg, border, popupWidth, popupHeight, 32, THEME.border);
@@ -2612,7 +2658,7 @@ function showIntroPopup(cfg, onClose) {
     const iconBottom = descBoxY - gap;
     const maxIconSize = Math.min(popupWidth * 0.28, Math.max(36, iconBottom - iconTop));
     const iconSize = Math.max(36, Math.min(maxIconSize, popupHeight * 0.2));
-    icon.width = icon.height = iconSize;
+    icon.scale.set(iconSize / Math.max(icon.texture.width, icon.texture.height));
     icon.x = popupWidth / 2;
     icon.y = iconTop + Math.max(0, (iconBottom - iconTop - iconSize) / 2) + iconSize / 2;
 
@@ -2641,12 +2687,7 @@ function showIntroPopup(cfg, onClose) {
 
   layoutIntroPopup();
   animateAppear(c, 400);
-  c._resizeHandler = () => {
-    overlay.width = app.screen.width;
-    overlay.height = app.screen.height;
-    layoutIntroPopup();
-  };
-  window.addEventListener('resize', c._resizeHandler);
+
   ok.on('pointerdown', close);
 }
 
@@ -2677,6 +2718,9 @@ function showWinOverlayThenPopup(currentLevelIndex) {
   txt.x = app.screen.width / 2;
   txt.y = app.screen.height / 2;
 
+  txt.name = 'resultTitle';
+  txt.style.fontSize = 100;
+  txt.scale.set(Math.min(app.screen.width / 1280, app.screen.height / 720));
   overlay.addChild(txt);
   animateAppear(txt, 500);
 
@@ -2711,6 +2755,9 @@ function showLoseOverlayThenPopup(currentLevelIndex) {
   txt.x = app.screen.width / 2;
   txt.y = app.screen.height / 2;
 
+  txt.name = 'resultTitle';
+  txt.style.fontSize = 100;
+  txt.scale.set(Math.min(app.screen.width / 1280, app.screen.height / 720));
   overlay.addChild(txt);
   animateAppear(txt, 500);
 
@@ -2737,8 +2784,7 @@ function showWinPopup(currentLevelIndex) {
 
     const popup = new PIXI.Container();
     popup.name = 'winPopup';
-    popup.x = popupBounds.x;
-    popup.y = popupBounds.y;
+    fitPopup(popup, app.screen, popupWidth, popupHeight);
 
     // Фон
     const bg = new PIXI.Graphics();
@@ -2861,8 +2907,7 @@ function showLosePopup(currentLevelIndex) {
 
     const popup = new PIXI.Container();
     popup.name = 'losePopup';
-    popup.x = popupBounds.x;
-    popup.y = popupBounds.y;
+    fitPopup(popup, app.screen, popupWidth, popupHeight);
 
     // Фон
     const bg = new PIXI.Graphics();
@@ -3009,8 +3054,7 @@ function showPausePopup(homeSettings = false) {
 
     const popup = new PIXI.Container();
     popup.name = 'pausePopup';
-    popup.x = popupBounds.x;
-    popup.y = popupBounds.y;
+    fitPopup(popup, app.screen, popupWidth, popupHeight);
 
     // Background
     const bg = new PIXI.Graphics();

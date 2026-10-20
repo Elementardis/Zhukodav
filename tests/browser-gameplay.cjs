@@ -14,7 +14,7 @@ window.gameTest = {
  stop: () => app.ticker.stop(),
  snapshot: () => ({ life, score, time: levelTimeRemainingMs, clock: gameTimeMs, ended: levelEnded, paused: isPaused, active: activeObjects.map(o => ({type:o.type,x:o.x,y:o.y,state:o.state})), held: getActiveColor(), sceneScale: currentGameUI.scene?.scale.x }),
  step: ms => tickLevelCountdown((levelCountdownLastAt ?? performance.now()) + ms),
- configure(weights, hp=100) { levelData = {...levels[0], lifeCount:hp, durationSeconds:60, params:{...levels[0].params, maxObjects:20, spawnWeights:weights}}; life=hp; levelTimeRemainingMs=60000; removeAllActiveObjectsImmediate(); prepareObjectQueue(); const result=setupPlayArea(); playArea=result.playField; spawnDueAt=null; },
+ configure(weights, hp=8) { levelData = {...levels[0], food:"pizza", durationSeconds:60, params:{...levels[0].params, maxObjects:20, spawnWeights:weights}}; life=hp; levelTimeRemainingMs=60000; removeAllActiveObjectsImmediate(); prepareObjectQueue(); const result=setupPlayArea(); playArea=result.playField; spawnDueAt=null; },
  spawn(type) { const b=getRuntimeBugBalance(type); objectQueue=[{type,...b}]; spawnObject(); spawnDueAt=null; return activeObjects.length; },
  hit(index=0) { hitFoodBug(activeObjects[index]); },
  atFood(index=0, time=400) { const o=activeObjects[index]; o.x=o.targetX; o.y=o.targetY; o.state='atFood'; o.reactionRemainingMs=time; showFoodWarning(o); },
@@ -24,7 +24,28 @@ window.gameTest = {
  release(color, id=1) { currentGameUI.buttons[color].emit('pointerupoutside',{data:{pointerId:id}}); },
  setEnd(time,hp) {levelTimeRemainingMs=time;life=hp;},
  home: () => showProgressScreen(),
+ debugState: () => ({select:app.stage.children.includes(levelSelectContainer),game:app.stage.children.includes(gameContainer),levelId:levelData?.id,active:activeObjects.length}),
+ showTestPopup(kind) {
+   clearAllPopups(); isPaused=false; introActive=false; levelEnded=kind==='win'||kind==='lose';
+   if(kind==='pause') showPausePopup();
+   if(kind==='win') showWinPopup(0);
+   if(kind==='lose') showLosePopup(0);
+   if(kind==='intro') { introActive=true; const longest=levels.map(l=>l.introPopup).filter(Boolean).sort((a,b)=>b.descryption.length-a.descryption.length)[0];showIntroPopup(longest,()=>{introActive=false;}); }
+ },
+ popupInfo() {
+   const popup=gameContainer.children.find(c=>c._popupLayout);
+   if(!popup)return null;
+   const bounds=popup.getBounds();
+   return {name:popup.name,x:bounds.x,y:bounds.y,width:bounds.width,height:bounds.height,scaleX:popup.scale.x,scaleY:popup.scale.y};
+ },
+ popupButtonPoint(text) {
+   const popup=gameContainer.children.find(c=>c._popupLayout);
+   function find(node) {if(node.text===text)return node;for(const child of node.children||[]){const found=find(child);if(found)return found;}}
+   const bounds=find(popup).getBounds();return {x:bounds.x+bounds.width/2,y:bounds.y+bounds.height/2};
+ },
+ selectTestLevel(index) { showLevelEntryPopup(index); const popup=levelSelectContainer.getChildByName('levelEntryPopup'); popup.children.find(c=>c.children?.some(t=>t.text==='ИГРАТЬ')).emit('pointerdown',{stopPropagation(){}}); app.ticker.stop(); },
  render: () => app.renderer.render(app.stage),
+ indicators: () => ({slices:currentGameUI.slices.filter(s=>s.visible).length, timeFresh:currentGameUI.segments.filter(s=>s.texture===TEXTURES.gameplay_hp_fresh).length}),
  get ui(){return currentGameUI;}, get objects(){return activeObjects;}, get levels(){return levels;}
 };`;
 const server = http.createServer((req,res) => {
@@ -63,28 +84,94 @@ async function main() {
     const evaluate=async expression=>{const result=await cdp('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);return result.result.value;};
     await cdp('Runtime.enable');await cdp('Page.enable');
     await cdp('Emulation.setDeviceMetricsOverride',{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
-    await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/`});
+    const debugSelect = process.argv.includes('--debug-select');
+    await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/${debugSelect ? '?debug=1' : ''}`});
     const deadline=Date.now()+45000;
     while(!await evaluate('!!window.gameTest?.ready()')) {if(Date.now()>deadline)throw Error('Loading timeout: '+errors.join('\n'));await new Promise(r=>setTimeout(r,250));}
+    if (debugSelect) {
+        assert.equal(await evaluate('gameTest.debugState().select'),true);
+        await evaluate('gameTest.selectTestLevel(gameTest.levels.length-1)');
+        assert.equal(await evaluate('gameTest.debugState().levelId === gameTest.levels.at(-1).id'),true);
+        assert.equal(await evaluate('gameTest.debugState().game'),true);
+        await evaluate('gameTest.spawn("bug");gameTest.atFood();gameTest.pause();document.getElementById("debug-level-select").click()');
+        assert.equal(await evaluate('gameTest.debugState().select'),true);
+        assert.equal(await evaluate('gameTest.debugState().game'),false);
+        assert.equal(await evaluate('gameTest.debugState().active'),0);
+        await evaluate('document.getElementById("debug-level-select").click()');
+        assert.equal(await evaluate('document.querySelectorAll("#debug-level-select").length'),1);
+        await evaluate('gameTest.selectTestLevel(2);document.getElementById("debug-level-select").click()');
+        assert.equal(await evaluate('gameTest.debugState().select'),true);
+        assert.deepEqual(errors,[]);
+        console.log('Debug level selection passed: all levels accessible, last level starts, exit during pause/contact/intro clears gameplay, repeated open has one button.');
+        await send('Browser.close');
+        return;
+    }
+    assert.equal(await evaluate('document.getElementById("debug-level-select") === null'),true);
+    if (process.argv.includes('--popups')) {
+        await evaluate('gameTest.start()');
+        const dimensions=[[1920,1080],[960,540],[844,390],[568,320],[320,568],[2560,1080]];
+        for(const kind of ['intro','pause','win','lose']) {
+            await evaluate(`gameTest.showTestPopup('${kind}')`);
+            for(const [width,height] of dimensions) {
+                await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+                await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+                const info=await evaluate('gameTest.popupInfo()');
+                assert.ok(info,kind);
+                assert.equal(info.scaleX,info.scaleY);
+                assert.ok(info.x>=0 && info.y>=0 && info.x+info.width<=width && info.y+info.height<=height,`${kind} ${width}x${height}: ${JSON.stringify(info)}`);
+                assert.ok(Math.abs(info.x+info.width/2-width/2)<8,kind+' centered horizontally');
+                assert.ok(Math.abs(info.y+info.height/2-height/2)<8,kind+' centered vertically');
+                if(width===844 || width===1920) {
+                    await evaluate('gameTest.render()');
+                    const {data}=await cdp('Page.captureScreenshot',{format:'png'});
+                    fs.mkdirSync(path.join(root,'tests/artifacts'),{recursive:true});
+                    fs.writeFileSync(path.join(root,'tests/artifacts',`popup-${kind}-${width}.png`),Buffer.from(data,'base64'));
+                }
+            }
+        }
+        await evaluate("gameTest.showTestPopup('pause')");
+        await cdp('Emulation.setDeviceMetricsOverride',{width:844,height:390,deviceScaleFactor:1,mobile:false});
+        await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+        const point=await evaluate('gameTest.popupButtonPoint(\"ПРОДОЛЖИТЬ\")');
+        await cdp('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...point});
+        await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...point});
+        assert.equal(await evaluate('gameTest.snapshot().paused'),false);
+        await evaluate('gameTest.stop()');
+        assert.deepEqual(errors,[]);
+        console.log('Popup checks passed: intro (longest text), pause, win and lose at six viewports, live resize, uniform scale, centering, bounds and real resume click after resize.');
+        await send('Browser.close');
+        return;
+    }
     await evaluate('gameTest.start();gameTest.configure({coloredBug_red:1,coloredBug_yellow:1,coloredBug_purple:1,coloredBug_green:1});gameTest.render()');
     const capture=async name=>{const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.mkdirSync(path.join(root,'tests/artifacts'),{recursive:true});fs.writeFileSync(path.join(root,'tests/artifacts',name),Buffer.from(data,'base64'));};
     await capture('gameplay-1920.png');
     const check=async (expression,expected)=>assert.deepEqual(await evaluate(expression),expected,expression);
     await check('gameTest.ui.scene.children.filter(c=>c.name?.startsWith("colorButton_")).length',4);
+    await check('gameTest.indicators()', {slices:8,timeFresh:7});
+    await evaluate('gameTest.spawn("coloredBug_red");gameTest.spawn("coloredBug_yellow");gameTest.hold("red")');
+    await check('gameTest.objects.map(o=>o.highlight.visible)',[true,false]);
+    await evaluate('gameTest.release("red")');
+    await check('gameTest.objects.map(o=>o.highlight.visible)',[false,false]);
+    await evaluate('gameTest.configure({coloredBug_red:1,coloredBug_yellow:1,coloredBug_purple:1,coloredBug_green:1})');
     for(const color of ['red','yellow','purple','green']) {
         await evaluate(`gameTest.spawn('coloredBug_${color}'); gameTest.hold('${color}'); gameTest.hit(); gameTest.release('${color}'); gameTest.step(200);`);
         await check('gameTest.objects.length',0);
     }
     await evaluate("gameTest.spawn('bug');gameTest.atFood();gameTest.hit();gameTest.step(500)");
-    await check('gameTest.snapshot().life',100);
+    await check('gameTest.snapshot().life',8);
     await evaluate("gameTest.spawn('bug');gameTest.atFood();gameTest.step(399)");
-    await check('gameTest.snapshot().life',100);
+    await check('gameTest.snapshot().life',8);
     await evaluate('gameTest.step(1);gameTest.step(1000)');
-    await check('gameTest.snapshot().life',99);
+    await check('gameTest.snapshot().life',7);
     await evaluate("gameTest.spawn('bomb');gameTest.atFood();gameTest.step(500)");
-    await check('gameTest.snapshot().life',99);
-    await evaluate("gameTest.spawn('bomb');gameTest.hit();gameTest.step(500)");
-    await check('gameTest.snapshot().life',98);
+    await check('gameTest.snapshot().life',7);
+    await evaluate("gameTest.spawn('bomb');gameTest.hit()");
+    await check('gameTest.ui.effects.getChildByName("bombExplosion").animationFrames.length',17);
+    await evaluate('gameTest.step(200)');
+    await check('gameTest.ui.effects.getChildByName("bombExplosion").texture === gameTest.ui.effects.getChildByName("bombExplosion").animationFrames[2]',true);
+    await check('gameTest.indicators().slices',6);
+    await evaluate('gameTest.step(300)');
+    await check('gameTest.snapshot().life',6);
     await evaluate("gameTest.spawn('fatColoredBug_red');gameTest.hold('red');gameTest.hit();gameTest.hit()");
     await check('gameTest.objects[0].state === "resolved"',false);
     await evaluate("gameTest.hit();gameTest.release('red');gameTest.step(200)");
@@ -94,12 +181,13 @@ async function main() {
     await evaluate('gameTest.step(10000)');
     assert.deepEqual(await evaluate('gameTest.snapshot()'),paused);
     await evaluate('gameTest.resume();gameTest.step(400)');
-    await check('gameTest.snapshot().life',97);
+    await check('gameTest.snapshot().life',5);
     // Existing special bugs retain their effects and use paused game time.
     await evaluate("gameTest.spawn('healer');gameTest.hit();gameTest.step(200)");
-    await check('gameTest.snapshot().life',98);
+    await check('gameTest.snapshot().life',6);
     await evaluate("gameTest.spawn('frozen');gameTest.hit();gameTest.step(200);gameTest.spawn('bug')");
     await check('gameTest.objects[0].state === "resolved"',false);
+    await check('gameTest.ui.foodAccent.geometry.graphicsData.length > 0',true);
     await evaluate('gameTest.pause()');
     const frozenPause=await evaluate('gameTest.snapshot()');
     await evaluate('gameTest.step(7000)');
@@ -137,12 +225,14 @@ async function main() {
     await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:70,y:400,id:1}]});
     await check('gameTest.snapshot().held',null);
     await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+    await cdp('Emulation.setUserAgentOverride',{userAgent:'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/130.0.0.0 Mobile Safari/537.36'});
     await cdp('Emulation.setDeviceMetricsOverride',{width:540,height:960,deviceScaleFactor:1,mobile:true});
     await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
     await check('!!document.getElementById("mobile-orientation-overlay")',true);
     const portrait=await evaluate('gameTest.snapshot()');
     await evaluate('gameTest.step(5000)');
     await check('gameTest.snapshot().time',portrait.time);
+    await cdp('Emulation.setUserAgentOverride',{userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36'});
     await cdp('Emulation.setDeviceMetricsOverride',{width:960,height:540,deviceScaleFactor:1,mobile:false});
     await cdp('Emulation.setTouchEmulationEnabled',{enabled:false});
     await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');

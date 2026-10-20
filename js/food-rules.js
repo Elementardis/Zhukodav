@@ -4,8 +4,6 @@ export const FOOD_RULES = {
     bugSize: 100,
     fatSizeMultiplier: 1.4,
     tapRadiusMultiplier: 0.58,
-    travelTimeMultiplier: 1.8,
-    minimumTravelMs: 1200,
     reactionMs: 400,
     entryGap: 10,
     spawnSeparation: 16,
@@ -66,7 +64,8 @@ export function createApproach(position, food, radius, lifetime, reactionMs = FO
         ...position, radius, state: 'entering', angle,
         targetX: position.x + Math.cos(angle) * distance,
         targetY: position.y + Math.sin(angle) * distance,
-        speed: distance / Math.max(FOOD_RULES.minimumTravelMs, lifetime * FOOD_RULES.travelTimeMultiplier),
+        // The configured lifetime is the complete approach time, before the food warning.
+        speed: distance / Math.max(1, lifetime),
         reactionRemainingMs: reactionMs
     };
 }

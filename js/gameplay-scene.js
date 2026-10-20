@@ -22,14 +22,12 @@ export const GAMEPLAY_ASSETS = [
     ...Array.from({ length: 8 }, (_, i) => [`slice_${i + 1}`, `food/slices/pizza_slice_${String(i + 1).padStart(2, '0')}.png`])
 ].map(([name, path]) => ({ name: `gameplay_${name}`, path: `images/gameplay/${path}` }));
 
-export function dirtySegments(life, maximum) {
-    return Math.round(7 * (1 - Math.max(0, Math.min(1, life / Math.max(1, maximum)))));
+export function elapsedSegments(remainingMs, durationMs) {
+    return Math.floor(7 * (1 - Math.max(0, Math.min(1, remainingMs / Math.max(1, durationMs)))));
 }
 
-export function remainingSliceIndices(remainingMs, durationMs) {
-    const removed = Math.min(8, Math.floor(8 * (1 - Math.max(0, remainingMs) / Math.max(1, durationMs))));
-    const order = [3, 4, 5, 6, 7, 8, 1, 2];
-    return order.slice(removed);
+export function remainingSliceIndices(life, food) {
+    return food.removalOrder.slice(food.pieces - Math.max(0, Math.min(food.pieces, Math.floor(life))));
 }
 
 export function fitGameplayScene(scene, viewport) {
@@ -42,7 +40,7 @@ function brighten(color) {
     return [16, 8, 0].reduce((result, shift) => result | Math.round(((color >> shift) & 255) * 0.93 + 255 * 0.07) << shift, 0);
 }
 
-export function buildGameplayScene(textures, { enabledColors, onHold, onRelease, onSettings }) {
+export function buildGameplayScene(textures, { enabledColors, foodDefinition, onHold, onRelease, onSettings }) {
     const style = GAMEPLAY_STYLE;
     const scene = new PIXI.Container();
     scene.name = 'gameplayScene';
@@ -60,7 +58,7 @@ export function buildGameplayScene(textures, { enabledColors, onHold, onRelease,
     food.position.set(style.food.x, style.food.y);
     food.scale.set(style.food.size / 640);
     food.addChild(sprite('plate', 0, 0, 640, 640));
-    const slices = Array.from({ length: 8 }, (_, i) => sprite(`slice_${i + 1}`, 40, 40, 560, 560));
+    const slices = Array.from({ length: foodDefinition.pieces }, (_, i) => sprite(`slice_${i + 1}`, 40, 40, 560, 560));
     slices.forEach(s => food.addChild(s));
     scene.addChild(food);
 
@@ -80,14 +78,17 @@ export function buildGameplayScene(textures, { enabledColors, onHold, onRelease,
     scene.addChild(effects);
 
     const hp = new PIXI.Container();
-    hp.name = 'foodHealth';
+    hp.name = 'levelTimeBar';
     hp.position.set(style.hp.x, style.hp.y);
     hp.addChild(sprite('hp_frame', 0, 0, 700, 96));
     const segments = Array.from({ length: 7 }, (_, i) => sprite('hp_fresh', 34 + 91 * i, 18, 85, 60));
     segments.forEach(s => hp.addChild(s));
-    const accent = new PIXI.Graphics();
-    hp.addChild(accent);
     scene.addChild(hp);
+    const foodAccent = new PIXI.Graphics();
+    foodAccent.name = 'foodEffectRing';
+    foodAccent.position.set(style.food.x + 250, style.food.y + 250);
+    foodAccent.interactive = false;
+    scene.addChild(foodAccent);
 
     const buttons = {};
     for (const tool of style.tools) {
@@ -154,19 +155,35 @@ export function buildGameplayScene(textures, { enabledColors, onHold, onRelease,
         feedbackColor = kind === 'damage' ? 0xF65C70 : kind === 'heal' ? 0x9ED52A : 0xFFFFFF;
     };
     return {
-        scene, field, effects, hp, buttons, feedback,
-        update({ life, maximum, remainingMs, durationMs, activeColor, special, dt = 0 }) {
+        scene, field, effects, hp, buttons, feedback, slices, segments, foodAccent,
+        update({ life, remainingMs, durationMs, activeColor, specialEffects = [], clockMs = 0, dt = 0 }) {
             if (lastLife !== null && life !== lastLife) feedback(life < lastLife ? 'damage' : 'heal');
             lastLife = life;
-            const dirty = dirtySegments(life, maximum);
+            const dirty = elapsedSegments(remainingMs, durationMs);
             segments.forEach((segment, i) => { segment.texture = textures[i >= 7 - dirty ? 'gameplay_hp_dirty' : 'gameplay_hp_fresh']; });
-            const visible = remainingSliceIndices(remainingMs, durationMs);
+            const visible = remainingSliceIndices(life, foodDefinition);
             slices.forEach((slice, i) => { slice.visible = visible.includes(i + 1); });
             feedbackMs = Math.max(0, feedbackMs - dt);
-            hp.x = style.hp.x + (feedbackMs > 0 ? Math.sin(feedbackMs * 0.08) * 3 : 0);
-            const color = feedbackMs > 0 ? feedbackColor : special === 'frozen' ? 0x8FE8FF : special === 'chameleon' ? 0xE9B4F5 : style.tools.find(t => t.color === activeColor)?.fill;
-            accent.clear();
-            if (color !== undefined) accent.lineStyle(3, color).drawRoundedRect(-4, -4, 708, 104, 24);
+            food.x = style.food.x + (feedbackMs > 0 ? Math.sin(feedbackMs * 0.08) * 3 : 0);
+            foodAccent.clear();
+            const toolColor = style.tools.find(t => t.color === activeColor)?.fill;
+            if (feedbackMs > 0 || toolColor !== undefined) {
+                foodAccent.lineStyle(3, feedbackMs > 0 ? feedbackColor : toolColor).drawCircle(0, 0, 254);
+            }
+            specialEffects.forEach((effect, index) => {
+                const fraction = Math.max(0, Math.min(1, effect.remainingMs / effect.durationMs));
+                if (!fraction) return;
+                const radius = 260 + index * 7;
+                // A shrinking coloured arc has the same duration meaning as the old field border.
+                const colors = effect.type === 'frozen' ? [0x8FE8FF, 0x4FC3F7, 0xE9FBFF] : [0xFFB7C5, 0xFFD7A8, 0xFFF0A6, 0xBAF2BB, 0xB8E7FF, 0xD8C4FF];
+                const segments = 72;
+                for (let i = 0; i < segments * fraction; i++) {
+                    const from = -Math.PI / 2 + i / segments * Math.PI * 2;
+                    const to = -Math.PI / 2 + Math.min(i + 1, segments * fraction) / segments * Math.PI * 2;
+                    const color = colors[(Math.floor(i / 6) + Math.floor(clockMs / 120)) % colors.length];
+                    foodAccent.lineStyle(4, color).moveTo(Math.cos(from) * radius, Math.sin(from) * radius).arc(0, 0, radius, from, to);
+                }
+            });
         }
     };
 }
