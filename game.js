@@ -2017,9 +2017,15 @@ function spawnObject() {
     container.interactive = container.buttonMode = true;
     container.hitArea = new PIXI.Circle(0, 0, size * FOOD_RULES.tapRadiusMultiplier);
     container.animations = [];
+    // Separate screen-vertical hops from heading, hit effects and the clickable root.
+    const hop = new PIXI.Container();
+    container.hop = hop;
+    container.hopPeriodMs = fat ? FOOD_RULES.fatHopPeriodMs : FOOD_RULES.hopPeriodMs;
+    container.hopElapsedMs = Math.random() * container.hopPeriodMs;
+    container.addChild(hop);
     const heading = new PIXI.Container();
     heading.rotation = container.angle - FOOD_RULES.textureForwardAngle;
-    container.addChild(heading);
+    hop.addChild(heading);
     const body = new PIXI.Container();
     body.name = 'bugBody';
     heading.addChild(body);
@@ -2138,6 +2144,19 @@ function showFoodWarning(obj) {
     obj.warning = warning;
 }
 
+function updateBugHop(obj, dt, rate) {
+    if (!obj.hop) return;
+    if (obj.state !== 'entering' && obj.state !== 'approaching') {
+        obj.hop.y = 0;
+        return;
+    }
+    obj.hopElapsedMs = (obj.hopElapsedMs + dt * rate) % obj.hopPeriodMs;
+    const phase = obj.hopElapsedMs / obj.hopPeriodMs;
+    // A soft lift and landing, with the final quarter of each cycle on the ground.
+    const lift = Math.sin(Math.PI * Math.min(phase / 0.75, 1));
+    obj.hop.y = -FOOD_RULES.hopHeight * lift * lift;
+}
+
 function advanceGameplay(dt) {
     // Fixed maximum step preserves contact/timeout ordering at low and high FPS.
     let remaining = Math.min(dt, levelTimeRemainingMs);
@@ -2164,7 +2183,9 @@ function advanceGameplay(dt) {
                 else { obj.alpha = obj.removeRemainingMs / 180; obj.body.scale.set(0.8 + 0.2 * obj.alpha); }
                 continue;
             }
-            const event = advanceApproach(obj, step, GAMEPLAY_STYLE.playRect, isFrozenEffectActive() ? FROZEN_LIFETIME_RATE : 1);
+            const movementRate = isFrozenEffectActive() ? FROZEN_LIFETIME_RATE : 1;
+            const event = advanceApproach(obj, step, GAMEPLAY_STYLE.playRect, movementRate);
+            updateBugHop(obj, step, movementRate);
             if (event === 'warning') showFoodWarning(obj);
             if (obj.warning) obj.warning.alpha = 0.65 + Math.sin(gameTimeMs * 0.025) * 0.35;
             if (event === 'damage' || event === 'departed') {
