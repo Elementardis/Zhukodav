@@ -76,7 +76,7 @@ const levels = [
   },
   {
     id: 6,
-    durationSeconds: 45,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -105,7 +105,7 @@ const levels = [
   },
   {
     id: 8,
-    durationSeconds: 45,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 5,
@@ -124,7 +124,7 @@ const levels = [
   },
   {
     id: 9,
-    durationSeconds: 45,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 5,
@@ -139,7 +139,7 @@ const levels = [
   },
   {
     id: 10,
-    durationSeconds: 20,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -153,7 +153,7 @@ const levels = [
   },
   {
     id: 11,
-    durationSeconds: 15,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 3,
@@ -200,7 +200,7 @@ const levels = [
   },
   {
     id: 14,
-    durationSeconds: 45,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 3,
@@ -216,7 +216,7 @@ const levels = [
   },
   {
     id: 15,
-    durationSeconds: 50,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -250,7 +250,7 @@ const levels = [
   },
   {
     id: 17,
-    durationSeconds: 40,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -265,7 +265,7 @@ const levels = [
   },
   {
     id: 18,
-    durationSeconds: 45,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 3,
@@ -279,7 +279,7 @@ const levels = [
   },
   {
     id: 19,
-    durationSeconds: 50,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -295,7 +295,7 @@ const levels = [
   },
   {
     id: 20,
-    durationSeconds: 50,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -314,7 +314,7 @@ const levels = [
   },
   {
     id: 21,
-    durationSeconds: 55,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 5,
@@ -331,7 +331,7 @@ const levels = [
   },
   {
     id: 22,
-    durationSeconds: 55,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -347,7 +347,7 @@ const levels = [
   },
   {
     id: 23,
-    durationSeconds: 55,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -362,7 +362,7 @@ const levels = [
   },
   {
     id: 24,
-    durationSeconds: 55,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -378,7 +378,7 @@ const levels = [
   },
   {
     id: 25,
-    durationSeconds: 55,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 5,
@@ -394,7 +394,7 @@ const levels = [
   },
   {
     id: 26,
-    durationSeconds: 50,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 3,
@@ -410,7 +410,7 @@ const levels = [
   },
   {
     id: 27,
-    durationSeconds: 50,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -427,7 +427,7 @@ const levels = [
   },
   {
     id: 28,
-    durationSeconds: 50,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -448,7 +448,7 @@ const levels = [
   },
   {
     id: 29,
-    durationSeconds: 50,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -465,7 +465,7 @@ const levels = [
   },
   {
     id: 30,
-    durationSeconds: 45,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -481,7 +481,7 @@ const levels = [
   },
   {
     id: 31,
-    durationSeconds: 60,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
@@ -496,7 +496,7 @@ const levels = [
   },
   {
     id: 32,
-    durationSeconds: 60,
+    durationSeconds: 30,
     food: 'pizza',
     params: {
       maxObjects: 4,
