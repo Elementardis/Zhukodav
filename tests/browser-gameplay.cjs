@@ -24,6 +24,10 @@ window.gameTest = {
  release(color, id=1) { currentGameUI.buttons[color].emit('pointerupoutside',{data:{pointerId:id}}); },
  setEnd(time,hp) {levelTimeRemainingMs=time;life=hp;},
  home: () => showProgressScreen(),
+ result(won,index=0) { clearAllPopups(); introActive=false; endGame(won); showResultPopup({won,levelIndex:index}); },
+ resultButton(name) { const popup=gameContainer.children.find(c=>c.name==='winPopup'||c.name==='losePopup');return popup.getChildByName(name); },
+ resultCounts: () => gameContainer.children.filter(c=>['winPopup','losePopup','winOverlay','loseOverlay'].includes(c.name)).length,
+ isHome: () => app.stage.children.includes(progressContainer),
  debugState: () => ({select:app.stage.children.includes(levelSelectContainer),game:app.stage.children.includes(gameContainer),levelId:levelData?.id,active:activeObjects.length}),
  showTestPopup(kind) {
    clearAllPopups(); isPaused=false; introActive=false; levelEnded=kind==='win'||kind==='lose';
@@ -55,7 +59,7 @@ const server = http.createServer((req,res) => {
     try {
         let data = file === path.join(root,'firebase.js') ? backend : fs.readFileSync(file);
         if (file === path.join(root,'game.js')) data = data.toString() + expose;
-        const mime = {'.js':'text/javascript','.html':'text/html','.png':'image/png','.gif':'image/gif','.mp3':'audio/mpeg'}[path.extname(file)] || 'application/octet-stream';
+        const mime = {'.js':'text/javascript','.html':'text/html','.png':'image/png','.svg':'image/svg+xml','.json':'application/json','.gif':'image/gif','.mp3':'audio/mpeg'}[path.extname(file)] || 'application/octet-stream';
         res.writeHead(200, {'Content-Type':mime});res.end(data);
     } catch { res.writeHead(404).end(); }
 });
@@ -87,7 +91,41 @@ async function main() {
     const debugSelect = process.argv.includes('--debug-select');
     await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/${debugSelect ? '?debug=1' : ''}`});
     const deadline=Date.now()+45000;
-    while(!await evaluate('!!window.gameTest?.ready()')) {if(Date.now()>deadline)throw Error('Loading timeout: '+errors.join('\n'));await new Promise(r=>setTimeout(r,250));}
+    while(!await evaluate('!!window.gameTest?.ready()')) {if(Date.now()>deadline)throw Error('Loading timeout: '+await evaluate('document.querySelector(' + JSON.stringify('[role=status]') + ')?.textContent')+' '+errors.join('\n'));await new Promise(r=>setTimeout(r,250));}
+    if (process.argv.includes('--loading')) {
+        const loadingDeadline = Date.now()+20000;
+        while (await evaluate('!!document.getElementById("preloader")')) {
+            const failure = await evaluate('document.querySelector(".loading-fallback button")?.hidden === false ? document.querySelector(".loading-fallback [role=status]").textContent : null');
+            assert.equal(failure,null,JSON.stringify(errors));
+            if (Date.now()>loadingDeadline) throw Error('Loading screen did not finish: '+JSON.stringify(errors));
+            await new Promise(resolve=>setTimeout(resolve,100));
+        }
+        assert.equal(await evaluate('document.getElementById("preloader") === null'),true,'menu finishes loading');
+        assert.deepEqual(errors,[]);
+        const markup = fs.readFileSync(path.join(root,'index.html'),'utf8').replace(/<script[\s\S]*?<\/script>/g,'');
+        await evaluate(`document.body.innerHTML = ${JSON.stringify(markup.match(/<body>([\s\S]*)<\/body>/)[1])}; delete window.gamePreloader;`);
+        await evaluate(fs.readFileSync(path.join(root,'js/preloader.js'),'utf8'));
+        await evaluate('gamePreloader.ready');
+        for (const [width,height] of [[1920,1080],[1280,720],[844,390],[390,844]]) {
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+            await evaluate('window.dispatchEvent(new Event("resize"))');
+            const bounds=await evaluate('document.querySelector(".loading-scene").getBoundingClientRect().toJSON()');
+            assert.ok(bounds.x>=-1 && bounds.y>=-1 && bounds.right<=width+1 && bounds.bottom<=height+1);
+        }
+        for (const progress of [0,0.01,0.5,1]) {
+            await evaluate(`gamePreloader.update(${progress})`);
+            assert.equal(await evaluate('Number(document.getElementById("preloader").getAttribute("aria-valuenow"))'),progress*100);
+            const widths=await evaluate('(()=>{const image=[...document.images].find(img=>img.src.endsWith("preloader_fill.png"));return [parseFloat(image.style.width),parseFloat(image.parentElement.style.width)];})()');
+            assert.deepEqual(widths,[1072,progress*100]);
+        }
+        await evaluate('gamePreloader.error()');
+        assert.equal(await evaluate('document.querySelector(".loading-fallback button").hidden'),false);
+        assert.equal(await evaluate('document.querySelectorAll("#preloader").length'),1);
+        assert.deepEqual(errors,[]);
+        console.log('Loading screen passed: menu starts, overlay removed, four viewport sizes, 0/1/50/100% reveal without texture scaling, retry UI.');
+        await send('Browser.close');
+        return;
+    }
     if (debugSelect) {
         assert.equal(await evaluate('gameTest.debugState().select'),true);
         await evaluate('gameTest.selectTestLevel(gameTest.levels.length-1)');
@@ -107,6 +145,43 @@ async function main() {
         return;
     }
     assert.equal(await evaluate('document.getElementById("debug-level-select") === null'),true);
+    if (process.argv.includes('--results')) {
+        await evaluate('new Promise(resolve=>{const poll=()=>document.getElementById("preloader")?setTimeout(poll,100):resolve();poll();})');
+        for (const won of [false,true]) {
+            await evaluate(`gameTest.start();gameTest.result(${won})`);
+            for (const [width,height] of [[1920,1080],[1280,720],[844,390]]) {
+                await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+                await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+                const info=await evaluate('gameTest.popupInfo()');
+                assert.equal(info.scaleX,Math.min(width/1920,height/1080));
+                assert.equal(info.scaleX,info.scaleY);
+            }
+            const before=await evaluate('gameTest.snapshot()');
+            await cdp('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x:10,y:10});
+            await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x:10,y:10});
+            await evaluate('gameTest.step(5000)');
+            assert.deepEqual(await evaluate('gameTest.snapshot()'),before,'result blocks gameplay');
+            assert.equal(await evaluate('gameTest.snapshot().ended'),true);
+            assert.equal(await evaluate('gameTest.resultCounts()'),2);
+            await evaluate('(()=>{const b=gameTest.resultButton("resultPrimary");b.emit("pointertap");b.emit("pointertap");gameTest.stop();})()');
+            assert.equal(await evaluate('gameTest.debugState().levelId'),won?2:1);
+            assert.equal(await evaluate('gameTest.resultCounts()'),0);
+            await evaluate(`gameTest.result(${won});gameTest.result(${won})`);
+            assert.equal(await evaluate('gameTest.resultCounts()'),2);
+            const point=await evaluate('gameTest.popupButtonPoint("В ГЛАВНОЕ МЕНЮ")');
+            await cdp('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...point});
+            await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...point});
+            assert.equal(await evaluate('gameTest.isHome()'),true);
+            assert.equal(await evaluate('gameTest.debugState().game'),false);
+        }
+        await evaluate('gameTest.start(gameTest.levels.length-1);gameTest.result(true,gameTest.levels.length-1);gameTest.resultButton("resultPrimary").emit("pointertap")');
+        assert.equal(await evaluate('gameTest.debugState().select'),true);
+        assert.equal(await evaluate('gameTest.debugState().game'),false);
+        assert.deepEqual(errors,[]);
+        console.log('Result transitions passed: retry, next, last level, home, duplicate tap, repeated opens, ended simulation, three viewports.');
+        await send('Browser.close');
+        return;
+    }
     if (process.argv.includes('--popups')) {
         await evaluate('gameTest.start()');
         const dimensions=[[1920,1080],[960,540],[844,390],[568,320],[320,568],[2560,1080]];

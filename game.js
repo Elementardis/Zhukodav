@@ -1,7 +1,8 @@
 import { POPUP_REFERENCE, fitPopup } from './js/popup-layout.js';
-import { getFoodDefinition, getFoodMaxLives } from './js/food-config.js';
+import { RESULT_ASSETS, createResultPopup } from './js/result-popup.js';
+import { getFoodDefinition, getFoodMaxLives, getFoodAssets } from './js/food-config.js';
 import { GAMEPLAY_ASSETS, GAMEPLAY_STYLE, buildGameplayScene, fitGameplayScene } from './js/gameplay-scene.js';
-import { FOOD_RULES, levelDurationMs, weightedType, shuffledSides, chooseEntry, createApproach, advanceApproach } from './js/food-rules.js';
+import { FOOD_RULES, levelDurationMs, weightedType, shuffledSides, chooseEntry, createApproach, createCrossing, advanceApproach } from './js/food-rules.js';
 import levels from './levels.js';
 import { createSoundEffects } from './js/sound-effects.js';
 import { getBugBaseBalance, getBugSpawnZone } from './bug-config.js';
@@ -691,6 +692,8 @@ const UI_ASSET_SLOTS = {
 const SPRITE_PATHS = [
     ...HOME_ASSETS,
     ...GAMEPLAY_ASSETS,
+    ...RESULT_ASSETS,
+    ...getFoodAssets(levels),
     { name: 'bug', path: 'images/bugs/bug.png' },
     { name: 'healer', path: 'images/bugs/healer.png' },
     { name: 'bomb', path: 'images/bugs/bomb.png' },
@@ -839,59 +842,7 @@ function updateMobilePortraitOverlay() {
     });
 }
 
-function showPreloader() {
-    const preloader = document.createElement('div');
-    preloader.id = 'preloader';
-    preloader.style.position = 'fixed';
-    preloader.style.left = '0';
-    preloader.style.top = '0';
-    preloader.style.width = '100vw';
-    preloader.style.height = '100vh';
-    preloader.style.background = THEME.preloaderBg;
-    preloader.style.display = 'flex';
-    preloader.style.flexDirection = 'column';
-    preloader.style.alignItems = 'center';
-    preloader.style.justifyContent = 'center';
-    preloader.style.fontSize = '2em';
-    preloader.style.zIndex = '9999';
-    preloader.style.fontFamily = 'Arial';
-    
-    const loadingText = document.createElement('div');
-    loadingText.innerText = 'Загрузка...';
-    loadingText.style.marginBottom = '20px';
-    
-    const progressBar = document.createElement('div');
-    progressBar.style.width = '300px';
-    progressBar.style.height = '20px';
-    progressBar.style.background = THEME.preloaderTrack;
-    progressBar.style.borderRadius = '10px';
-    progressBar.style.overflow = 'hidden';
-    
-    const progressFill = document.createElement('div');
-    progressFill.style.width = '0%';
-    progressFill.style.height = '100%';
-    progressFill.style.background = THEME.preloaderFill;
-    progressFill.style.transition = 'width 0.3s';
-    
-    progressBar.appendChild(progressFill);
-    preloader.appendChild(loadingText);
-    preloader.appendChild(progressBar);
-    document.body.appendChild(preloader);
-    
-    return { preloader, progressFill };
-}
-
-function hidePreloader() {
-    const preloader = document.getElementById('preloader');
-    if (preloader) {
-        preloader.style.opacity = '0';
-        preloader.style.transition = 'opacity 0.5s';
-        setTimeout(() => preloader.remove(), 500);
-    }
-}
-
-// ==== START GAME AFTER IMAGE AND AUDIO PRELOADING ====
-const { preloader, progressFill } = showPreloader();
+const loadingScreen = window.gamePreloader;
 
 // Create PIXI Application
 const app = new PIXI.Application({
@@ -932,7 +883,7 @@ function updatePreloadProgress() {
     // Reserve the final 20% for GPU preparation, not just network downloads.
     const progress = Math.floor(80 * (loadedSprites + loadedAudioCount) / (SPRITE_PATHS.length + audioNames.length)
         + 20 * preparedTextureProgress);
-    progressFill.style.width = `${progress}%`;
+    loadingScreen.update(Math.min(progress / 100, 0.99));
 }
 
 async function prepareLoadedTextures() {
@@ -953,56 +904,55 @@ const audioReady = Promise.all(audioNames.map((name) => preloadAudio(name).then(
     updatePreloadProgress();
 })));
 
-// Add loading progress handler
-loader.onProgress.add((loader) => {
-    updatePreloadProgress();
-});
-
-// Add error handler
-loader.onError.add((error, loader, resource) => {
-    const isOptionalResource = SPRITE_PATHS.some(({ name, optional }) => optional && resource?.name === name);
-    if (isOptionalResource) {
-        console.warn('Optional UI asset not loaded, using Pixi fallback:', resource?.url || resource?.name);
+let requiredResourceFailed = false;
+const onLoadProgress = () => updatePreloadProgress();
+const onLoadError = (error, loader, resource) => {
+    if (SPRITE_PATHS.some(asset => asset.optional && asset.name === resource?.name)) {
+        console.warn('Optional UI asset unavailable:', resource?.url);
         return;
     }
-
-    console.error('Error loading sprite:', {
-        error: error,
-        resource: resource ? {
-            name: resource.name,
-            url: resource.url,
-            type: resource.type
-        } : 'unknown',
-        loader: loader
-    });
-    alert('Ошибка загрузки ресурсов. Пожалуйста, обновите страницу.');
-});
-
-// Start loading
-loader.load(async () => {
-    // Store all loaded textures
-    SPRITE_PATHS.forEach(({ name }) => {
-        const texture = loader.resources[name]?.texture;
-        if (texture) {
-            TEXTURES[name] = texture;
-        }
-    });
-    bombAnimationFrames = Array.from({ length: 17 }, (_, index) => new PIXI.Texture(
-        TEXTURES.bomb_animation.baseTexture, new PIXI.Rectangle(index * 142, 0, 142, 200)
-    ));
-    await Promise.all([audioReady, prepareLoadedTextures()]);
-    updatePreloadProgress();
-    hidePreloader();
-    showProgressScreen();
-    resizeGame();
-    if (DEBUG_LEVEL_SELECT) {
-        installDebugLevelButton();
-        openDebugLevelSelect();
+    console.error('Required sprite unavailable:', resource?.url, error);
+    if (!requiredResourceFailed) {
+        loadingScreen.error(`Не удалось загрузить файл: ${resource?.url || resource?.name || 'неизвестный ресурс'}. Проверьте путь к файлу и нажмите «Повторить».`);
     }
-});
+    requiredResourceFailed = true;
+};
+const progressBinding = loader.onProgress.add(onLoadProgress);
+const errorBinding = loader.onError.add(onLoadError);
 
-// ...весь остальной код...
-
+// Bootstrap artwork first; artwork failures keep the CSS fallback available.
+loadingScreen.ready.then(() => loader.load(async () => {
+    try {
+        if (requiredResourceFailed) return;
+        for (const { name, optional, dataResource } of SPRITE_PATHS) {
+            if (dataResource) {
+                if (!loader.resources[name]?.data) throw new Error(`Missing data: ${name}`);
+                continue;
+            }
+            const texture = loader.resources[name]?.texture;
+            if (texture) TEXTURES[name] = texture;
+            else if (!optional) throw new Error(`Missing texture: ${name}`);
+        }
+        bombAnimationFrames = Array.from({ length: 17 }, (_, index) => new PIXI.Texture(
+            TEXTURES.bomb_animation.baseTexture, new PIXI.Rectangle(index * 142, 0, 142, 200)
+        ));
+        await Promise.all([audioReady, prepareLoadedTextures()]);
+        showProgressScreen();
+        resizeGame();
+        if (DEBUG_LEVEL_SELECT) {
+            installDebugLevelButton();
+            openDebugLevelSelect();
+        }
+        app.renderer.render(app.stage);
+        loadingScreen.finish();
+    } catch (error) {
+        console.error('Game startup failed:', error);
+        loadingScreen.error();
+    } finally {
+        progressBinding.detach();
+        errorBinding.detach();
+    }
+}));
 // Color definitions and key mappings
 
 
@@ -1815,6 +1765,8 @@ function setupPlayArea() {
     const enabledColors = getUsedLevelColors();
     currentGameUI = buildGameplayScene(TEXTURES, {
         enabledColors,
+        levelNumber: levelData.id,
+        showKeyboardHints: getViewportMode() === 'desktop',
         foodDefinition: getFoodDefinition(levelData),
         onHold: (color, event) => {
             if (isPaused || introActive || orientationPauseActive || levelEnded) return;
@@ -2000,17 +1952,20 @@ function spawnObject() {
     if (!spawnSides.some(allowed)) spawnSides = shuffledSides();
     const sideIndex = spawnSides.findIndex(allowed);
     const side = spawnSides[sideIndex];
-    const position = chooseEntry(rect, side, radius, activeObjects, Math.random, data.spawnZone);
-    if (!position) { scheduleNextSpawn(FOOD_RULES.retrySpawnMs); return; }
-    spawnSides.splice(sideIndex, 1);
-    objectQueue.shift();
     const food = {
         x: GAMEPLAY_STYLE.food.x + GAMEPLAY_STYLE.food.size / 2 - rect.x,
         y: GAMEPLAY_STYLE.food.y + GAMEPLAY_STYLE.food.size / 2 - rect.y,
-        radius: GAMEPLAY_STYLE.food.radius
+        radius: GAMEPLAY_STYLE.food.size / 2
     };
+    const position = chooseEntry(rect, side, radius, activeObjects, Math.random, data.spawnZone, data.type === 'bomb' ? food : null);
+    if (!position) { scheduleNextSpawn(FOOD_RULES.retrySpawnMs); return; }
+    spawnSides.splice(sideIndex, 1);
+    objectQueue.shift();
+    food.radius = GAMEPLAY_STYLE.food.radius;
     const container = new PIXI.Container();
-    Object.assign(container, createApproach(position, food, radius, data.lifetime, levelData.params.foodReactionMs ?? FOOD_RULES.reactionMs));
+    Object.assign(container, data.type === 'bomb'
+        ? createCrossing(position, rect, side, radius, data.lifetime)
+        : createApproach(position, food, radius, data.lifetime, levelData.params.foodReactionMs ?? FOOD_RULES.reactionMs));
     container.type = data.type;
     container.data = data;
     container.scoreValue = data.scoreValue;
@@ -2476,10 +2431,10 @@ function resizeGame() {
         for (const child of host.children) {
             if (child._popupLayout) fitPopup(child, app.screen);
             if (['pauseOverlay', 'winOverlay', 'loseOverlay', 'introOverlay'].includes(child.name)) {
-                const opacity = child.name === 'introOverlay' ? 0.42 : child.name === 'pauseOverlay' ? 0.34 : 0.30;
+                const opacity = child._backdropAlpha ?? (child.name === 'introOverlay' ? 0.42 : child.name === 'pauseOverlay' ? 0.34 : 0.30);
                 // Redraw the backdrop instead of scaling its children (result titles).
                 child.scale.set(1);
-                child.clear().beginFill(THEME.overlay, opacity).drawRect(0, 0, app.screen.width, app.screen.height).endFill();
+                child.clear().beginFill(child._backdropColor ?? THEME.overlay, opacity).drawRect(0, 0, app.screen.width, app.screen.height).endFill();
             }
             const title = child.getChildByName?.('resultTitle');
             if (title) {
@@ -2504,6 +2459,7 @@ function clearAllPopups() {
         if (node._appearFrame) cancelAnimationFrame(node._appearFrame);
         if (node._resizeHandler) window.removeEventListener('resize', node._resizeHandler);
         gameContainer.removeChild(node);
+        node.destroy({ children: true });
     }
   });
 }
@@ -2712,334 +2668,43 @@ function showIntroPopup(cfg, onClose) {
   ok.on('pointerdown', close);
 }
 
-// Победа: затемняем фон, показываем «Победа!», через 1s — попап победы
-function showWinOverlayThenPopup(currentLevelIndex) {
-  clearAllPopups();
+function showWinOverlayThenPopup(levelIndex) { showWinPopup(levelIndex); }
+function showLoseOverlayThenPopup(levelIndex) { showLosePopup(levelIndex); }
+function showWinPopup(levelIndex) { showResultPopup({ won: true, levelIndex }); }
+function showLosePopup(levelIndex) { showResultPopup({ won: false, levelIndex }); }
 
-  const overlay = new PIXI.Graphics();
-  overlay.beginFill(THEME.overlay, 0.30);
-  overlay.drawRect(0, 0, app.screen.width, app.screen.height);
-  overlay.endFill();
-  overlay.name = 'winOverlay';
-  overlay.interactive = true; // блокируем клики в поле
-  gameContainer.addChild(overlay);
-
-  const txt = new PIXI.Text('Победа!', new PIXI.TextStyle({
-    fill: THEME.success,
-    fontSize: Math.round(app.screen.width * 0.08),
-    fontWeight: '900',
-    dropShadow: true,
-    dropShadowDistance: 4,
-    dropShadowBlur: 2,
-    dropShadowColor: 0x000000
-  }));
-  txt.anchor?.set ? txt.anchor.set(0.5) : null; // если anchor доступен
-  // fallback, если anchor нет:
-  if (!txt.anchor?.set) { txt.pivot.set(txt.width/2, txt.height/2); }
-  txt.x = app.screen.width / 2;
-  txt.y = app.screen.height / 2;
-
-  txt.name = 'resultTitle';
-  txt.style.fontSize = 100;
-  txt.scale.set(Math.min(app.screen.width / 1280, app.screen.height / 720));
-  overlay.addChild(txt);
-  animateAppear(txt, 500);
-
-  sessionDelay(() => {
-    showWinPopup(currentLevelIndex); // попап поверх overlay
-  }, 1000);
-}
-
-// Поражение: затемняем фон, показываем «Поражение», через 1s — попап проигрыша
-function showLoseOverlayThenPopup(currentLevelIndex) {
-  clearAllPopups();
-
-  const overlay = new PIXI.Graphics();
-  overlay.beginFill(THEME.overlay, 0.30);
-  overlay.drawRect(0, 0, app.screen.width, app.screen.height);
-  overlay.endFill();
-  overlay.name = 'loseOverlay';
-  overlay.interactive = true;
-  gameContainer.addChild(overlay);
-
-  const txt = new PIXI.Text('Поражение', new PIXI.TextStyle({
-    fill: THEME.fail,
-    fontSize: Math.round(app.screen.width * 0.07),
-    fontWeight: '900',
-    dropShadow: true,
-    dropShadowDistance: 4,
-    dropShadowBlur: 2,
-    dropShadowColor: 0x000000
-  }));
-  txt.anchor?.set ? txt.anchor.set(0.5) : null;
-  if (!txt.anchor?.set) { txt.pivot.set(txt.width/2, txt.height/2); }
-  txt.x = app.screen.width / 2;
-  txt.y = app.screen.height / 2;
-
-  txt.name = 'resultTitle';
-  txt.style.fontSize = 100;
-  txt.scale.set(Math.min(app.screen.width / 1280, app.screen.height / 720));
-  overlay.addChild(txt);
-  animateAppear(txt, 500);
-
-  sessionDelay(() => {
-    showLosePopup(currentLevelIndex);
-  }, 1000);
-}
-
-
-function showWinPopup(currentLevelIndex) {
-    // Очищаем все существующие попапы
+function showResultPopup({ won, levelIndex }) {
     clearAllPopups();
-
-
-    const popupBounds = getCenteredPopupBounds({
-        widthRatio: 0.8,
-        maxWidth: 480,
-        heightRatio: 0.62,
-        maxHeight: 420,
-        minHeight: 250
-    });
-    const popupWidth = popupBounds.width;
-    const popupHeight = popupBounds.height;
-
-    const popup = new PIXI.Container();
-    popup.name = 'winPopup';
-    fitPopup(popup, app.screen, popupWidth, popupHeight);
-
-    // Фон
-    const bg = new PIXI.Graphics();
-    // Рамка
-    const border = new PIXI.Graphics();
-    drawGameFieldPopupPanel(bg, border, popupWidth, popupHeight, 36, THEME.success);
-    popup.addChild(bg);
-    popup.addChild(border);
-
-    // Заголовок
-    const title = new PIXI.Text('ПОБЕДА', {
-        fontSize: Math.max(28, Math.min(46, Math.round(Math.min(popupWidth * 0.1, popupHeight * 0.16)))),
-        fill: THEME.textDark,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
-        align: 'center',
-    });
-    title.anchor.set(0.5, 0);
-    title.x = popupWidth / 2;
-    title.y = Math.max(20, Math.round(popupHeight * 0.11));
-    popup.addChild(title);
-
-    // Кнопка "Следующий уровень"
-    const nextBtn = new PIXI.Graphics();
-    const btnW = popupWidth * 0.8;
-    const buttonLayout = getVerticalStackLayout({
-        popupHeight,
-        topY: title.y + title.height + Math.max(18, Math.round(popupHeight * 0.09)),
-        itemCount: 2,
-        bottomPadding: Math.max(20, Math.round(popupHeight * 0.1)),
-        preferredHeight: 70,
-        preferredGap: 18,
-        minHeight: 46,
-        minGap: 12
-    });
-    const btnH = buttonLayout.itemHeight;
-    const btnFontSize = Math.max(20, Math.min(32, Math.round(btnH * 0.42)));
-    nextBtn.lineStyle(4, THEME.borderDark);
-    nextBtn.beginFill(THEME.primary);
-    nextBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
-    nextBtn.endFill();
-    nextBtn.x = popupWidth / 2;
-    nextBtn.y = buttonLayout.startY;
-    nextBtn.interactive = true;
-    nextBtn.buttonMode = true;
-    nextBtn.on('pointerdown', () => {
+    const layout = loader.resources.result_layout.data;
+    const overlay = new PIXI.Graphics();
+    overlay.name = won ? 'winOverlay' : 'loseOverlay';
+    overlay._backdropColor = parseInt(layout.backdrop.color.slice(1), 16);
+    overlay._backdropAlpha = layout.backdrop.alpha;
+    overlay.beginFill(overlay._backdropColor, overlay._backdropAlpha)
+        .drawRect(0, 0, app.screen.width, app.screen.height).endFill();
+    overlay.interactive = true;
+    gameContainer.addChild(overlay);
+    const hasNext = !!levels[levelIndex + 1];
+    const transition = callback => {
         playUiClick();
         clearAllPopups();
-        if (levels[currentLevelIndex + 1]) {
-            startLevel(currentLevelIndex + 1);
-        } else {
-            showProgressScreen();
-        }
+        callback();
+    };
+    const popup = createResultPopup(TEXTURES, layout, {
+        won, hasNext,
+        onMenu: () => transition(showProgressScreen),
+        onPrimary: () => transition(() => {
+            if (!won) startLevel(levelIndex);
+            else if (hasNext) startLevel(levelIndex + 1);
+            else {
+                showProgressScreen();
+                showLevelSelect();
+            }
+        })
     });
-    popup.addChild(nextBtn);
-
-    const nextText = new PIXI.Text('СЛЕДУЮЩИЙ\nУРОВЕНЬ', {
-        fontSize: btnFontSize,
-        fill: THEME.white,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
-        align: 'center',
-    });
-    nextText.anchor.set(0.5);
-    nextText.x = 0;
-    nextText.y = 0;
-    nextBtn.addChild(nextText);
-
-    // Кнопка "Главное меню"
-    const menuBtn = new PIXI.Graphics();
-    menuBtn.lineStyle(4, 0xB56A2D);
-    menuBtn.beginFill(THEME.secondary);
-    menuBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
-    menuBtn.endFill();
-    menuBtn.x = popupWidth / 2;
-    menuBtn.y = buttonLayout.startY + btnH + buttonLayout.gap;
-    menuBtn.interactive = true;
-    menuBtn.buttonMode = true;
-    menuBtn.on('pointerdown', () => {
-        playUiClick();
-        clearAllPopups();
-        if (app.stage.children.includes(gameContainer)) {
-            app.stage.removeChild(gameContainer);
-        }
-        gameContainer.removeChildren();
-        showProgressScreen();
-    });
-    popup.addChild(menuBtn);
-
-    const menuText = new PIXI.Text('ГЛАВНОЕ\nМЕНЮ', {
-        fontSize: btnFontSize,
-        fill: THEME.textDark,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
-        align: 'center',
-    });
-    menuText.anchor.set(0.5);
-    menuText.x = 0;
-    menuText.y = 0;
-    menuBtn.addChild(menuText);
-
+    fitPopup(popup, app.screen);
     gameContainer.addChild(popup);
 }
-
-function showLosePopup(currentLevelIndex) {
-    const showRewardedContinue = shouldShowRewarded();
-    // Очищаем все существующие попапы
-    clearAllPopups();
-
-
-    const popupBounds = getCenteredPopupBounds({
-        widthRatio: 0.8,
-        maxWidth: 480,
-        heightRatio: 0.62,
-        maxHeight: 420,
-        minHeight: 250
-    });
-    const popupWidth = popupBounds.width;
-    const popupHeight = popupBounds.height;
-
-    const popup = new PIXI.Container();
-    popup.name = 'losePopup';
-    fitPopup(popup, app.screen, popupWidth, popupHeight);
-
-    // Фон
-    const bg = new PIXI.Graphics();
-    // Рамка
-    const border = new PIXI.Graphics();
-    drawGameFieldPopupPanel(bg, border, popupWidth, popupHeight, 36, THEME.fail);
-    popup.addChild(bg);
-    popup.addChild(border);
-
-    // Заголовок
-    const title = new PIXI.Text('НЕ ПОВЕЗЛО!', {
-        fontSize: Math.max(28, Math.min(46, Math.round(Math.min(popupWidth * 0.1, popupHeight * 0.16)))),
-        fill: THEME.fail,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
-        align: 'center',
-    });
-    title.anchor.set(0.5, 0);
-    title.x = popupWidth / 2;
-    title.y = Math.max(20, Math.round(popupHeight * 0.11));
-    popup.addChild(title);
-
-    // Кнопка "Попробовать ещё раз"
-    const btnW = popupWidth * 0.8;
-    const buttonLayout = getVerticalStackLayout({
-        popupHeight,
-        topY: title.y + title.height + Math.max(18, Math.round(popupHeight * 0.09)),
-        itemCount: showRewardedContinue ? 3 : 2,
-        bottomPadding: Math.max(20, Math.round(popupHeight * 0.1)),
-        preferredHeight: 70,
-        preferredGap: 18,
-        minHeight: 46,
-        minGap: 12
-    });
-    const btnH = buttonLayout.itemHeight;
-    const btnFontSize = Math.max(20, Math.min(32, Math.round(btnH * 0.42)));
-    let buttonIndex = 0;
-    if (showRewardedContinue) {
-        const continueBtn = createButton(btnW, btnH, 'РџР РћР”РћР›Р–РРўР¬\n+3 Р–РР—РќР', () => {
-            showRewardedAd();
-        }, 'success', btnFontSize);
-        continueBtn.x = popupWidth / 2;
-        continueBtn.y = buttonLayout.startY;
-        popup.addChild(continueBtn);
-        buttonIndex++;
-    }
-    const retryBtn = new PIXI.Graphics();
-    retryBtn.lineStyle(4, THEME.borderDark);
-    retryBtn.beginFill(THEME.primary);
-    retryBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
-    retryBtn.endFill();
-    retryBtn.x = popupWidth / 2;
-    retryBtn.y = buttonLayout.startY + (btnH + buttonLayout.gap) * buttonIndex;
-    retryBtn.interactive = true;
-    retryBtn.buttonMode = true;
-    retryBtn.on('pointerdown', () => {
-        playUiClick();
-        clearAllPopups();
-        startLevel(currentLevelIndex);
-    });
-    popup.addChild(retryBtn);
-
-    const retryText = new PIXI.Text('ПОПРОБОВАТЬ\nЕЩЕ РАЗ', {
-        fontSize: btnFontSize,
-        fill: THEME.white,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
-        align: 'center',
-    });
-    retryText.anchor.set(0.5);
-    retryText.x = 0;
-    retryText.y = 0;
-    retryBtn.addChild(retryText);
-    buttonIndex++;
-
-    // Кнопка "Меню"
-    const menuBtn = new PIXI.Graphics();
-    menuBtn.lineStyle(4, 0xB56A2D);
-    menuBtn.beginFill(THEME.secondary);
-    menuBtn.drawRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 18);
-    menuBtn.endFill();
-    menuBtn.x = popupWidth / 2;
-    menuBtn.y = buttonLayout.startY + (btnH + buttonLayout.gap) * buttonIndex;
-    menuBtn.interactive = true;
-    menuBtn.buttonMode = true;
-    menuBtn.on('pointerdown', () => {
-        playUiClick();
-        clearAllPopups();
-        if (app.stage.children.includes(gameContainer)) {
-            app.stage.removeChild(gameContainer);
-        }
-        gameContainer.removeChildren();
-        showProgressScreen();
-    });
-    popup.addChild(menuBtn);
-
-    const menuText = new PIXI.Text('МЕНЮ', {
-        fontSize: btnFontSize,
-        fill: THEME.textDark,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
-        align: 'center',
-    });
-    menuText.anchor.set(0.5);
-    menuText.x = 0;
-    menuText.y = 0;
-    menuBtn.addChild(menuText);
-
-    gameContainer.addChild(popup);
-}
-
 function showPausePopup(homeSettings = false) {
     homeSettings = homeSettings === true;
     const popupHost = homeSettings ? progressContainer : gameContainer;

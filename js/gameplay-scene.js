@@ -15,12 +15,11 @@ export const GAMEPLAY_STYLE = {
 };
 
 export const GAMEPLAY_ASSETS = [
-    ['tabletop', 'background/tabletop_1920x1080.png'],
+    ['tabletop', 'backgrounds/tabletop_1920x1080.png'],
     ['settings', 'ui/settings_button.png'], ['plate', 'food/plate_empty.png'],
-    ['hp_frame', 'hp/hp_frame.png'], ['hp_fresh', 'hp/hp_segment_fresh.png'], ['hp_dirty', 'hp/hp_segment_dirty.png'],
-    ...GAMEPLAY_STYLE.tools.map(t => [t.icon, `icons/${t.icon}.png`]),
-    ...Array.from({ length: 8 }, (_, i) => [`slice_${i + 1}`, `food/slices/pizza_slice_${String(i + 1).padStart(2, '0')}.png`])
-].map(([name, path]) => ({ name: `gameplay_${name}`, path: `images/gameplay/${path}` }));
+    ['hp_frame', 'gameplay/timer/hp_frame.png'], ['hp_fresh', 'gameplay/timer/hp_segment_fresh.png'], ['hp_dirty', 'gameplay/timer/hp_segment_dirty.png'],
+    ...GAMEPLAY_STYLE.tools.map(t => [t.icon, `gameplay/tools/${t.icon}.png`])
+].map(([name, path]) => ({ name: `gameplay_${name}`, path: `images/${path}` }));
 
 export function elapsedSegments(remainingMs, durationMs) {
     return Math.floor(7 * (1 - Math.max(0, Math.min(1, remainingMs / Math.max(1, durationMs)))));
@@ -40,7 +39,7 @@ function brighten(color) {
     return [16, 8, 0].reduce((result, shift) => result | Math.round(((color >> shift) & 255) * 0.93 + 255 * 0.07) << shift, 0);
 }
 
-export function buildGameplayScene(textures, { enabledColors, foodDefinition, onHold, onRelease, onSettings }) {
+export function buildGameplayScene(textures, { enabledColors, foodDefinition, levelNumber = 1, showKeyboardHints = false, onHold, onRelease, onSettings }) {
     const style = GAMEPLAY_STYLE;
     const scene = new PIXI.Container();
     scene.name = 'gameplayScene';
@@ -58,7 +57,7 @@ export function buildGameplayScene(textures, { enabledColors, foodDefinition, on
     food.position.set(style.food.x, style.food.y);
     food.scale.set(style.food.size / 640);
     food.addChild(sprite('plate', 0, 0, 640, 640));
-    const slices = Array.from({ length: foodDefinition.pieces }, (_, i) => sprite(`slice_${i + 1}`, 40, 40, 560, 560));
+    const slices = Array.from({ length: foodDefinition.pieces }, (_, i) => sprite(`food_${foodDefinition.id}_${i + 1}`, 40, 40, 560, 560));
     slices.forEach(s => food.addChild(s));
     scene.addChild(food);
 
@@ -84,6 +83,14 @@ export function buildGameplayScene(textures, { enabledColors, foodDefinition, on
     const segments = Array.from({ length: 7 }, (_, i) => sprite('hp_fresh', 34 + 91 * i, 18, 85, 60));
     segments.forEach(s => hp.addChild(s));
     scene.addChild(hp);
+    const levelLabel = new PIXI.Text(`уровень ${levelNumber}`, {
+        fontFamily: 'Arial', fontSize: 42, fontWeight: 'bold', fill: style.outline
+    });
+    levelLabel.name = 'levelLabel';
+    levelLabel.anchor.set(1, 0.5);
+    levelLabel.position.set(style.hp.x - 28, style.hp.y + style.hp.height / 2);
+    if (levelLabel.width > 330) levelLabel.scale.set(330 / levelLabel.width);
+    scene.addChild(levelLabel);
     const foodAccent = new PIXI.Graphics();
     foodAccent.name = 'foodEffectRing';
     foodAccent.position.set(style.food.x + 250, style.food.y + 250);
@@ -96,6 +103,7 @@ export function buildGameplayScene(textures, { enabledColors, foodDefinition, on
         button.name = `colorButton_${tool.color}`;
         button.position.set(tool.x, tool.y);
         const enabled = enabledColors.includes(tool.color);
+        button.visible = enabled;
         button.interactive = enabled;
         button.interactiveChildren = false;
         button.buttonMode = enabled;
@@ -111,6 +119,19 @@ export function buildGameplayScene(textures, { enabledColors, foodDefinition, on
         icon.scale.set(Math.min(278 * style.iconWidth / icon.texture.width, 528 * style.iconHeight / icon.texture.height));
         icon.alpha = enabled ? 1 : 0.45;
         face.addChild(icon);
+        if (showKeyboardHints) {
+            const keyBadge = new PIXI.Graphics();
+            keyBadge.lineStyle(3, style.outline).beginFill(0xFFFFFF, 0.9)
+                .drawRoundedRect(22, 22, 64, 64, 12).endFill();
+            const keyLabel = new PIXI.Text(tool.key.toUpperCase(), {
+                fontFamily: 'Arial', fontSize: 40, fontWeight: 'bold', fill: style.outline
+            });
+            keyLabel.name = 'keyboardHint';
+            keyLabel.anchor.set(0.5);
+            keyLabel.position.set(54, 54);
+            keyBadge.alpha = keyLabel.alpha = enabled ? 1 : 0.45;
+            face.addChild(keyBadge, keyLabel);
+        }
         const selected = new PIXI.Graphics();
         selected.name = 'activeIndicator';
         selected.lineStyle(3, 0xFFFFFF).drawRoundedRect(12, 12, 254, 504, 28);

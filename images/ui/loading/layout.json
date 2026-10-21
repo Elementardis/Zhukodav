@@ -1,0 +1,201 @@
+{
+  "canvas": {
+    "width": 1920,
+    "height": 1080
+  },
+  "units": "logical pixels",
+  "anchor": [
+    0,
+    0
+  ],
+  "elements": [
+    {
+      "id": "cloth",
+      "file": "assets/tablecloth_1920x1080.png",
+      "rect": [
+        0,
+        0,
+        1920,
+        1080
+      ],
+      "z": 0
+    },
+    {
+      "id": "pizza",
+      "file": "assets/pizza_plate.png",
+      "rect": [
+        100,
+        -170,
+        640,
+        640
+      ],
+      "z": 10
+    },
+    {
+      "id": "sandwiches",
+      "file": "assets/sandwiches_plate.png",
+      "rect": [
+        1300,
+        640,
+        560,
+        560
+      ],
+      "z": 10
+    },
+    {
+      "id": "label",
+      "file": "assets/loading_label.png",
+      "rect": [
+        690,
+        440,
+        540,
+        70
+      ],
+      "z": 30
+    },
+    {
+      "id": "frame",
+      "file": "assets/preloader_frame.png",
+      "rect": [
+        410,
+        530,
+        1100,
+        120
+      ],
+      "z": 31
+    },
+    {
+      "id": "fill",
+      "file": "assets/preloader_fill.png",
+      "rect": [
+        424,
+        544,
+        1072,
+        82
+      ],
+      "z": 32
+    }
+  ],
+  "progress": {
+    "range": [
+      0,
+      1
+    ],
+    "fill_local_rect": [
+      14,
+      14,
+      1072,
+      82
+    ],
+    "clip_radius": 41,
+    "method": "reveal full-size fill through increasing-width clip; do not stretch texture",
+    "preview_progress": 0.6
+  },
+  "bugs": [
+    {
+      "file": "bugs/bug_green.png",
+      "center": [
+        115,
+        290
+      ],
+      "max_size": [
+        200,
+        200
+      ],
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "rotation_radians": 1.14047,
+      "target": [
+        420,
+        150
+      ],
+      "z": 20
+    },
+    {
+      "file": "bugs/bug_orange.png",
+      "center": [
+        795,
+        205
+      ],
+      "max_size": [
+        200,
+        200
+      ],
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "rotation_radians": -1.425168,
+      "target": [
+        420,
+        150
+      ],
+      "z": 20
+    },
+    {
+      "file": "bugs/bug_purple.png",
+      "center": [
+        225,
+        500
+      ],
+      "max_size": [
+        200,
+        200
+      ],
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "rotation_radians": 0.508311,
+      "target": [
+        420,
+        150
+      ],
+      "z": 20
+    },
+    {
+      "file": "bugs/bug_red.png",
+      "center": [
+        1775,
+        690
+      ],
+      "max_size": [
+        200,
+        200
+      ],
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "rotation_radians": 3.844823,
+      "target": [
+        1580,
+        920
+      ],
+      "z": 20
+    },
+    {
+      "file": "bugs/bug_orange.png",
+      "center": [
+        1220,
+        935
+      ],
+      "max_size": [
+        200,
+        200
+      ],
+      "anchor": [
+        0.5,
+        0.5
+      ],
+      "rotation_radians": 1.529154,
+      "target": [
+        1580,
+        920
+      ],
+      "z": 20
+    }
+  ]
+}

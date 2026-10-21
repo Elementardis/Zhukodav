@@ -7,11 +7,25 @@
   <style>
     body { margin: 0; padding: 0; background: #EEF2FF; }
     canvas { display: block; margin: auto; image-rendering: auto; }    
+    #preloader { position: fixed; inset: 0; z-index: 9999; background: #65b3c1; overflow: hidden; transition: opacity 300ms; font-family: Arial, sans-serif; color: #321638; }
+    .loading-scene { position: absolute; left: 50%; top: 50%; transform-origin: center; overflow: hidden; pointer-events: none; }
+    .loading-fallback { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(80vw, 500px); padding: 24px; border-radius: 24px; background: #fffaf0; text-align: center; }
+    .loading-fallback [role="progressbar"] { height: 24px; border: 4px solid #321638; border-radius: 20px; overflow: hidden; }
+    .loading-fallback [role="progressbar"] > div { width: 0; height: 100%; background: #00c5ba; }
+    .loading-fallback button { margin-top: 16px; padding: 12px 24px; font: inherit; cursor: pointer; }
+    @media (prefers-reduced-motion: reduce) { #preloader { transition: none; } }
   </style>
 </head>
 <body>
+  <div id="preloader" role="progressbar" aria-label="Загрузка игры" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+    <div class="loading-fallback">
+      <p role="status">Загрузка…</p>
+      <div role="progressbar" aria-label="Загрузка ресурсов" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div></div></div>
+      <button hidden onclick="location.reload()">Повторить</button>
+    </div>
+  </div>
+  <script src="js/preloader.js" onerror="document.querySelector('#preloader [role=status]').textContent='Не удалось загрузить игру. Обновите страницу.'"></script>
   <script src="js/pixi.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/pixi-gif@1.0.0/dist/pixi-gif.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script type="module" src="game.js"></script>
 </body>

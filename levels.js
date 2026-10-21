@@ -2,7 +2,7 @@ const levels = [
   {
     id: 1,
     durationSeconds: 10,
-    food: 'pizza',
+    food: 'dressed_herring',
     params: {
       maxObjects: 3,
       lifetimeMultiplier: 1.1,

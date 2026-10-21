@@ -43,7 +43,7 @@ export function shuffledSides(random = Math.random) {
     return sides;
 }
 
-export function chooseEntry(rect, side, radius, actors, random = Math.random, zone = 'full') {
+export function chooseEntry(rect, side, radius, actors, random = Math.random, zone = 'full', avoidFood = null) {
     if ((zone === 'left' && side === 'right') || (zone === 'right' && side === 'left')) return null;
     for (let i = 0; i < FOOD_RULES.spawnAttempts; i++) {
         const offset = radius + FOOD_RULES.entryGap;
@@ -55,9 +55,25 @@ export function chooseEntry(rect, side, radius, actors, random = Math.random, zo
         if (side === 'right') x = rect.width + offset;
         if (side === 'top') y = -offset;
         if (side === 'bottom') y = rect.height + offset;
+        if (avoidFood) {
+            const clearance = avoidFood.radius + radius + FOOD_RULES.hopHeight + FOOD_RULES.entryGap;
+            const distance = side === 'left' || side === 'right' ? Math.abs(y - avoidFood.y) : Math.abs(x - avoidFood.x);
+            if (distance <= clearance) continue;
+        }
         if (actors.every(actor => actor.state === 'resolved' || Math.hypot(x - actor.x, y - actor.y) >= radius + actor.radius + FOOD_RULES.spawnSeparation)) return { x, y };
     }
     return null;
+}
+
+export function createCrossing(position, rect, side, radius, lifetime) {
+    const offset = radius + FOOD_RULES.entryGap;
+    const targetX = side === 'left' ? rect.width + offset : side === 'right' ? -offset : position.x;
+    const targetY = side === 'top' ? rect.height + offset : side === 'bottom' ? -offset : position.y;
+    return {
+        ...position, radius, state: 'entering', targetX, targetY,
+        angle: Math.atan2(targetY - position.y, targetX - position.x),
+        speed: Math.hypot(targetX - position.x, targetY - position.y) / Math.max(1, lifetime)
+    };
 }
 
 export function createApproach(position, food, radius, lifetime, reactionMs = FOOD_RULES.reactionMs) {
@@ -93,7 +109,7 @@ export function advanceApproach(actor, dt, rect, rate = 1) {
         time -= needed;
         arrived = true;
     }
-    // Bombs leave on arrival without damaging food.
+    // Bombs leave at the opposite edge without damaging food.
     if (actor.type === 'bomb') {
         actor.state = 'resolved';
         return 'departed';

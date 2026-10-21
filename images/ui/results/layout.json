@@ -1,0 +1,109 @@
+{
+  "panelSize": [
+    1140,
+    850
+  ],
+  "baseViewport": [
+    1920,
+    1080
+  ],
+  "panelAnchor": [
+    0.5,
+    0.5
+  ],
+  "scale": "min(viewportWidth/1920,viewportHeight/1080)",
+  "backdrop": {
+    "color": "#2D1738",
+    "alpha": 0.58
+  },
+  "artworkRect": [
+    10,
+    155,
+    1120,
+    440
+  ],
+  "title": {
+    "center": [
+      570,
+      90
+    ],
+    "maxWidth": 1010,
+    "fontSize": 76,
+    "fill": "#F45D53",
+    "stroke": "#2D1738",
+    "strokeThickness": 7
+  },
+  "caption": {
+    "center": [
+      570,
+      620
+    ],
+    "maxWidth": 1020,
+    "fontSize": 35,
+    "fill": "#2D1738"
+  },
+  "menuButton": {
+    "rect": [
+      64,
+      660,
+      486,
+      142
+    ],
+    "iconRect": [
+      85,
+      687,
+      80,
+      80
+    ],
+    "textRect": [
+      177,
+      680,
+      353,
+      92
+    ],
+    "fontSize": 29
+  },
+  "primaryButton": {
+    "rect": [
+      590,
+      660,
+      486,
+      142
+    ],
+    "iconRect": [
+      611,
+      687,
+      80,
+      80
+    ],
+    "textRect": [
+      705,
+      680,
+      351,
+      92
+    ],
+    "fontSize": 30
+  },
+  "states": {
+    "lose": {
+      "art": "assets/illustration_lose.png",
+      "title": "Ой! Всё съели…",
+      "caption": "Жуки утащили весь обед!",
+      "primary": "ПОПРОБОВАТЬ\nЕЩЁ РАЗ",
+      "icon": "assets/retry.svg"
+    },
+    "win": {
+      "art": "assets/illustration_win.png",
+      "title": "Ура! Вкуснятина!",
+      "caption": "Обед спасён!",
+      "primary": "СЛЕДУЮЩИЙ\nУРОВЕНЬ",
+      "icon": "assets/next.svg"
+    }
+  },
+  "menuText": "В ГЛАВНОЕ МЕНЮ",
+  "fontStack": [
+    "Arial Rounded MT Bold",
+    "Arial",
+    "sans-serif"
+  ]
+}

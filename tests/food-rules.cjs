@@ -41,6 +41,23 @@ assert.equal(context.advanceApproach(contact,1,rect),'damage');
 assert.equal(context.advanceApproach(contact,5000,rect),null);
 const killed=actor();killed.state='resolved';assert.equal(context.advanceApproach(killed,10000,rect),null);
 const bomb=actor('bomb');assert.equal(context.advanceApproach(bomb,10000,rect),'departed');
+const plate = {x:670,y:416,radius:250};
+for (const side of ['left','right','top','bottom']) {
+    for (let i=0;i<100;i++) {
+        const start=context.chooseEntry(rect,side,50,[],Math.random,'full',plate);
+        if (!start) continue;
+        const crossing={...context.createCrossing(start,rect,side,50,2000),type:'bomb'};
+        for (let step=0;step<125;step++) {
+            context.advanceApproach(crossing,16,rect);
+            assert.ok(Math.hypot(crossing.x-plate.x,crossing.y-plate.y)>plate.radius+50+context.rules.hopHeight);
+            assert.notEqual(crossing.state,'atFood');
+        }
+        const expectedEvent = crossing.state==='resolved' ? null : 'departed';
+        assert.equal(context.advanceApproach(crossing,1,rect),expectedEvent);
+        assert.equal(crossing.state,'resolved');
+        assert.ok(crossing.x<0 || crossing.x>rect.width || crossing.y<0 || crossing.y>rect.height);
+    }
+}
 assert.equal(context.elapsedSegments(30000,30000),0);
 assert.equal(context.elapsedSegments(15000,30000),3);
 assert.equal(context.elapsedSegments(0,30000),7);
@@ -49,6 +66,23 @@ assert.equal(context.remainingSliceIndices(7,context.pizza).includes(3),false);
 assert.equal(context.remainingSliceIndices(6,context.pizza).includes(4),false);
 assert.equal(context.remainingSliceIndices(0,context.pizza).length,0);
 assert.equal(context.getFoodMaxLives({food:'pizza',lifeCount:100}),8);
+const herring = context.getFoodDefinition({food:'dressed_herring'});
+for (let lives = 7; lives >= 0; lives--) {
+    const visible = Array.from(context.remainingSliceIndices(lives, herring)).sort((a,b)=>a-b);
+    assert.deepEqual(visible, Array.from({length:lives}, (_, i)=>i+1), `Herring at ${lives} lives`);
+}
+for (const [id, pieces] of Object.entries({cake:6,pie:10,bundt_cake:12,greek_salad:5,dressed_herring:7})) {
+    const food = context.getFoodDefinition({food:id});
+    assert.equal(context.getFoodMaxLives({food:id}),pieces);
+    assert.equal(context.remainingSliceIndices(pieces,food).length,pieces);
+    assert.equal(context.remainingSliceIndices(0,food).length,0);
+    assert.equal(new Set(food.removalOrder).size,pieces);
+    const assets = context.getFoodAssets([{food:id},{food:id}]);
+    assert.equal(assets.length,pieces);
+    assert.equal(assets[0].path,`${food.partsPath}/${food.filePrefix || 'part_'}01.png`);
+    assert.equal(assets[pieces-1].name,`gameplay_food_${id}_${pieces}`);
+}
+for (const asset of context.getFoodAssets([{food:'pizza'}])) assert.ok(fs.existsSync(asset.path));
 const timed=actor();
 context.advanceApproach(timed,2199,rect);
 assert.notEqual(timed.state,'atFood');
@@ -56,5 +90,11 @@ context.advanceApproach(timed,1.000001,rect);
 assert.equal(timed.state,'atFood');
 assert.ok(Math.abs(timed.reactionRemainingMs-400)<0.001);
 vm.runInContext(fs.readFileSync('levels.js','utf8').replace('export default levels;','globalThis.testLevels = levels;'),context);
-assert.ok(context.testLevels.every(level => level.food === 'pizza' && !('lifeCount' in level)));
+assert.ok(context.testLevels.every(level => context.getFoodDefinition(level) && !('lifeCount' in level)));
+for (const asset of context.getFoodAssets(context.testLevels)) {
+    assert.ok(fs.existsSync(asset.path), `Missing food image: ${asset.path}`);
+}
+for (const asset of vm.runInContext('GAMEPLAY_ASSETS', context)) {
+    assert.ok(fs.existsSync(asset.path), `Missing gameplay image: ${asset.path}`);
+}
 console.log('Food rules passed: pizza defines eight lives, independent time bar, exact lifetime travel, weighted bombs, spawn sides, collisions, FPS independence, slow effect, warning and one damage.');

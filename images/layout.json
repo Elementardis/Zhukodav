@@ -11,7 +11,7 @@
   "elements": [
     {
       "id": "background",
-      "file": "background/tabletop_1920x1080.png",
+      "file": "backgrounds/tabletop_1920x1080.png",
       "rect": [
         0,
         0,
@@ -57,7 +57,7 @@
   "buttons": [
     {
       "id": "swatter",
-      "icon": "icons/fly_swatter.png",
+      "icon": "gameplay/tools/fly_swatter.png",
       "rect": [
         4,
         6,
@@ -69,7 +69,7 @@
     },
     {
       "id": "trap",
-      "icon": "icons/insect_trap.png",
+      "icon": "gameplay/tools/insect_trap.png",
       "rect": [
         4,
         546,
@@ -81,7 +81,7 @@
     },
     {
       "id": "spray",
-      "icon": "icons/insecticide_spray.png",
+      "icon": "gameplay/tools/insecticide_spray.png",
       "rect": [
         1638,
         6,
@@ -93,7 +93,7 @@
     },
     {
       "id": "tape",
-      "icon": "icons/sticky_tape.png",
+      "icon": "gameplay/tools/sticky_tape.png",
       "rect": [
         1638,
         546,
