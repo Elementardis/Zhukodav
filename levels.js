@@ -15,7 +15,7 @@ const levels = [
   {
     id: 2,
     durationSeconds: 15,
-    food: 'pizza',
+    food: 'cake',
     params: {
       maxObjects: 3,
       lifetimeMultiplier: 1,
@@ -28,7 +28,7 @@ const levels = [
   {
     id: 3,
     durationSeconds: 20,
-    food: 'pizza',
+    food: 'pie',
     params: {
       maxObjects: 3,
       lifetimeMultiplier: 1.2,
@@ -46,7 +46,7 @@ const levels = [
   {
     id: 4,
     durationSeconds: 30,
-    food: 'pizza',
+    food: 'bundt_cake',
     params: {
       maxObjects: 4,
       lifetimeMultiplier: 1.2,
@@ -60,7 +60,7 @@ const levels = [
   {
     id: 5,
     durationSeconds: 20,
-    food: 'pizza',
+    food: 'greek_salad',
     params: {
       maxObjects: 3,
       lifetimeMultiplier: 2,

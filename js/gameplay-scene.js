@@ -58,7 +58,8 @@ export function buildGameplayScene(textures, { enabledColors, foodDefinition, le
     food.scale.set(style.food.size / 640);
     food.addChild(sprite('plate', 0, 0, 640, 640));
     const slices = Array.from({ length: foodDefinition.pieces }, (_, i) => sprite(`food_${foodDefinition.id}_${i + 1}`, 40, 40, 560, 560));
-    slices.forEach(s => food.addChild(s));
+    // Drawing order (bottom to top) is independent of health/removal order.
+    (foodDefinition.drawOrder || slices.map((_, i) => i + 1)).forEach(index => food.addChild(slices[index - 1]));
     scene.addChild(food);
 
     const field = new PIXI.Container();

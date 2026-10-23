@@ -41,6 +41,12 @@ assert.equal(context.advanceApproach(contact,1,rect),'damage');
 assert.equal(context.advanceApproach(contact,5000,rect),null);
 const killed=actor();killed.state='resolved';assert.equal(context.advanceApproach(killed,10000,rect),null);
 const bomb=actor('bomb');assert.equal(context.advanceApproach(bomb,10000,rect),'departed');
+const flyingBomb = {...context.createApproach(entry,{x:670,y:416,radius:0},0,450,0), type:'bomb', bombTriggered:true};
+assert.equal(context.advanceApproach(flyingBomb,449,rect),null);
+assert.equal(context.advanceApproach(flyingBomb,1.001,rect),'damage');
+assert.ok(Math.abs(flyingBomb.x-670)<1e-8);
+assert.ok(Math.abs(flyingBomb.y-416)<1e-8);
+assert.equal(context.advanceApproach(flyingBomb,1000,rect),null);
 const plate = {x:670,y:416,radius:250};
 for (const side of ['left','right','top','bottom']) {
     for (let i=0;i<100;i++) {
@@ -67,6 +73,11 @@ assert.equal(context.remainingSliceIndices(6,context.pizza).includes(4),false);
 assert.equal(context.remainingSliceIndices(0,context.pizza).length,0);
 assert.equal(context.getFoodMaxLives({food:'pizza',lifeCount:100}),8);
 const herring = context.getFoodDefinition({food:'dressed_herring'});
+const salad = context.getFoodDefinition({food:'greek_salad'});
+assert.deepEqual(Array.from(salad.drawOrder),[5,4,3,2,1]);
+for (let lives=5; lives>=0; lives--) {
+    assert.deepEqual(Array.from(context.remainingSliceIndices(lives,salad)),Array.from({length:lives},(_,i)=>6-lives+i));
+}
 for (let lives = 7; lives >= 0; lives--) {
     const visible = Array.from(context.remainingSliceIndices(lives, herring)).sort((a,b)=>a-b);
     assert.deepEqual(visible, Array.from({length:lives}, (_, i)=>i+1), `Herring at ${lives} lives`);

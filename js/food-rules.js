@@ -4,6 +4,8 @@ export const FOOD_RULES = {
     bugSize: 100,
     fatSizeMultiplier: 1.4,
     tapRadiusMultiplier: 0.58,
+    regularTapScale: 1.15,
+    bombFlightMs: 450,
     hopHeight: 7,
     hopPeriodMs: 420,
     fatHopPeriodMs: 560,
@@ -97,7 +99,7 @@ export function advanceApproach(actor, dt, rect, rate = 1) {
     if (actor.state !== 'atFood') {
         const distance = Math.hypot(actor.targetX - actor.x, actor.targetY - actor.y);
         const needed = actor.speed > 0 ? distance / actor.speed : 0;
-        if (time < needed) {
+        if (time + 1e-7 < needed) {
             actor.x += Math.cos(actor.angle) * actor.speed * time;
             actor.y += Math.sin(actor.angle) * actor.speed * time;
             if (actor.x >= 0 && actor.x <= rect.width && actor.y >= 0 && actor.y <= rect.height) actor.state = 'approaching';
@@ -106,11 +108,11 @@ export function advanceApproach(actor, dt, rect, rate = 1) {
         actor.x = actor.targetX;
         actor.y = actor.targetY;
         actor.state = 'atFood';
-        time -= needed;
+        time = Math.max(0, time - needed);
         arrived = true;
     }
     // Bombs leave at the opposite edge without damaging food.
-    if (actor.type === 'bomb') {
+    if (actor.type === 'bomb' && !actor.bombTriggered) {
         actor.state = 'resolved';
         return 'departed';
     }

@@ -241,6 +241,12 @@ async function main() {
     await evaluate("gameTest.spawn('bomb');gameTest.atFood();gameTest.step(500)");
     await check('gameTest.snapshot().life',7);
     await evaluate("gameTest.spawn('bomb');gameTest.hit()");
+    await check('gameTest.snapshot().life',7);
+    await check('Math.abs(gameTest.objects[0].hitArea.radius - 58) < 0.00001',true);
+    await check('!!gameTest.ui.effects.getChildByName("bombExplosion")',false);
+    await evaluate('gameTest.hit();gameTest.step(449)');
+    await check('gameTest.snapshot().life',7);
+    await evaluate('gameTest.step(1)');
     await check('gameTest.ui.effects.getChildByName("bombExplosion").animationFrames.length',17);
     await evaluate('gameTest.step(200)');
     await check('gameTest.ui.effects.getChildByName("bombExplosion").texture === gameTest.ui.effects.getChildByName("bombExplosion").animationFrames[2]',true);
@@ -252,6 +258,7 @@ async function main() {
     await evaluate("gameTest.hit();gameTest.release('red');gameTest.step(200)");
     await check('gameTest.objects.length',0);
     await evaluate("gameTest.spawn('bug');gameTest.atFood();gameTest.pause()");
+    await check('Math.abs(gameTest.objects[0].hitArea.radius - 66.7) < 0.00001',true);
     const paused=await evaluate('gameTest.snapshot()');
     await evaluate('gameTest.step(10000)');
     assert.deepEqual(await evaluate('gameTest.snapshot()'),paused);

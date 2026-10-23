@@ -1970,7 +1970,7 @@ function spawnObject() {
     container.data = data;
     container.scoreValue = data.scoreValue;
     container.interactive = container.buttonMode = true;
-    container.hitArea = new PIXI.Circle(0, 0, size * FOOD_RULES.tapRadiusMultiplier);
+    container.hitArea = new PIXI.Circle(0, 0, size * FOOD_RULES.tapRadiusMultiplier * (data.type === 'bomb' ? 1 : FOOD_RULES.regularTapScale));
     container.animations = [];
     // Separate screen-vertical hops from heading, hit effects and the clickable root.
     const hop = new PIXI.Container();
@@ -2008,7 +2008,7 @@ function spawnObject() {
 }
 
 function hitFoodBug(obj) {
-    if (isPaused || introActive || orientationPauseActive || levelEnded || obj.state === 'resolved' || document.hidden) return;
+    if (isPaused || introActive || orientationPauseActive || levelEnded || obj.state === 'resolved' || obj.bombTriggered || document.hidden) return;
     const type = obj.type;
     const colored = type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_');
     const wrong = type !== 'bomb' && !isChameleonEffectActive() && (colored ? !isColorHeld(type.split('_')[1]) : hasAnyActiveColor());
@@ -2020,9 +2020,17 @@ function hitFoodBug(obj) {
     }
     if (type === 'bomb') {
         playBombClick();
-        showExplosion(obj.x, obj.y);
-        resolveFoodBug(obj);
-        changeFoodHealth(-1);
+        const food = {
+            x: GAMEPLAY_STYLE.food.x + GAMEPLAY_STYLE.food.size / 2 - GAMEPLAY_STYLE.playRect.x,
+            y: GAMEPLAY_STYLE.food.y + GAMEPLAY_STYLE.food.size / 2 - GAMEPLAY_STYLE.playRect.y,
+            radius: 0
+        };
+        const radius = obj.radius;
+        Object.assign(obj, createApproach({ x: obj.x, y: obj.y }, food, 0, FOOD_RULES.bombFlightMs, 0));
+        obj.radius = radius;
+        obj.bombTriggered = true;
+        obj.interactive = obj.buttonMode = false;
+        obj.hop.children[0].rotation = obj.angle - FOOD_RULES.textureForwardAngle;
         return;
     }
     playBugClick();
@@ -2101,6 +2109,10 @@ function showFoodWarning(obj) {
 
 function updateBugHop(obj, dt, rate) {
     if (!obj.hop) return;
+    if (obj.bombTriggered) {
+        obj.hop.y = 0;
+        return;
+    }
     if (obj.state !== 'entering' && obj.state !== 'approaching') {
         obj.hop.y = 0;
         return;
@@ -2144,6 +2156,7 @@ function advanceGameplay(dt) {
             if (event === 'warning') showFoodWarning(obj);
             if (obj.warning) obj.warning.alpha = 0.65 + Math.sin(gameTimeMs * 0.025) * 0.35;
             if (event === 'damage' || event === 'departed') {
+                if (event === 'damage' && obj.bombTriggered) showExplosion(obj.x, obj.y);
                 resolveFoodBug(obj, false);
                 if (event === 'damage') changeFoodHealth(-1);
             }
