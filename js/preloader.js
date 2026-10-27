@@ -7,12 +7,20 @@
     const retry = overlay.querySelector('button');
     const bar = overlay.querySelector('[role="progressbar"]');
     const fallbackFill = bar.firstElementChild;
+    const safeProbe = document.createElement('div');
+    safeProbe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;padding:var(--safe-top,env(safe-area-inset-top,0px)) var(--safe-right,env(safe-area-inset-right,0px)) var(--safe-bottom,env(safe-area-inset-bottom,0px)) var(--safe-left,env(safe-area-inset-left,0px))';
+    overlay.appendChild(safeProbe);
     let scene, reveal, fraction = 0, failed = false, disposed = false;
-    let frame = 0, timer = 0;
+    let frame = 0, timer = 0, resizeFrame = 0;
     const root = 'images/ui/loading/';
     const resize = () => {
         if (!scene) return;
-        const scale = Math.min(innerWidth / scene.logicalWidth, innerHeight / scene.logicalHeight);
+        const css = getComputedStyle(safeProbe);
+        const left=parseFloat(css.paddingLeft)||0, right=parseFloat(css.paddingRight)||0;
+        const top=parseFloat(css.paddingTop)||0, bottom=parseFloat(css.paddingBottom)||0;
+        const scale = Math.min((overlay.clientWidth-left-right) / scene.logicalWidth, (overlay.clientHeight-top-bottom) / scene.logicalHeight);
+        scene.style.left = `${left+(overlay.clientWidth-left-right)/2}px`;
+        scene.style.top = `${top+(overlay.clientHeight-top-bottom)/2}px`;
         scene.style.transform = `translate(-50%, -50%) scale(${scale})`;
     };
     const update = value => {
@@ -40,7 +48,12 @@
         else if (event instanceof ErrorEvent) error(`Не удалось запустить игру: ${event.message}. Нажмите «Повторить».`);
     };
     window.addEventListener('error', onError, true);
-    window.addEventListener('resize', resize);
+    const scheduleResize = () => {
+        if (!resizeFrame) resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; resize(); });
+    };
+    window.addEventListener('resize', scheduleResize);
+    window.addEventListener('orientationchange', scheduleResize);
+    window.visualViewport?.addEventListener('resize', scheduleResize);
     const finish = () => {
         if (failed || disposed) return;
         update(1);
@@ -50,7 +63,10 @@
                 overlay.style.opacity = '0';
                 timer = setTimeout(() => {
                     disposed = true;
-                    window.removeEventListener('resize', resize);
+                    cancelAnimationFrame(resizeFrame);
+                    window.removeEventListener('resize', scheduleResize);
+                    window.removeEventListener('orientationchange', scheduleResize);
+                    window.visualViewport?.removeEventListener('resize', scheduleResize);
                     window.removeEventListener('error', onError, true);
                     overlay.remove();
                 }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 300);
@@ -79,6 +95,7 @@
         scene.logicalHeight = layout.canvas.height;
         Object.assign(scene.style, { width: `${layout.canvas.width}px`, height: `${layout.canvas.height}px` });
         entries.forEach((entry, index) => {
+            if (entry.id === 'cloth') return; // Full-viewport CSS background is the only cloth.
             const image = images[index];
             image.style.position = 'absolute';
             image.style.zIndex = entry.z;

@@ -6,7 +6,7 @@ const os = require('node:os');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
-const backend = ['initBackend','fetchRemoteLevel','saveProgress','trackEvent','recalcLeaderboard','createLevelAttempt','finishLevelAttempt'].map(name => `export async function ${name}(){return null;}`).join('\n') + '\nexport function rcNumber(key,fallback){return fallback;}';
+const backend = ['initBackend','fetchRemoteLevel','saveProgress','trackEvent','recalcLeaderboard','createLevelAttempt','finishLevelAttempt','loadDishPreference','saveDishPreference'].map(name => `export async function ${name}(){window.backendCalls??={};window.backendCalls['${name}']=(window.backendCalls['${name}']||0)+1;return null;}`).join('\n') + '\nexport function rcNumber(key,fallback){return fallback;}';
 const expose = `
 window.gameTest = {
  ready: () => !!TEXTURES.gameplay_plate && !!progressContainer,
@@ -19,6 +19,22 @@ window.gameTest = {
  hit(index=0) { hitFoodBug(activeObjects[index]); },
  atFood(index=0, time=400) { const o=activeObjects[index]; o.x=o.targetX; o.y=o.targetY; o.state='atFood'; o.reactionRemainingMs=time; showFoodWarning(o); },
  pause: () => showPausePopup(),
+ get cutscene(){return activeCutscene;},
+ end: won => endGame(won),
+ get introActive(){return introActive;},
+ confirmIntro(){gameContainer.getChildByName('introPopup')?.getChildByName('introConfirm').emit('pointertap');app.ticker.stop();},
+ background: () => { const b=adaptiveBackground.layer.getBounds();return {visible:adaptiveBackground.layer.visible,x:b.x,y:b.y,width:b.width,height:b.height,count:app.stage.children.filter(c=>c.name==='backgroundLayer').length}; },
+ safe: () => safeViewport(app.screen),
+ viewport: () => ({width:app.screen.width,height:app.screen.height}),
+ dishes: () => showDishSelect(),
+ selectDish,
+ get dishScene(){return dishSelectScene;},
+ get homeScene(){return progressContainer.getChildByName('homeContainer');},
+ get selectedDish(){return selectedDishId;},
+ musicVolume: () => getEffectiveAudioVolume('levelMusic'),
+ stopSpawns: () => { spawnDueAt=null; },
+ settings: () => showPausePopup(true),
+ get settingsNode(){return progressContainer.getChildByName('pausePopup');},
  resume() { const p=gameContainer.getChildByName('pausePopup'); const o=gameContainer.getChildByName('pauseOverlay'); p?.destroy({children:true}); o?.destroy(); isPaused=false; resumeGame(); app.ticker.stop(); },
  hold(color, id=1) { currentGameUI.buttons[color].emit('pointerdown',{data:{pointerId:id}}); },
  release(color, id=1) { currentGameUI.buttons[color].emit('pointerupoutside',{data:{pointerId:id}}); },
@@ -50,6 +66,9 @@ window.gameTest = {
  selectTestLevel(index) { showLevelEntryPopup(index); const popup=levelSelectContainer.getChildByName('levelEntryPopup'); popup.children.find(c=>c.children?.some(t=>t.text==='ИГРАТЬ')).emit('pointerdown',{stopPropagation(){}}); app.ticker.stop(); },
  render: () => app.renderer.render(app.stage),
  indicators: () => ({slices:currentGameUI.slices.filter(s=>s.visible).length, timeFresh:currentGameUI.segments.filter(s=>s.texture===TEXTURES.gameplay_hp_fresh).length}),
+ intro(cfg) { this.confirmations=0; showIntroPopup(cfg,()=>{this.confirmations++;}); },
+ get introNode(){return gameContainer.getChildByName('introPopup');},
+ get textures(){return TEXTURES;},
  get ui(){return currentGameUI;}, get objects(){return activeObjects;}, get levels(){return levels;}
 };`;
 const server = http.createServer((req,res) => {
@@ -59,6 +78,10 @@ const server = http.createServer((req,res) => {
     try {
         let data = file === path.join(root,'firebase.js') ? backend : fs.readFileSync(file);
         if (file === path.join(root,'game.js')) data = data.toString() + expose;
+        // Test fixture only: production unlock levels stay user-configured.
+        if (process.argv.includes('--dishes') && file === path.join(root,'js','food-config.js')) {
+            data = data.toString().replace("name: 'Пирог', pieces: 10, unlockLevel: null", "name: 'Пирог', pieces: 10, unlockLevel: 2");
+        }
         const mime = {'.js':'text/javascript','.html':'text/html','.png':'image/png','.svg':'image/svg+xml','.json':'application/json','.gif':'image/gif','.mp3':'audio/mpeg'}[path.extname(file)] || 'application/octet-stream';
         res.writeHead(200, {'Content-Type':mime});res.end(data);
     } catch { res.writeHead(404).end(); }
@@ -89,9 +112,95 @@ async function main() {
     await cdp('Runtime.enable');await cdp('Page.enable');
     await cdp('Emulation.setDeviceMetricsOverride',{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
     const debugSelect = process.argv.includes('--debug-select');
+    if (!process.argv.includes('--cutscenes')) await cdp('Page.addScriptToEvaluateOnNewDocument',{source:'localStorage.setItem("zhukodav.cutscenes.v1",JSON.stringify(["welcome"]))'});
     await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/${debugSelect ? '?debug=1' : ''}`});
     const deadline=Date.now()+45000;
     while(!await evaluate('!!window.gameTest?.ready()')) {if(Date.now()>deadline)throw Error('Loading timeout: '+await evaluate('document.querySelector(' + JSON.stringify('[role=status]') + ')?.textContent')+' '+errors.join('\n'));await new Promise(r=>setTimeout(r,250));}
+    assert.equal(await evaluate('document.fonts.check(\'700 32px "Balsamiq Sans"\')'),true);
+    if (process.argv.includes('--cutscenes')) {
+        const click=async()=>{await evaluate('gameTest.cutscene.root.getChildByName("cutsceneContent").getChildByName("cutsceneNext").emit("pointertap")');};
+        await evaluate('gameTest.start()');
+        assert.equal(await evaluate('gameTest.cutscene.text'),'Приветствую на празднике!');
+        await evaluate('new Promise(r=>setTimeout(r,200));');
+        await evaluate('gameTest.render()');
+        {const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts','cutscene-welcome.png'),Buffer.from(data,'base64'));}
+        const before=await evaluate('gameTest.snapshot()');await evaluate('gameTest.step(10000);gameTest.spawn("bug");gameTest.hold("red")');
+        assert.deepEqual(await evaluate('gameTest.snapshot()'),before);
+        await evaluate('gameTest.home()');assert.equal(await evaluate('JSON.parse(localStorage.getItem("zhukodav.cutscenes.v1")||"[]").includes("welcome")'),false);
+        await evaluate('gameTest.start()');await click();await evaluate('gameTest.stop()');
+        assert.equal(await evaluate('JSON.parse(localStorage.getItem("zhukodav.cutscenes.v1")).includes("welcome")'),true);
+        await cdp('Page.reload');
+        const storyReload=Date.now()+45000;
+        while(!await evaluate('!!window.gameTest?.ready()')){if(Date.now()>storyReload)throw Error('story reload timeout');await new Promise(r=>setTimeout(r,250));}
+        await evaluate('gameTest.start()');assert.equal(await evaluate('gameTest.cutscene===null'),true);
+        await evaluate(`(async()=>{window.storyConfig=(await import('./cutscenes.js')).cutscenes;storyConfig.splice(0,storyConfig.length,
+            {id:'multi',levelId:gameTest.levels[0].id,when:'beforeLevel',repeat:'always',frames:[{image:'images/home/04_mascot.png',text:'Первый',buttonText:'Привет!'},{image:null,text:'Длинный текст. '.repeat(100),buttonText:'Продолжить разговор'},{image:'images/missing-character.png',text:'Без картинки',buttonText:'Начать'}]},
+            {id:'empty',levelId:gameTest.levels[0].id,when:'beforeLevel',repeat:'once',frames:[]},
+            {id:'second',levelId:gameTest.levels[0].id,when:'beforeLevel',repeat:'always',frames:[{image:null,text:'Вторая сцена',buttonText:'Далее'}]},
+            ...['win','lose'].map(outcome=>({id:outcome,levelId:gameTest.levels[0].id,when:'afterLevel',outcome,repeat:'always',frames:[{image:null,text:outcome,buttonText:'Результат'}]})));
+            gameTest.levels[0].introPopup={type:'bug',descryption:'Тест интро'};gameTest.levels[0].onEnterLevel=()=>{window.starts=(window.starts||0)+1};})()`);
+        await evaluate('gameTest.start()');await click();await click();assert.equal(await evaluate('gameTest.cutscene.frameIndex'),1);
+        assert.equal(await evaluate('gameTest.cutscene.imageCount'),0);
+        await evaluate('(()=>{const area=gameTest.cutscene.root.getChildByName("cutsceneContent").getChildByName("cutsceneScroll");area.emit("pointerdown",{data:{getLocalPosition:()=>({y:950})}});area.emit("pointermove",{data:{getLocalPosition:()=>({y:850})}});area.emit("pointerup");})()');
+        assert.equal(await evaluate('gameTest.cutscene.scrollY'),100);
+        for(const [width,height] of [[1920,1080],[852,393]]) {
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+            await evaluate('document.documentElement.style.setProperty("--safe-left","59px");window.dispatchEvent(new Event("resize"));new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+            assert.equal(await evaluate('gameTest.cutscene.frameIndex'),1);
+            assert.equal(await evaluate('gameTest.cutscene.scrollY'),100);
+            await evaluate('gameTest.render()');const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts',`cutscene-${width}.png`),Buffer.from(data,'base64'));
+        }
+        await new Promise(r=>setTimeout(r,360));await click();assert.equal(await evaluate('gameTest.cutscene.text'),'Без картинки');
+        await new Promise(r=>setTimeout(r,360));await click();assert.equal(await evaluate('gameTest.cutscene.text'),'Вторая сцена');
+        await new Promise(r=>setTimeout(r,360));await click();assert.equal(await evaluate('gameTest.introActive'),true);
+        await evaluate('gameTest.confirmIntro();gameTest.confirmIntro()');assert.equal(await evaluate('window.starts'),1);
+        await evaluate('storyConfig.splice(0,3)');
+        for(const won of [true,false]) {
+            await evaluate('gameTest.start();gameTest.confirmIntro()');
+            const saves=await evaluate('backendCalls.saveProgress||0');
+            await evaluate(`gameTest.end(${won});gameTest.end(${won})`);assert.equal(await evaluate('backendCalls.saveProgress'),saves+1);
+            assert.equal(await evaluate('gameTest.cutscene.text'),won?'win':'lose');
+            await click();assert.equal(await evaluate('gameTest.resultCounts()'),2);
+        }
+        assert.deepEqual(errors,[]);console.log('Cutscenes passed: welcome once/interruption, frames, null/missing art, double tap, sequential scenes, safe-area resize, bug intro, start once, win/loss and single save.');
+        await send('Browser.close');return;
+    }
+    if (process.argv.includes('--background')) {
+        const readyDeadline=Date.now()+20000;
+        while(await evaluate('!!document.getElementById("preloader")')) { if(Date.now()>readyDeadline)throw Error('Preloader did not close');await new Promise(r=>setTimeout(r,100)); }
+        await evaluate('gameTest.start()');
+        for(const [width,height] of [[1920,1080],[1280,720],[852,393],[844,390],[1024,768],[2560,1080]]) {
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:2,mobile:false});
+            await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+            const b=await evaluate('gameTest.background()');
+            assert.ok(b.visible && b.count===1 && b.x<=0.01 && b.y<=0.01 && b.x+b.width>=width-0.01 && b.y+b.height>=height-0.01);
+            assert.equal(await evaluate('gameTest.ui.scene.children.some(c=>c.texture===gameTest.textures.gameplay_tablecloth)'),false);
+            for(const [left,right] of [[59,0],[0,59]]) {
+                await evaluate(`document.documentElement.style.setProperty('--safe-left','${left}px');document.documentElement.style.setProperty('--safe-right','${right}px');document.documentElement.style.setProperty('--safe-bottom','21px');window.dispatchEvent(new Event('resize'))`);
+                await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+                const safe=await evaluate('gameTest.safe()');assert.equal(safe.x,left);assert.equal(safe.width,width-left-right);
+                const pose=await evaluate('({x:gameTest.ui.scene.x,y:gameTest.ui.scene.y,scale:gameTest.ui.scene.scale.x})');
+                assert.ok(pose.x>=left && pose.x+1920*pose.scale<=width-right+0.01 && pose.y+1080*pose.scale<=height-21+0.01);
+                await evaluate('gameTest.render()');
+                const point=await evaluate('(()=>{const b=gameTest.ui.scene.children.find(c=>c.texture===gameTest.textures.gameplay_settings).getBounds();return {x:b.x+b.width/2,y:b.y+b.height/2};})()');
+                await cdp('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...point});
+                await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...point});
+                assert.equal(await evaluate('gameTest.snapshot().paused'),true,JSON.stringify({width,height,left,right,point}));
+                const p=await evaluate('gameTest.popupInfo()');assert.ok(p.x>=left && p.x+p.width<=width-right+0.01);
+                assert.equal(await evaluate(`(()=>{const p=gameTest.ui.scene.parent.parent.getChildByName('pauseOverlay').getBounds();return p.x===0&&p.y===0&&p.width===${width}&&p.height===${height};})()`),true);
+                await evaluate('gameTest.resume();gameTest.stop()');
+            }
+            await evaluate('gameTest.render()');
+            const {data}=await cdp('Page.captureScreenshot',{format:'png'});
+            fs.writeFileSync(path.join(root,'tests/artifacts',`background-${width}.png`),Buffer.from(data,'base64'));
+        }
+        await evaluate('document.documentElement.style.removeProperty("--safe-left");document.documentElement.style.removeProperty("--safe-right");document.documentElement.style.removeProperty("--safe-bottom");gameTest.home()');
+        assert.equal(await evaluate('gameTest.background().visible'),false);
+        await evaluate('gameTest.dishes()');assert.equal(await evaluate('gameTest.background().visible'),false);
+        await evaluate('gameTest.home();gameTest.start();gameTest.home();gameTest.start()');assert.equal(await evaluate('gameTest.background().count'),1);
+        assert.deepEqual(errors,[]);console.log('Background passed: cover at six sizes, DPR 2, simulated left/right safe areas, popup backdrop, menu/dishes visibility, repeated transitions.');
+        await send('Browser.close');return;
+    }
     if (process.argv.includes('--loading')) {
         const loadingDeadline = Date.now()+20000;
         while (await evaluate('!!document.getElementById("preloader")')) {
@@ -106,11 +215,14 @@ async function main() {
         await evaluate(`document.body.innerHTML = ${JSON.stringify(markup.match(/<body>([\s\S]*)<\/body>/)[1])}; delete window.gamePreloader;`);
         await evaluate(fs.readFileSync(path.join(root,'js/preloader.js'),'utf8'));
         await evaluate('gamePreloader.ready');
-        for (const [width,height] of [[1920,1080],[1280,720],[844,390],[390,844]]) {
+        for (const [width,height] of [[1920,1080],[1280,720],[852,393],[844,390],[1024,768],[2560,1080],[390,844]]) {
             await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
             await evaluate('window.dispatchEvent(new Event("resize"))');
+            await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
             const bounds=await evaluate('document.querySelector(".loading-scene").getBoundingClientRect().toJSON()');
             assert.ok(bounds.x>=-1 && bounds.y>=-1 && bounds.right<=width+1 && bounds.bottom<=height+1);
+            assert.equal(await evaluate('getComputedStyle(document.getElementById("preloader")).backgroundSize'),'cover');
+            assert.equal(await evaluate('!!document.querySelector(".loading-scene img[src*=tablecloth]")'),false);
         }
         for (const progress of [0,0.01,0.5,1]) {
             await evaluate(`gamePreloader.update(${progress})`);
@@ -182,6 +294,127 @@ async function main() {
         await send('Browser.close');
         return;
     }
+    if (process.argv.includes('--menus')) {
+        for(const [width,height] of [[1920,1080],[852,393],[390,844],[768,1024],[2560,1080]]) {
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+            await evaluate('document.documentElement.style.setProperty("--safe-left","20px");window.dispatchEvent(new Event("resize"));gameTest.home()');
+            await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+            for(const kind of ['home','dishes']) {
+                if(kind==='dishes')await evaluate('gameTest.dishes()');
+                await evaluate('gameTest.render()');
+                const scene=kind==='home'?'homeScene':'dishScene';
+                assert.equal(await evaluate(`(()=>{const b=gameTest.${scene}.getChildByName('01_background').getBounds();return b.x<=0.01&&b.y<=0.01&&b.x+b.width>=${width}-.01&&b.y+b.height>=${height}-.01;})()`),true);
+                const names=kind==='home'?['07_button_settings','08_button_dishes','09_button_play']:['dishCard_pizza','dishCard_pie','dishCard_cake','dishCard_bundt_cake','dishCard_greek_salad','dishCard_dressed_herring','dishBack'];
+                for(const name of names)assert.equal(await evaluate(`(()=>{const b=gameTest.${scene}.getChildByName('${name}').getBounds();return b.x>=19&&b.y>=-1&&b.x+b.width<=${width}+1&&b.y+b.height<=${height}+1;})()`),true,`${kind} ${name} ${width}x${height}`);
+                const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts',`${kind}-${width}x${height}.png`),Buffer.from(data,'base64'));
+            }
+        }
+        assert.deepEqual(errors,[]);console.log('Menus passed: home and six dishes, portrait/landscape, safe-area, full room background, five viewport sizes.');await send('Browser.close');return;
+    }
+    if (process.argv.includes('--dishes')) {
+        await evaluate('gameTest.home();gameTest.dishes()');
+        assert.equal(await evaluate('gameTest.dishScene.children.filter(c=>c.name?.startsWith("dishCard_")).length'),6);
+        assert.equal(await evaluate('gameTest.selectDish("greek_salad")'),false);
+        assert.equal(await evaluate('gameTest.selectedDish'), 'pizza');
+        for(const [width,height] of [[1920,1080],[1280,720],[844,390]]) {
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+            await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+            assert.equal(await evaluate(`gameTest.dishScene.children.filter(c=>c.name?.startsWith('dishCard_')).every(c=>{const b=c.getBounds();return b.x>=0&&b.y>=0&&b.x+b.width<=${width}+1&&b.y+b.height<=${height}+1})`),true);
+            await evaluate('gameTest.render()');
+            const {data}=await cdp('Page.captureScreenshot',{format:'png'});
+            fs.writeFileSync(path.join(root,'tests/artifacts',`dishes-${width}.png`),Buffer.from(data,'base64'));
+        }
+        await evaluate(`(async()=>{const m=await import('./js/dish-select.js');
+            if(m.canSelectDish('pie',[])||m.canSelectDish('pie',[0])||m.canSelectDish('pie',[2])||!m.canSelectDish('pie',[1]))throw Error('Unlock policy');
+            const layout=await (await fetch('images/dishes/layout.json')).json();let selected='pizza';
+            let completed=[];
+            const scene=m.createDishSelect(gameTest.textures,layout,{getSelected:()=>selected,getCompletedLevels:()=>completed,onSelect:id=>{selected=id;},onBack(){}});
+            const host=new PIXI.Container();host.addChild(scene);
+            const card=scene.getChildByName('dishCard_pie');
+            if(card.getChildByName('unlockLabel').text!=='После уровня 2')throw Error('Unlock label');
+            card.getChildByName('select_pie').emit('pointertap');
+            if(selected!=='pizza')throw Error('Locked selection');
+            completed=[1];scene.refresh();
+            scene.getChildByName('dishCard_pie').getChildByName('select_pie').emit('pointertap');
+            if(selected!=='pie'||scene.getChildByName('dishCard_pie').getChildByName('select_pie').visible||!scene.getChildByName('dishCard_pizza').getChildByName('select_pizza').visible)throw Error('Selection swap');
+            scene.destroy();host.destroy();
+        })()`);
+        await evaluate('localStorage.setItem("completedLevels","[1]")');
+        assert.equal(await evaluate('gameTest.selectDish("pie")'),true);
+        await evaluate('gameTest.dishScene.getChildByName("dishBack").emit("pointertap");gameTest.dishes();gameTest.dishScene.getChildByName("dishBack").emit("pointertap")');
+        assert.equal(await evaluate('gameTest.isHome()'),true);
+        await cdp('Page.reload');
+        const reloadEnd=Date.now()+45000;
+        while(!await evaluate('!!window.gameTest?.ready()')){if(Date.now()>reloadEnd)throw Error('reload timeout');await new Promise(r=>setTimeout(r,250));}
+        assert.equal(await evaluate('gameTest.selectedDish'),'pie');
+        await evaluate('localStorage.setItem("selectedDishId","invalid")');
+        await cdp('Page.reload');
+        const end=Date.now()+45000;
+        while(!await evaluate('!!window.gameTest?.ready()')){if(Date.now()>end)throw Error('reload timeout');await new Promise(r=>setTimeout(r,250));}
+        assert.equal(await evaluate('gameTest.selectedDish'),'pizza');
+        assert.deepEqual(errors,[]);
+        console.log('Dishes passed: six cards, three sizes, locked selection, character-level policy, back/reopen, reload and invalid-ID fallback.');
+        await send('Browser.close');return;
+    }
+    if (process.argv.includes('--settings')) {
+        await evaluate('gameTest.home();gameTest.settings()');
+        for (const [name,key] of [['soundToggle','soundEnabled'],['musicToggle','musicEnabled']]) {
+            const before = await evaluate(`localStorage.getItem('${key}') !== 'false'`);
+            await evaluate(`gameTest.settingsNode.getChildByName('${name}').emit('pointertap')`);
+            assert.equal(await evaluate(`localStorage.getItem('${key}') !== 'false'`),!before);
+            assert.equal(await evaluate(`gameTest.settingsNode.getChildByName('${name}').enabled`),!before);
+        }
+        await evaluate('gameTest.settingsNode.getChildByName("settingsClose").emit("pointertap");gameTest.settings()');
+        assert.equal(await evaluate('gameTest.settingsNode.getChildByName("soundToggle").enabled === (localStorage.getItem("soundEnabled") !== "false")'),true);
+        for (const [width,height] of [[1920,1080],[844,390]]) {
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+            await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+            const bounds=await evaluate('(()=>{const b=gameTest.settingsNode.getBounds();return {x:b.x,y:b.y,width:b.width,height:b.height};})()');
+            assert.ok(bounds.x>=0 && bounds.y>=0 && bounds.x+bounds.width<=width && bounds.y+bounds.height<=height);
+            await evaluate('gameTest.render()');
+            const {data}=await cdp('Page.captureScreenshot',{format:'png'});
+            fs.writeFileSync(path.join(root,'tests/artifacts',`popup-settings-${width}.png`),Buffer.from(data,'base64'));
+        }
+        await evaluate('gameTest.settingsNode.getChildByName("settingsClose").emit("pointertap");gameTest.start();gameTest.pause()');
+        const before=await evaluate('gameTest.snapshot()');
+        await evaluate('gameTest.step(10000)');
+        assert.deepEqual(await evaluate('gameTest.snapshot()'),before);
+        await evaluate('gameTest.ui.scene.parent.parent.getChildByName("pausePopup").getChildByName("pauseRetry").emit("pointertap");gameTest.stop()');
+        assert.equal(await evaluate('gameTest.snapshot().paused'),false);
+        await evaluate('gameTest.pause();gameTest.ui.scene.parent.parent.getChildByName("pausePopup").getChildByName("pauseMenu").emit("pointertap")');
+        assert.equal(await evaluate('gameTest.isHome()'),true);
+        assert.deepEqual(errors,[]);
+        console.log('Settings checks passed: audio toggles, persistence, home close/reopen, two sizes, pause clock, restart and menu.');
+        await send('Browser.close'); return;
+    }
+    if (process.argv.includes('--intro')) {
+        await evaluate('gameTest.start()');
+        for (const index of await evaluate('gameTest.levels.map((l,i)=>l.introPopup ? i : -1).filter(i=>i>=0)')) {
+            await evaluate(`gameTest.intro(gameTest.levels[${index}].introPopup)`);
+            assert.equal(await evaluate(`gameTest.introNode.getChildByName('introDescription').text === gameTest.levels[${index}].introPopup.descryption`),true);
+            assert.equal(await evaluate('gameTest.introNode.getChildByName("introIcon").texture.valid'),true);
+            assert.equal(await evaluate('gameTest.introNode.getChildByName("introTitle").text.includes("_")'),false);
+            const before=await evaluate('gameTest.snapshot()');
+            await evaluate('gameTest.step(10000);gameTest.spawn("bug")');
+            assert.deepEqual(await evaluate('gameTest.snapshot()'),before);
+            await evaluate('{ const b=gameTest.introNode.getChildByName("introConfirm");b.emit("pointertap");b.emit("pointertap"); }');
+            assert.equal(await evaluate('gameTest.confirmations'),1);
+        }
+        await evaluate('gameTest.intro({title:"Очень длинное название нового необычного жука",descryption:"Длинная инструкция. ".repeat(100),type:"bomb"})');
+        assert.equal(await evaluate('gameTest.introNode.getChildByName("introDescription").style.fontSize'),28);
+        assert.equal(await evaluate('!!gameTest.introNode.getChildByName("introDescriptionScroll")'),true);
+        await evaluate('const a=gameTest.introNode.getChildByName("introDescriptionScroll");a.emit("pointerdown",{data:{getLocalPosition:()=>({y:600})}});a.emit("pointermove",{data:{getLocalPosition:()=>({y:550})}});a.emit("pointerup")');
+        assert.equal(await evaluate('gameTest.introNode.getChildByName("introDescription").y < 555'),true);
+        await evaluate('window.oldIntro=gameTest.introNode;window.oldConfirm=oldIntro.getChildByName("introConfirm");gameTest.home();oldConfirm.emit("pointertap")');
+        assert.equal(await evaluate('oldIntro._destroyed && gameTest.confirmations===0'),true);
+        await evaluate('gameTest.start();gameTest.intro({type:"fat"});window.oldIntro=gameTest.introNode;gameTest.start()');
+        assert.equal(await evaluate('oldIntro._destroyed && gameTest.confirmations===0'),true);
+        assert.equal(await evaluate('gameTest.textures.result_panel.baseTexture.realWidth >= 2280'),true);
+        await evaluate(`(async()=>{const fallback = (await import('./js/intro-popup.js')).createIntroPopup({},await (await fetch('images/ui/results/intro-layout.json')).json(),['Arial'],{},null,()=>{},document.querySelector('canvas'));fallback.destroy({children:true});})()`);
+        assert.deepEqual(errors,[]);
+        console.log('Intro checks passed: all configured types, original descriptions, blocked simulation/spawn, double confirmation, long text scrolling, external cleanup/restart, missing textures and 2x SVG rasterization.');
+        await send('Browser.close'); return;
+    }
     if (process.argv.includes('--popups')) {
         await evaluate('gameTest.start()');
         const dimensions=[[1920,1080],[960,540],[844,390],[568,320],[320,568],[2560,1080]];
@@ -218,6 +451,13 @@ async function main() {
         return;
     }
     await evaluate('gameTest.start();gameTest.configure({coloredBug_red:1,coloredBug_yellow:1,coloredBug_purple:1,coloredBug_green:1});gameTest.render()');
+    const musicVolume = await evaluate('gameTest.musicVolume()');
+    for (const color of ['red','yellow','purple','green']) {
+        await evaluate(`gameTest.hold('${color}')`);
+        assert.equal(await evaluate('gameTest.musicVolume()'),musicVolume);
+        await evaluate(`gameTest.release('${color}')`);
+        assert.equal(await evaluate('gameTest.musicVolume()'),musicVolume);
+    }
     const capture=async name=>{const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.mkdirSync(path.join(root,'tests/artifacts'),{recursive:true});fs.writeFileSync(path.join(root,'tests/artifacts',name),Buffer.from(data,'base64'));};
     await capture('gameplay-1920.png');
     const check=async (expression,expected)=>assert.deepEqual(await evaluate(expression),expected,expression);
@@ -229,7 +469,15 @@ async function main() {
     await check('gameTest.objects.map(o=>o.highlight.visible)',[false,false]);
     await evaluate('gameTest.configure({coloredBug_red:1,coloredBug_yellow:1,coloredBug_purple:1,coloredBug_green:1})');
     for(const color of ['red','yellow','purple','green']) {
-        await evaluate(`gameTest.spawn('coloredBug_${color}'); gameTest.hold('${color}'); gameTest.hit(); gameTest.release('${color}'); gameTest.step(200);`);
+        await evaluate(`gameTest.spawn('coloredBug_${color}'); gameTest.hold('${color}'); gameTest.hit(); gameTest.release('${color}');`);
+        const pose = await evaluate('gameTest.objects.map(o=>({x:o.x,y:o.y,hop:o.hop.y,alpha:o.alpha,scale:o.body.scale.x}))');
+        await check('gameTest.objects[0].alpha',0.3);
+        await check('gameTest.objects[0].interactive',false);
+        const scoreBeforeRepeat = await evaluate('gameTest.snapshot().score');
+        await evaluate('gameTest.hit();gameTest.step(499)');
+        assert.deepEqual(await evaluate('gameTest.objects.map(o=>({x:o.x,y:o.y,hop:o.hop.y,alpha:o.alpha,scale:o.body.scale.x}))'),pose);
+        await check('gameTest.snapshot().score',scoreBeforeRepeat);
+        await evaluate('gameTest.step(1)');
         await check('gameTest.objects.length',0);
     }
     await evaluate("gameTest.spawn('bug');gameTest.atFood();gameTest.hit();gameTest.step(500)");
@@ -255,7 +503,7 @@ async function main() {
     await check('gameTest.snapshot().life',6);
     await evaluate("gameTest.spawn('fatColoredBug_red');gameTest.hold('red');gameTest.hit();gameTest.hit()");
     await check('gameTest.objects[0].state === "resolved"',false);
-    await evaluate("gameTest.hit();gameTest.release('red');gameTest.step(200)");
+    await evaluate("gameTest.hit();gameTest.release('red');gameTest.step(500)");
     await check('gameTest.objects.length',0);
     await evaluate("gameTest.spawn('bug');gameTest.atFood();gameTest.pause()");
     await check('Math.abs(gameTest.objects[0].hitArea.radius - 66.7) < 0.00001',true);
@@ -274,8 +522,8 @@ async function main() {
     const frozenPause=await evaluate('gameTest.snapshot()');
     await evaluate('gameTest.step(7000)');
     assert.deepEqual(await evaluate('gameTest.snapshot()'),frozenPause);
-    await evaluate('gameTest.resume();gameTest.hit();gameTest.step(200)');
-    await evaluate("gameTest.spawn('chameleon');gameTest.hit();gameTest.step(200);gameTest.spawn('coloredBug_purple');gameTest.hit();gameTest.step(200)");
+    await evaluate('gameTest.resume();gameTest.stopSpawns();gameTest.hit();gameTest.step(500)');
+    await evaluate("gameTest.spawn('chameleon');gameTest.hit();gameTest.step(200);gameTest.spawn('coloredBug_purple');gameTest.hit();gameTest.step(500)");
     await check('gameTest.objects.length',0);
     await evaluate("gameTest.spawn('bug');gameTest.spawn('bomb');gameTest.spawn('neat');gameTest.hit(2);gameTest.hit(2);gameTest.step(200)");
     await check('gameTest.objects.length',0);

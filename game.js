@@ -1,4 +1,11 @@
 import { POPUP_REFERENCE, fitPopup } from './js/popup-layout.js';
+import { createIntroPopup } from './js/intro-popup.js';
+import { createSettingsPopup } from './js/settings-popup.js';
+import { HEADING_FONT, headingFontReady } from './js/typography.js';
+import { matchingCutscenes, playCutscenes } from './js/cutscene-player.js';
+import { safeViewport, viewportSize, createAdaptiveBackground } from './js/adaptive-background.js';
+import { DISH_ASSETS, DISH_IDS, normalizeDish, canSelectDish, createDishSelect, fitDishIcon } from './js/dish-select.js';
+import { loadDishPreference, saveDishPreference } from './firebase.js';
 import { RESULT_ASSETS, createResultPopup } from './js/result-popup.js';
 import { getFoodDefinition, getFoodMaxLives, getFoodAssets } from './js/food-config.js';
 import { GAMEPLAY_ASSETS, GAMEPLAY_STYLE, buildGameplayScene, fitGameplayScene } from './js/gameplay-scene.js';
@@ -127,7 +134,8 @@ const soundEffects = createSoundEffects(AUDIO_PATHS, getEffectiveAudioVolume);
 
 function getEffectiveAudioVolume(name) {
     const musicEffectVolume = name === 'levelMusic' ? getLevelMusicEffectVolume() : 1;
-    return (AUDIO_VOLUME[name] ?? 1) * musicEffectVolume * (audioDuckingActive ? AUDIO_DUCKING_MULTIPLIER : 1);
+    const duckEffects = audioDuckingActive && name !== 'levelMusic' && name !== 'menuMusic';
+    return (AUDIO_VOLUME[name] ?? 1) * musicEffectVolume * (duckEffects ? AUDIO_DUCKING_MULTIPLIER : 1);
 }
 
 function applyAudioVolumes() {
@@ -525,6 +533,22 @@ let levelEnded = false; // true — как только показан попа�
 
 // Показывается ли сейчас интро‑попап (блокируем спавн до закрытия)
 let introActive = false;
+let activeCutscene = null;
+let cutsceneGeneration = 0;
+function cancelCutscene() {
+    cutsceneGeneration++;
+    activeCutscene?.dispose();activeCutscene=null;
+}
+function runCutscenes(when, won, continuation) {
+    const scenes=matchingCutscenes(levelData.id,when,won);
+    if(!scenes.length){continuation();return;}
+    const generation=cutsceneGeneration;
+    clearActiveColor();introActive=true;
+    activeCutscene=playCutscenes({scenes,host:gameContainer,app,textures:TEXTURES,
+        theme:loader.resources.intro_layout.data.popupTheme,
+        onComplete(){if(generation!==cutsceneGeneration)return;activeCutscene=null;introActive=false;continuation();}
+    });
+}
 
 // Runtime balance is always derived from base bug config * level multipliers.
 function getLevelLifetimeMultiplier(type) {
@@ -654,6 +678,42 @@ function syncAllColorButtonStates() {
 // ==== UI Containers ====
 const levelSelectContainer = new PIXI.Container();
 let progressContainer = null;
+let dishSelectScene = null;
+let selectedDishId = normalizeDish(localStorage.getItem('selectedDishId'), getCompletedLevels());
+let dishSelectionRevision = 0;
+function selectDish(id) {
+    if (!canSelectDish(id, getCompletedLevels())) return false;
+    selectedDishId = id; dishSelectionRevision++;
+    localStorage.setItem('selectedDishId', id);
+    saveDishPreference(id).catch(() => {});
+    updateHomeDish(); return true;
+}
+function updateHomeDish() {
+    const dish = progressContainer?.getChildByName('homeContainer')?.getChildByName('dishContainer');
+    if (!dish) return;
+    const key = Object.keys(DISH_IDS).find(key => DISH_IDS[key] === selectedDishId);
+    const texture = TEXTURES[`dish_${key}`];
+    if (!texture?.valid) return;
+    for (const child of dish.removeChildren()) child.destroy({ children: true });
+    const icon = new PIXI.Sprite(texture); fitDishIcon(icon, [75, 150, 380, 360], true); dish.addChild(icon);
+}
+function menuViewport() {
+    return { ...safeViewport(app.screen), fullWidth: app.screen.width, fullHeight: app.screen.height };
+}
+function closeDishSelect() {
+    if (dishSelectScene) { dishSelectScene.destroy(); dishSelectScene = null; }
+}
+function showDishSelect() {
+    if (dishSelectScene) return;
+    clearProgressPopup();
+    app.stage.removeChild(progressContainer);
+    dishSelectScene = createDishSelect(TEXTURES, loader.resources.dish_layout.data, {
+        getSelected: () => selectedDishId, getCompletedLevels,
+        onSelect: id => { playUiClick(); selectDish(id); },
+        onBack: () => { playUiClick(); showProgressScreen(); }
+    });
+    app.stage.addChild(dishSelectScene); dishSelectScene.fit(menuViewport()); updateMobilePortraitOverlay();
+}
 let selectedLevelIndex = null;
 
 PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
@@ -691,6 +751,7 @@ const UI_ASSET_SLOTS = {
 // ==== SPRITE PRELOADER (PIXI.Loader) ====
 const SPRITE_PATHS = [
     ...HOME_ASSETS,
+    ...DISH_ASSETS,
     ...GAMEPLAY_ASSETS,
     ...RESULT_ASSETS,
     ...getFoodAssets(levels),
@@ -851,12 +912,15 @@ const app = new PIXI.Application({
     backgroundColor: THEME.appBg,
     resolution: Math.min(window.devicePixelRatio || 1, isMobileDeviceUI(MOBILE_MAX_VIEWPORT) ? 2 : Infinity),
     autoDensity: true,
-    resizeTo: window,
     roundPixels: true
 });
 
 // Add app view to DOM
 document.body.appendChild(app.view);
+const adaptiveBackground = createAdaptiveBackground(app);
+const syncBackground = () => { adaptiveBackground.layer.visible = gameContainer.parent === app.stage; };
+gameContainer.on('added', syncBackground);
+gameContainer.on('removed', syncBackground);
 document.body.style.backgroundColor = THEME.appBgCss;
 document.body.style.overscrollBehavior = 'none';
 document.body.style.touchAction = 'none';
@@ -866,7 +930,17 @@ initYandexSDK();
 
 // === Backend init (Firebase) ===
 initBackend()
-  .then(() => trackEvent('app_open', { ua: navigator.userAgent }))
+  .then(async () => {
+      const revision = dishSelectionRevision;
+      const remote = await loadDishPreference().catch(() => null);
+      if (revision === dishSelectionRevision) {
+          selectedDishId = normalizeDish(localStorage.getItem('selectedDishId') || remote, getCompletedLevels());
+          localStorage.setItem('selectedDishId', selectedDishId);
+          await saveDishPreference(selectedDishId).catch(() => {});
+          updateHomeDish(); dishSelectScene?.refresh();
+      }
+      return trackEvent('app_open', { ua: navigator.userAgent });
+  })
   .catch((e) => console.warn('Backend init failed', e));
 
 // Load sprites
@@ -924,18 +998,28 @@ const errorBinding = loader.onError.add(onLoadError);
 loadingScreen.ready.then(() => loader.load(async () => {
     try {
         if (requiredResourceFailed) return;
-        for (const { name, optional, dataResource } of SPRITE_PATHS) {
+        await headingFontReady;
+        for (const { name, path, optional, dataResource } of SPRITE_PATHS) {
             if (dataResource) {
                 if (!loader.resources[name]?.data) throw new Error(`Missing data: ${name}`);
                 continue;
             }
-            const texture = loader.resources[name]?.texture;
+            let texture = loader.resources[name]?.texture;
+            if (texture && path.endsWith('.svg')) {
+                const source = loader.resources[name].data;
+                const canvas = document.createElement('canvas');
+                canvas.width = source.naturalWidth * 2;
+                canvas.height = source.naturalHeight * 2;
+                canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
+                texture = new PIXI.Texture(new PIXI.BaseTexture(canvas, { resolution: 2 }));
+            }
             if (texture) TEXTURES[name] = texture;
             else if (!optional) throw new Error(`Missing texture: ${name}`);
         }
         bombAnimationFrames = Array.from({ length: 17 }, (_, index) => new PIXI.Texture(
             TEXTURES.bomb_animation.baseTexture, new PIXI.Rectangle(index * 142, 0, 142, 200)
         ));
+        adaptiveBackground.setTexture(TEXTURES.gameplay_tablecloth);
         await Promise.all([audioReady, prepareLoadedTextures()]);
         showProgressScreen();
         resizeGame();
@@ -1157,7 +1241,7 @@ function showAllLevelsCompletedPopup() {
         fontSize: Math.max(28, Math.min(42, popupWidth * 0.09)),
         fill: THEME.textDark,
         fontWeight: '900',
-        fontFamily: 'Arial',
+        fontFamily: HEADING_FONT,
         align: 'center'
     });
     title.anchor.set(0.5);
@@ -1184,6 +1268,9 @@ function continueGameFromProgress() {
 }
 
 function showProgressScreen() {
+    cancelCutscene();
+    closeDishSelect();
+    clearAllPopups();
     clearSessionCallbacks();
     removeAllActiveObjectsImmediate();
     clearSpawnResumeDelay();
@@ -1215,11 +1302,13 @@ function showProgressScreen() {
         progressContainer.name = 'homeScreen';
         progressContainer.addChild(createHomeScreen(TEXTURES, {
             onPlay: () => { playUiClick(); continueGameFromProgress(); },
-            onSettings: () => showPausePopup(true)
+            onSettings: () => showPausePopup(true),
+            onDishes: () => { playUiClick(); showDishSelect(); }
         }));
     }
     app.renderer.backgroundColor = 0xE5E8E6;
-    layoutHomeScreen(progressContainer.getChildByName('homeContainer'), app.screen);
+    updateHomeDish();
+    layoutHomeScreen(progressContainer.getChildByName('homeContainer'), menuViewport());
     if (!app.stage.children.includes(progressContainer)) {
         app.stage.addChild(progressContainer);
     }
@@ -1253,6 +1342,7 @@ function installDebugLevelButton() {
 }
 
 function showLevelSelect() {
+    cancelCutscene();
     stopLevelCountdown();
     clearSpawnTimer();
     clearGameplayMusicEffects();
@@ -1287,7 +1377,7 @@ function showLevelSelect() {
         fontSize: Math.max(38, Math.min(68, screenW * 0.085)),
         fill: THEME.textDark,
         fontWeight: '900',
-        fontFamily: 'Arial'
+        fontFamily: HEADING_FONT
     });
     title.anchor.set(0.5);
     title.x = screenW / 2;
@@ -1637,7 +1727,7 @@ function showLevelEntryPopup(levelIndex) {
         fontSize: Math.max(22, Math.min(40, Math.round(Math.min(popupWidth * 0.088, popupHeight * 0.13)))),
         fill: THEME.textDark,
         fontWeight: 'bold',
-        fontFamily: 'Arial',
+        fontFamily: HEADING_FONT,
         align: 'center',
     });
     title.anchor.set(0.5, 0);
@@ -1693,6 +1783,9 @@ function showLevelEntryPopup(levelIndex) {
 
 // запускаем уровень
 function startLevel(index) {
+    cancelCutscene();
+    closeDishSelect();
+    clearAllPopups();
     clearSessionCallbacks();
     stopLevelCountdown();
   // Очищаем предыдущий уровень: останавливаем интервалы и таймеры
@@ -1740,7 +1833,11 @@ function startLevel(index) {
   updateMobilePortraitOverlay();
 
     // реальный старт спавна
+  let started = false;
+  const generation = cutsceneGeneration;
   const startSpawning = () => {
+    if(started || generation!==cutsceneGeneration)return;
+    started=true;
     startLevelCountdown();
     beginLevelAttempt();
     startLevelMusic();
@@ -1750,12 +1847,14 @@ function startLevel(index) {
   };
 
   // если в конфиге уровня есть интро-попап — сначала показываем его, спавн не запускаем
+  runCutscenes('beforeLevel', null, () => {
   if (levelData.introPopup) {
     introActive = true; // ⬅ блокируем спавн
     showIntroPopup(levelData.introPopup, startSpawning);
   } else {
     startSpawning();
   }
+  });
 
 }
 
@@ -1784,7 +1883,7 @@ function setupPlayArea() {
     rootUI.addChild(currentGameUI.scene);
     colorButtonsMap = currentGameUI.buttons;
     dynamicColorKeyMap = Object.fromEntries(GAMEPLAY_STYLE.tools.filter(t => enabledColors.includes(t.color)).map(t => [t.key, t.color]));
-    fitGameplayScene(currentGameUI.scene, app.screen);
+    fitGameplayScene(currentGameUI.scene, safeViewport(app.screen));
     app.renderer.backgroundColor = 0x79A6AA;
     updateUI();
     return { fieldWrapper: currentGameUI.scene, playField: currentGameUI.field };
@@ -2040,7 +2139,8 @@ function hitFoodBug(obj) {
     if (obj.data.clicks > 0) { animateFatBugSquish(obj); return; }
     score += getObjectScoreValue(obj.data);
     // Resolve before any visual effect, so a click during the warning cannot damage food.
-    resolveFoodBug(obj);
+    const holdAfterHit = type === 'bug' || type === 'fat' || colored;
+    resolveFoodBug(obj, true, holdAfterHit);
     if (type === 'healer') {
         changeFoodHealth(Math.max(0, obj.data.healAmount ?? 0));
         playHealerMusicEffect();
@@ -2070,7 +2170,7 @@ function changeFoodHealth(delta) {
     if (life <= 0) endGame(false);
 }
 
-function resolveFoodBug(obj, animate = true) {
+function resolveFoodBug(obj, animate = true, holdAfterHit = false) {
     obj.state = 'resolved';
     if (obj.highlight) obj.highlight.visible = false;
     obj.interactive = obj.buttonMode = false;
@@ -2084,7 +2184,9 @@ function resolveFoodBug(obj, animate = true) {
         return;
     }
     // Removal is advanced by the same clock as motion; no delayed callbacks survive a restart.
-    obj.removeRemainingMs = 180;
+    obj.holdAfterHit = holdAfterHit;
+    obj.removeRemainingMs = holdAfterHit ? 500 : 180;
+    if (holdAfterHit) obj.alpha = 0.3;
 }
 
 function showFoodWarning(obj) {
@@ -2146,8 +2248,8 @@ function advanceGameplay(dt) {
             if (levelEnded) break;
             if (obj.state === 'resolved') {
                 obj.removeRemainingMs -= step;
-                if (obj.removeRemainingMs <= 0) resolveFoodBug(obj, false);
-                else { obj.alpha = obj.removeRemainingMs / 180; obj.body.scale.set(0.8 + 0.2 * obj.alpha); }
+                if (obj.removeRemainingMs <= 1e-7) resolveFoodBug(obj, false);
+                else if (!obj.holdAfterHit) { obj.alpha = obj.removeRemainingMs / 180; obj.body.scale.set(0.8 + 0.2 * obj.alpha); }
                 continue;
             }
             const movementRate = isFrozenEffectActive() ? FROZEN_LIFETIME_RATE : 1;
@@ -2264,7 +2366,7 @@ function endGame(won) {
     }).catch(() => {});
     recalcLeaderboard(levels.length).catch(() => {});
 
-    const idx = levelData.id - 1;
+    const idx = levels.findIndex(level => level.id === levelData.id);
     if (won) {
         levelsSinceLastAd++;
         if (levelsSinceLastAd >= 2) {
@@ -2272,12 +2374,11 @@ function endGame(won) {
             levelsSinceLastAd = 0;
         }
         markLevelCompleted(idx);
-        showWinOverlayThenPopup(idx);
     } else {
         showInterstitialAd();
         levelsSinceLastAd = 0;
-        showLoseOverlayThenPopup(idx);
     }
+    runCutscenes('afterLevel', won, () => won ? showWinOverlayThenPopup(idx) : showLoseOverlayThenPopup(idx));
 
 }
 
@@ -2379,7 +2480,7 @@ function closeLevelAttempt(status, exitReason = null) {
 }
 
 function rebuildUI() {
-    if (currentGameUI.scene) fitGameplayScene(currentGameUI.scene, app.screen);
+    if (currentGameUI.scene) fitGameplayScene(currentGameUI.scene, safeViewport(app.screen));
     updateUI();
 }
 
@@ -2395,7 +2496,7 @@ function scheduleResponsiveResize() {
 }
 
 window.addEventListener('resize', scheduleResponsiveResize);
-window.addEventListener('orientationchange', () => {
+function onOrientationChange() {
     scheduleResponsiveResize();
 
     if (pendingOrientationResizeTimeout !== null) {
@@ -2406,15 +2507,32 @@ window.addEventListener('orientationchange', () => {
         pendingOrientationResizeTimeout = null;
         scheduleResponsiveResize();
     }, 180);
-});
+}
+window.addEventListener('orientationchange', onOrientationChange);
+window.visualViewport?.addEventListener('resize', scheduleResponsiveResize);
+const destroyApp = app.destroy.bind(app);
+app.destroy = (...args) => {
+    cancelCutscene();
+    window.removeEventListener('resize', scheduleResponsiveResize);
+    window.removeEventListener('orientationchange', onOrientationChange);
+    window.visualViewport?.removeEventListener('resize', scheduleResponsiveResize);
+    if (pendingResizeFrame !== null) cancelAnimationFrame(pendingResizeFrame);
+    clearTimeout(pendingOrientationResizeTimeout);
+    gameContainer.off('added', syncBackground); gameContainer.off('removed', syncBackground);
+    adaptiveBackground.dispose(); destroyApp(...args);
+};
 
 function resizeGame() {
-    app.renderer.resize(window.innerWidth, window.innerHeight);
+    const viewport = viewportSize();
+    app.renderer.resize(viewport.width, viewport.height);
+    adaptiveBackground.resize();
+    activeCutscene?.resize();
+    if (dishSelectScene) dishSelectScene.fit(menuViewport());
     const viewportMode = getViewportMode();
     const isGameScreen = app.stage.children.includes(gameContainer);
 
     if (progressContainer && app.stage.children.includes(progressContainer)) {
-        layoutHomeScreen(progressContainer.getChildByName('homeContainer'), app.screen);
+        layoutHomeScreen(progressContainer.getChildByName('homeContainer'), menuViewport());
         if (progressContainer.getChildByName('allLevelsCompletedPopup')) showAllLevelsCompletedPopup();
 
     }
@@ -2525,162 +2643,27 @@ function getTextureForType(t) {
 
 // Попап "Новый жук!"
 function showIntroPopup(cfg, onClose) {
-  // overlay
-  const overlay = new PIXI.Graphics();
-  overlay.beginFill(THEME.overlay, 0.42);
-  overlay.drawRect(0, 0, app.screen.width, app.screen.height);
-  overlay.endFill();
-  overlay.name = 'introOverlay';
-  overlay.interactive = true; // блок кликов по полю
-  gameContainer.addChild(overlay);
-
-  // контейнер элементов (без карточки, только оверлей + элементы)
-  const c = new PIXI.Container();
-  c.name = 'introPopup';
-  gameContainer.addChild(c);
-
-  const bg = new PIXI.Graphics();
-  const border = new PIXI.Graphics();
-  const descBox = new PIXI.Graphics();
-  c.addChild(bg);
-  c.addChild(border);
-  c.addChild(descBox);
-
-  // Заголовок
-  const title = new PIXI.Text('Новый жук!', new PIXI.TextStyle({
-    fontSize: 48,
-    fill: THEME.primary,
-    fontWeight: '900',
-    stroke: THEME.white,
-    strokeThickness: 6,
-    align: 'center',
-    wordWrap: true
-  }));
-  title.anchor.set(0.5, 0);
-  c.addChild(title);
-
-  // Иконка из типа
-  const iconTex = getTextureForType(cfg?.type);
-  const icon = new PIXI.Sprite(iconTex);
-  icon.anchor.set(0.5);
-  c.addChild(icon);
-
-  // Текст-описание (берём из cfg.descryption)
-  const desc = new PIXI.Text(String(cfg?.descryption ?? ''), new PIXI.TextStyle({
-    fontSize: 24,
-    fill: THEME.textDark,
-    fontWeight: '700',
-    align: 'center',
-    wordWrap: true,
-    breakWords: true,
-    lineHeight: 30
-  }));
-  desc.anchor.set(0.5, 0);
-  c.addChild(desc);
-
-  // Кнопка "ОК"
-  const btnH = 64;
-  const ok = new PIXI.Graphics();
-  ok.interactive = true;
-  ok.buttonMode = true;
-
-  const okLabel = new PIXI.Text('ОК', {
-    fontSize: 32, fill: THEME.white, fontWeight: '900', stroke: THEME.borderDark, strokeThickness: 4
-  });
-  okLabel.anchor.set(0.5);
-  ok.addChild(okLabel);
-  c.addChild(ok);
-
-  // анимация появления
-  const close = () => {
-    if (!c.parent) return;
-    if (c._appearFrame) cancelAnimationFrame(c._appearFrame);
-    if (gameContainer.getChildByName('introOverlay')) gameContainer.removeChild(overlay);
-    if (gameContainer.getChildByName('introPopup')) gameContainer.removeChild(c);
-    introActive = false;
-    if (typeof onClose === 'function') onClose();
-  };
-  overlay.on('pointerdown', close);
-  c.interactive = true;
-  c.hitArea = new PIXI.Rectangle(0, 0, 1, 1);
-  c.on('pointerdown', (event) => event.stopPropagation());
-
-  const layoutIntroPopup = () => {
-    const popupWidth = 640;
-    const popupHeight = 560;
-    const padX = Math.max(16, Math.round(popupWidth * 0.055));
-    const padTop = Math.max(16, Math.round(popupHeight * 0.045));
-    const padBottom = Math.max(18, Math.round(popupHeight * 0.055));
-    const gap = Math.max(8, Math.min(14, Math.round(popupHeight * 0.025)));
-    const titleWrapWidth = popupWidth - padX * 2;
-    const descWrapWidth = popupWidth - padX * 2 - 24;
-    const buttonHeight = Math.max(46, Math.min(62, Math.round(popupHeight * 0.12)));
-    const buttonWidth = Math.min(popupWidth - padX * 2, 320);
-    const descPadY = Math.max(8, Math.min(10, Math.round(popupHeight * 0.018)));
-    const descBoxWidth = popupWidth - padX * 2;
-
-    fitPopup(c, app.screen, popupWidth, popupHeight);
-    c.hitArea = new PIXI.Rectangle(0, 0, popupWidth, popupHeight);
-
-    drawGameFieldPopupPanel(bg, border, popupWidth, popupHeight, 32, THEME.border);
-
-    title.style.fontSize = Math.max(22, Math.min(44, Math.round(Math.min(popupWidth * 0.1, popupHeight * 0.12))));
-    title.style.wordWrapWidth = titleWrapWidth;
-    title.style.lineHeight = Math.round(title.style.fontSize * 1.05);
-    title.x = popupWidth / 2;
-    title.y = padTop;
-
-    desc.style.fontSize = Math.max(14, Math.min(22, Math.round(Math.min(popupWidth * 0.046, popupHeight * 0.06))));
-    desc.style.lineHeight = Math.round(desc.style.fontSize * 1.3);
-    desc.style.wordWrapWidth = descWrapWidth;
-
-    let descBoxHeight = desc.height + descPadY * 2;
-    const maxDescBoxHeight = Math.max(52, popupHeight * 0.24);
-    if (descBoxHeight > maxDescBoxHeight) {
-      desc.style.fontSize = Math.max(12, Math.floor(desc.style.fontSize * maxDescBoxHeight / descBoxHeight));
-      desc.style.lineHeight = Math.round(desc.style.fontSize * 1.25);
-      descBoxHeight = desc.height + descPadY * 2;
-    }
-
-    const buttonCenterY = popupHeight - padBottom - buttonHeight / 2;
-    const descBoxY = buttonCenterY - buttonHeight / 2 - gap - descBoxHeight;
-    const iconTop = title.y + title.height + gap;
-    const iconBottom = descBoxY - gap;
-    const maxIconSize = Math.min(popupWidth * 0.28, Math.max(36, iconBottom - iconTop));
-    const iconSize = Math.max(36, Math.min(maxIconSize, popupHeight * 0.2));
-    icon.scale.set(iconSize / Math.max(icon.texture.width, icon.texture.height));
-    icon.x = popupWidth / 2;
-    icon.y = iconTop + Math.max(0, (iconBottom - iconTop - iconSize) / 2) + iconSize / 2;
-
-    descBox.clear();
-    descBox.beginFill(THEME.headerBg, 0.85);
-    descBox.drawRoundedRect(0, 0, descBoxWidth, descBoxHeight, 18);
-    descBox.endFill();
-    descBox.x = padX;
-    descBox.y = Math.max(icon.y + iconSize / 2 + gap, descBoxY);
-
-    desc.x = popupWidth / 2;
-    desc.y = descBox.y + descPadY;
-
-    ok.clear();
-    ok.lineStyle(6, THEME.borderDark);
-    ok.beginFill(THEME.primary);
-    ok.drawRoundedRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 18);
-    ok.endFill();
-    ok.x = popupWidth / 2;
-    ok.y = buttonCenterY;
-
-    okLabel.style.fontSize = Math.max(26, Math.min(32, Math.round(buttonHeight * 0.48)));
-    okLabel.x = 0;
-    okLabel.y = 0;
-  };
-
-  layoutIntroPopup();
-  animateAppear(c, 400);
-
-  ok.on('pointerdown', close);
+    clearAllPopups();
+    introActive = true;
+    const layout = loader.resources.intro_layout.data;
+    const theme = layout.popupTheme;
+    const overlay = new PIXI.Graphics();
+    overlay.name = 'introOverlay';
+    overlay._backdropColor = parseInt(theme.backdrop.slice(1), 16);
+    overlay._backdropAlpha = theme.backdropAlpha;
+    overlay.beginFill(overlay._backdropColor, overlay._backdropAlpha).drawRect(0, 0, app.screen.width, app.screen.height).endFill();
+    overlay.interactive = true;
+    const popup = createIntroPopup(TEXTURES, layout, loader.resources.result_layout.data.fontStack,
+        cfg, getTextureForType(cfg?.type), () => {
+            if (popup.destroyed || popup.parent !== gameContainer) return;
+            playUiClick();
+            clearAllPopups();
+            introActive = false;
+            if (typeof onClose === 'function') onClose();
+        }, app.view);
+    gameContainer.addChild(overlay, popup);
+    fitPopup(popup, app.screen);
 }
-
 function showWinOverlayThenPopup(levelIndex) { showWinPopup(levelIndex); }
 function showLoseOverlayThenPopup(levelIndex) { showLosePopup(levelIndex); }
 function showWinPopup(levelIndex) { showResultPopup({ won: true, levelIndex }); }
@@ -2691,8 +2674,9 @@ function showResultPopup({ won, levelIndex }) {
     const layout = loader.resources.result_layout.data;
     const overlay = new PIXI.Graphics();
     overlay.name = won ? 'winOverlay' : 'loseOverlay';
-    overlay._backdropColor = parseInt(layout.backdrop.color.slice(1), 16);
-    overlay._backdropAlpha = layout.backdrop.alpha;
+    const theme = loader.resources.intro_layout.data.popupTheme;
+    overlay._backdropColor = parseInt(theme.backdrop.slice(1), 16);
+    overlay._backdropAlpha = theme.backdropAlpha;
     overlay.beginFill(overlay._backdropColor, overlay._backdropAlpha)
         .drawRect(0, 0, app.screen.width, app.screen.height).endFill();
     overlay.interactive = true;
@@ -2704,7 +2688,7 @@ function showResultPopup({ won, levelIndex }) {
         callback();
     };
     const popup = createResultPopup(TEXTURES, layout, {
-        won, hasNext,
+        won, hasNext, theme: loader.resources.intro_layout.data.popupTheme,
         onMenu: () => transition(showProgressScreen),
         onPrimary: () => transition(() => {
             if (!won) startLevel(levelIndex);
@@ -2719,6 +2703,7 @@ function showResultPopup({ won, levelIndex }) {
     gameContainer.addChild(popup);
 }
 function showPausePopup(homeSettings = false) {
+    if(activeCutscene)return;
     homeSettings = homeSettings === true;
     const popupHost = homeSettings ? progressContainer : gameContainer;
     if (popupHost.getChildByName('pausePopup')) return;
@@ -2731,206 +2716,32 @@ function showPausePopup(homeSettings = false) {
         freezeActiveObjects();
     }
 
-    // Add semi-transparent overlay FIRST
+    const theme = loader.resources.intro_layout.data.popupTheme;
     const overlay = new PIXI.Graphics();
-    overlay.beginFill(THEME.overlay, 0.34);
-    overlay.drawRect(0, 0, app.screen.width, app.screen.height);
-    overlay.endFill();
     overlay.name = 'pauseOverlay';
-    overlay.interactive = true; // Prevent clicks through overlay
-    popupHost.addChild(overlay);
-
-    // Create popup container
-    const popupBounds = getCenteredPopupBounds({
-        widthRatio: 0.82,
-        maxWidth: 480,
-        heightRatio: 0.82,
-        maxHeight: 520,
-        minHeight: 300
-    });
-    const popupWidth = popupBounds.width;
-    const popupHeight = popupBounds.height;
-
-    const popup = new PIXI.Container();
-    popup.name = 'pausePopup';
-    fitPopup(popup, app.screen, popupWidth, popupHeight);
-
-    // Background
-    const bg = new PIXI.Graphics();
-
-    // Border
-    const border = new PIXI.Graphics();
-    drawGameFieldPopupPanel(bg, border, popupWidth, popupHeight, 40, THEME.pause);
-    popup.addChild(bg);
-    popup.addChild(border);
-
-    // Title
-    const title = new PIXI.Text(homeSettings ? 'НАСТРОЙКИ' : 'ПАУЗА', {
-        fontSize: Math.max(28, Math.min(48, Math.round(Math.min(popupWidth * 0.1, popupHeight * 0.12)))),
-        fill: THEME.textDark,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
-        align: 'center',
-    });
-    title.anchor.set(0.5, 0);
-    title.x = popupWidth / 2;
-    title.y = Math.max(18, Math.round(popupHeight * 0.07));
-    popup.addChild(title);
-
-    // Размер иконок и кнопок
-    const iconBtnSize = Math.max(50, Math.min(70, Math.round(popupHeight * 0.13)));
-    const iconFontSize = Math.max(28, Math.min(44, Math.round(iconBtnSize * 0.62)));
-    const iconSpacing = Math.max(18, Math.min(32, Math.round(popupWidth * 0.07)));
-
-    // Контейнер для иконок
-    const iconsRow = new PIXI.Container();
-    iconsRow.x = popupWidth / 2;
-    iconsRow.y = title.y + title.height + Math.max(14, Math.round(popupHeight * 0.06));
-
-    // Load sound states from localStorage
-    let isSoundEnabled = localStorage.getItem('soundEnabled') !== 'false';
-    let isMusicEnabled = localStorage.getItem('musicEnabled') !== 'false';
-
-    // Кнопка звука
-    const soundBtn = new PIXI.Graphics();
-    soundBtn.lineStyle(4, 0xB56A2D);
-    soundBtn.beginFill(THEME.secondary);
-    soundBtn.drawRoundedRect(-iconBtnSize/2, -iconBtnSize/2, iconBtnSize, iconBtnSize, 18);
-    soundBtn.endFill();
-    soundBtn.interactive = true;
-    soundBtn.buttonMode = true;
-    soundBtn.x = -iconBtnSize/2 - iconSpacing/2;
-
-    const soundIcon = new PIXI.Text(isSoundEnabled ? '🔊' : '🔇', {
-        fontSize: iconFontSize,
-        fill: THEME.textDark,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
-    });
-    soundIcon.anchor.set(0.5);
-    soundIcon.x = 0;
-    soundIcon.y = 0;
-    soundBtn.addChild(soundIcon);
-
-    // Кнопка музыки
-    const musicBtn = new PIXI.Graphics();
-    musicBtn.lineStyle(4, 0x5E4AE0);
-    musicBtn.beginFill(0x8E7CFF);
-    musicBtn.drawRoundedRect(-iconBtnSize/2, -iconBtnSize/2, iconBtnSize, iconBtnSize, 18);
-    musicBtn.endFill();
-    musicBtn.interactive = true;
-    musicBtn.buttonMode = true;
-    musicBtn.x = iconBtnSize/2 + iconSpacing/2;
-
-    const musicIcon = new PIXI.Text(isMusicEnabled ? '♪' : '♫', {
-        fontSize: iconFontSize,
-        fill: 0xFFFFFF,
-        fontWeight: 'bold',
-        fontFamily: 'Arial',
-    });
-    musicIcon.anchor.set(0.5);
-    musicIcon.x = 0;
-    musicIcon.y = 0;
-    musicBtn.addChild(musicIcon);
-
-    iconsRow.addChild(soundBtn);
-    iconsRow.addChild(musicBtn);
-    popup.addChild(iconsRow);
-
-    soundBtn.on('pointerdown', (event) => {
-        event.stopPropagation();
-        isSoundEnabled = !isSoundEnabled;
-        setSoundEnabled(isSoundEnabled);
-        if (isSoundEnabled) playUiClick();
-        updateSoundIcons(soundIcon, musicIcon, isSoundEnabled, isMusicEnabled);
-    });
-
-    musicBtn.on('pointerdown', (event) => {
-        event.stopPropagation();
-        playUiClick();
-        isMusicEnabled = !isMusicEnabled;
-        setMusicEnabled(isMusicEnabled);
-        updateSoundIcons(soundIcon, musicIcon, isSoundEnabled, isMusicEnabled);
-    });
-
-    if (homeSettings) {
-        const close = createButton(popupWidth * 0.8, 60, 'ЗАКРЫТЬ', () => {
-            overlay.destroy({ children: true });
-            popup.destroy({ children: true });
-        }, 'secondary', 26);
-        close.position.set(popupWidth / 2, popupHeight - 60);
-        popup.addChild(close);
-        popupHost.addChild(popup);
-        return;
-    }
-
-    const btnW = popupWidth * 0.8;
-    const buttonLayout = getVerticalStackLayout({
-        popupHeight,
-        topY: iconsRow.y + iconBtnSize / 2 + Math.max(16, Math.round(popupHeight * 0.06)),
-        itemCount: 3,
-        bottomPadding: Math.max(18, Math.round(popupHeight * 0.07)),
-        preferredHeight: 70,
-        preferredGap: 20,
-        minHeight: 44,
-        minGap: 10
-    });
-    const btnH = buttonLayout.itemHeight;
-    const btnSpacing = buttonLayout.gap;
-    const btnFontSize = Math.max(20, Math.min(30, Math.round(btnH * 0.42)));
-
-    // Game buttons container
-    const buttonsContainer = new PIXI.Container();
-    buttonsContainer.x = popupWidth / 2;
-    buttonsContainer.y = buttonLayout.startY;
-
-    // Helper function to clean up pause state
-    const cleanupPauseState = () => {
-        const overlay = gameContainer.getChildByName('pauseOverlay');
-        if (overlay) {
-            gameContainer.removeChild(overlay);
-        }
-        const popup = gameContainer.getChildByName('pausePopup');
-        if (popup) {
-            gameContainer.removeChild(popup);
-        }
-        isPaused = false;
+    overlay._backdropColor = parseInt(theme.backdrop.slice(1), 16);
+    overlay._backdropAlpha = theme.backdropAlpha;
+    overlay.beginFill(overlay._backdropColor, overlay._backdropAlpha)
+        .drawRect(0, 0, app.screen.width, app.screen.height).endFill();
+    overlay.interactive = true;
+    const close = () => {
+        overlay.destroy({ children: true });
+        popup.destroy({ children: true });
+        if (!homeSettings) isPaused = false;
     };
-
-    // Update continue button handler
-    const continueBtn = createButton(btnW, btnH, 'ПРОДОЛЖИТЬ', () => {
-        cleanupPauseState();
-        resumeGame();
-    }, 'pause', btnFontSize);
-    continueBtn.y = 0;
-    buttonsContainer.addChild(continueBtn);
-
-    // Retry button
-    const retryBtn = createButton(btnW, btnH, 'ЗАНОВО', () => {
-        closeLevelAttempt('exit', 'restart');
-        cleanupPauseState();
-        startLevel(levelData.id - 1);
-    }, 'primary', btnFontSize);
-    retryBtn.y = btnH + btnSpacing;
-    buttonsContainer.addChild(retryBtn);
-
-    // Menu button
-    const menuBtn = createButton(btnW, btnH, 'МЕНЮ', () => {
-        closeLevelAttempt('exit', 'menu');
-        cleanupPauseState();
-        if (app.stage.children.includes(gameContainer)) {
-            app.stage.removeChild(gameContainer);
-        }
-        gameContainer.removeChildren();
-        showProgressScreen();
-    }, 'secondary', btnFontSize);
-    menuBtn.y = (btnH + btnSpacing) * 2;
-    buttonsContainer.addChild(menuBtn);
-
-    popup.addChild(buttonsContainer);
-    popupHost.addChild(popup);
+    const popup = createSettingsPopup(TEXTURES, theme, loader.resources.result_layout.data.fontStack, {
+        homeSettings,
+        soundEnabled: localStorage.getItem('soundEnabled') !== 'false',
+        musicEnabled: localStorage.getItem('musicEnabled') !== 'false',
+        onSound(enabled) { setSoundEnabled(enabled); if (enabled) playUiClick(); },
+        onMusic(enabled) { playUiClick(); setMusicEnabled(enabled); },
+        onClose() { playUiClick(); close(); if (!homeSettings) resumeGame(); },
+        onRetry() { playUiClick(); closeLevelAttempt('exit', 'restart'); close(); startLevel(levelData.id - 1); },
+        onMenu() { playUiClick(); closeLevelAttempt('exit', 'menu'); close(); showProgressScreen(); }
+    });
+    fitPopup(popup, app.screen);
+    popupHost.addChild(overlay, popup);
 }
-
 function createButton(width, height, text, onClick, variant = 'primary', fontSize = 32) {
     const styles = {
         primary: { fill: THEME.primary, border: THEME.borderDark, text: THEME.white },
@@ -2964,11 +2775,6 @@ function createButton(width, height, text, onClick, variant = 'primary', fontSiz
     btn.addChild(btnText);
 
     return btn;
-}
-
-function updateSoundIcons(soundIcon, musicIcon, isSoundEnabled, isMusicEnabled) {
-    soundIcon.text = isSoundEnabled ? '🔊' : '🔇';
-    musicIcon.text = isMusicEnabled ? '♪' : '♫';
 }
 
 // Вынести удаление объекта с анимацией

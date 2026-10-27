@@ -1,4 +1,5 @@
 // Dialog content uses one coordinate system; viewport changes only transform it.
+import { safeViewport } from './adaptive-background.js';
 export const POPUP_REFERENCE = { width: 1280, height: 720, margin: 12 };
 
 export function popupTransform(viewport, width, height, appearance = 1, reference = POPUP_REFERENCE) {
@@ -18,10 +19,11 @@ export function popupTransform(viewport, width, height, appearance = 1, referenc
 }
 
 export function fitPopup(popup, viewport, width, height) {
+    viewport = safeViewport(viewport);
     if (width !== undefined) popup._popupLayout = { width, height };
     const size = popup._popupLayout;
     if (!size) return;
     const transform = popupTransform(viewport, size.width, size.height, popup._appearance ?? 1, size.reference);
     popup.scale.set(transform.scale);
-    popup.position.set(transform.x, transform.y);
+    popup.position.set(viewport.x + transform.x, viewport.y + transform.y);
 }

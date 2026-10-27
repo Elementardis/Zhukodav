@@ -1,0 +1,137 @@
+{
+  "baseViewport": [
+    1920,
+    1080
+  ],
+  "grid": {
+    "columns": 3,
+    "rows": 2,
+    "start": [
+      140,
+      145
+    ],
+    "cardSize": [
+      528,
+      430
+    ],
+    "gap": [
+      28,
+      25
+    ]
+  },
+  "headerRect": [
+    460,
+    22,
+    1160,
+    88
+  ],
+  "backRect": [
+    40,
+    24,
+    300,
+    100
+  ],
+  "localCard": {
+    "nameRect": [
+      18,
+      12,
+      486,
+      46
+    ],
+    "iconRect": [
+      60,
+      60,
+      408,
+      175
+    ],
+    "healthRect": [
+      80,
+      242,
+      368,
+      36
+    ],
+    "effectRect": [
+      32,
+      282,
+      464,
+      30
+    ],
+    "buttonRect": [
+      114,
+      318,
+      300,
+      88
+    ],
+    "selectedRect": [
+      70,
+      318,
+      388,
+      84
+    ],
+    "lockRect": [
+      204,
+      108,
+      120,
+      140
+    ],
+    "unlockRect": [
+      34,
+      290,
+      460,
+      66
+    ]
+  },
+  "palette": {
+    "panel": "#F7F7F3",
+    "outline": "#2D1738",
+    "title": "#2D1738",
+    "body": "#2D1738",
+    "button": "#30D5C1",
+    "selected": "#30D5C1"
+  },
+  "dishes": [
+    {
+      "id": "pizza",
+      "name": "Пицца",
+      "icon": "icons/pizza_icon.png"
+    },
+    {
+      "id": "pie",
+      "name": "Вишнёвый пирог",
+      "icon": "icons/pie_icon.png"
+    },
+    {
+      "id": "cake",
+      "name": "Торт",
+      "icon": "icons/cake_icon.png"
+    },
+    {
+      "id": "bundt",
+      "name": "Круговой кекс",
+      "icon": "icons/bundt_icon.png"
+    },
+    {
+      "id": "salad",
+      "name": "Греческий салат",
+      "icon": "icons/salad_icon.png"
+    },
+    {
+      "id": "dressed_herring",
+      "name": "Селёдка под шубой",
+      "icon": "icons/dressed_herring_icon.png"
+    }
+  ],
+  "scaling": "contain entire 1920x1080 scene; keep aspect ratio",
+  "fontSizes": {
+    "header": 64,
+    "cardTitle": 34,
+    "health": 28,
+    "effect": 24,
+    "button": 30,
+    "unlock": 40
+  },
+  "quality": {
+    "svgResolution": 2,
+    "textResolution": 2
+  }
+}

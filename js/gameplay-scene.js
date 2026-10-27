@@ -15,7 +15,7 @@ export const GAMEPLAY_STYLE = {
 };
 
 export const GAMEPLAY_ASSETS = [
-    ['tabletop', 'backgrounds/tabletop_1920x1080.png'],
+    ['tablecloth', 'ui/loading/assets/tablecloth_1920x1080.png'],
     ['settings', 'ui/settings_button.png'], ['plate', 'food/plate_empty.png'],
     ['hp_frame', 'gameplay/timer/hp_frame.png'], ['hp_fresh', 'gameplay/timer/hp_segment_fresh.png'], ['hp_dirty', 'gameplay/timer/hp_segment_dirty.png'],
     ...GAMEPLAY_STYLE.tools.map(t => [t.icon, `gameplay/tools/${t.icon}.png`])
@@ -32,7 +32,7 @@ export function remainingSliceIndices(life, food) {
 export function fitGameplayScene(scene, viewport) {
     const scale = Math.min(viewport.width / 1920, viewport.height / 1080);
     scene.scale.set(scale);
-    scene.position.set((viewport.width - 1920 * scale) / 2, (viewport.height - 1080 * scale) / 2);
+    scene.position.set((viewport.x || 0) + (viewport.width - 1920 * scale) / 2, (viewport.y || 0) + (viewport.height - 1080 * scale) / 2);
 }
 
 function brighten(color) {
@@ -52,7 +52,6 @@ export function buildGameplayScene(textures, { enabledColors, foodDefinition, le
         result.height = height;
         return result;
     };
-    scene.addChild(sprite('tabletop', 0, 0, 1920, 1080));
     const food = new PIXI.Container();
     food.position.set(style.food.x, style.food.y);
     food.scale.set(style.food.size / 640);

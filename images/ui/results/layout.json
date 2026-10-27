@@ -29,9 +29,9 @@
     ],
     "maxWidth": 1010,
     "fontSize": 76,
-    "fill": "#F45D53",
+    "fill": "#2D1738",
     "stroke": "#2D1738",
-    "strokeThickness": 7
+    "strokeThickness": 0
   },
   "caption": {
     "center": [

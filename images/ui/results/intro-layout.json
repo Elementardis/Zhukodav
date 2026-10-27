@@ -1,0 +1,75 @@
+{
+  "baseViewport": [
+    1920,
+    1080
+  ],
+  "panelSize": [
+    1140,
+    850
+  ],
+  "eyebrowRect": [
+    100,
+    35,
+    940,
+    52
+  ],
+  "titleRect": [
+    80,
+    95,
+    980,
+    120
+  ],
+  "iconRect": [
+    390,
+    220,
+    360,
+    330
+  ],
+  "descriptionRect": [
+    100,
+    555,
+    940,
+    110
+  ],
+  "buttonRect": [
+    327,
+    675,
+    486,
+    142
+  ],
+  "fontSizes": {
+    "eyebrow": 32,
+    "title": 70,
+    "description": 32,
+    "descriptionMin": 28,
+    "button": 42
+  },
+  "popupTheme": {
+    "panel": "#F7F7F3",
+    "outline": "#2D1738",
+    "title": "#2D1738",
+    "body": "#2D1738",
+    "primaryButton": "#30D5C1",
+    "primaryText": "#2D1738",
+    "secondaryButton": "#E5E8E6",
+    "secondaryText": "#2D1738",
+    "backdrop": "#2D1738",
+    "backdropAlpha": 0.58
+  },
+  "sharedAssets": {
+    "panel": "shared/panel.svg",
+    "button_primary": "shared/button_primary.svg",
+    "button_menu": "shared/button_menu.svg",
+    "home": "shared/home.svg",
+    "retry": "shared/retry.svg",
+    "next": "shared/next.svg"
+  },
+  "runtimeBugTexture": "getTextureForType(cfg.type)",
+  "descriptionField": "cfg.descryption",
+  "buttonText": "ПОНЯТНО!",
+  "runtimeNewArtRequired": false,
+  "sample": {
+    "title": "Обычный жук",
+    "description": "Норовит добраться до еды.\nНажми на него, чтобы остановить.\nДостаточно одного нажатия."
+  }
+}

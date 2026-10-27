@@ -140,7 +140,7 @@ export const HOME_ASSETS = HOME_LAYOUT.layers.map(layer => ({
     name: `home_${layer.name}`, path: `images/home/${layer.name}.png`
 }));
 
-export function createHomeScreen(textures, { onPlay, onSettings }) {
+export function createHomeScreen(textures, { onPlay, onSettings, onDishes }) {
     const homeContainer = new PIXI.Container();
     homeContainer.name = 'homeContainer';
     homeContainer.sortableChildren = true;
@@ -168,7 +168,7 @@ export function createHomeScreen(textures, { onPlay, onSettings }) {
             homeContainer.addChild(sprite);
         }
         const action = layer.name === '09_button_play' ? onPlay
-            : layer.name === '07_button_settings' ? onSettings : null;
+            : layer.name === '07_button_settings' ? onSettings : layer.name === '08_button_dishes' ? onDishes : null;
         if (action) {
             sprite.interactive = true;
             sprite.buttonMode = true;
@@ -184,8 +184,34 @@ export function createHomeScreen(textures, { onPlay, onSettings }) {
     return homeContainer;
 }
 
-export function layoutHomeScreen(homeContainer, { width, height }) {
-    const scale = Math.min(width / HOME_LAYOUT.canvas.width, height / HOME_LAYOUT.canvas.height);
+export function layoutHomeScreen(homeContainer, { width, height, x = 0, y = 0, fullWidth = width, fullHeight = height }) {
+    const portrait = width < height;
+    const home = homeContainer.name === 'homeContainer';
+    const logical = home ? (portrait ? {width:1080,height:1920} : HOME_LAYOUT.canvas) : (homeContainer.logicalSize || HOME_LAYOUT.canvas);
+    if (home) {
+        const positions = {
+            '02_decor':[0,0,1080,284], '03_banner':[40,100,900,306],
+            '04_mascot':[30,430,490,800], '05_table':[-300,550,1672,904],
+            '07_button_settings':[880,20,150,141], '08_button_dishes':[130,1550,330,260],
+            '09_button_play':[580,1490,360,360]
+        };
+        for (const layer of HOME_LAYOUT.layers) {
+            const item=homeContainer.children.find(c=>c.name===layer.name);
+            if(!item) continue;
+            const [lx,ly,lw,lh]=portrait&&positions[layer.name]?positions[layer.name]:[layer.x,layer.y,layer.width,layer.height];
+            item.position.set(lx,ly);item.width=lw;item.height=lh;
+        }
+        const dish=homeContainer.children.find(c=>c.name==='dishContainer');
+        if(dish)dish.position.set(portrait?350:760,portrait?770:388);
+    }
+    const scale = Math.min(width / logical.width, height / logical.height);
     homeContainer.scale.set(scale);
-    homeContainer.position.set((width - 1920 * scale) / 2, (height - 1080 * scale) / 2);
+    homeContainer.position.set(x+(width-logical.width*scale)/2,y+(height-logical.height*scale)/2);
+    // Cover the viewport with the room, independently of safe-area content fitting.
+    const background=homeContainer.children.find(c=>c.name==='01_background');
+    if(background){
+        const cover=Math.max(fullWidth/1920,fullHeight/1080);
+        background.width=1920*cover/scale;background.height=1080*cover/scale;
+        background.position.set(((fullWidth-1920*cover)/2-homeContainer.position.x)/scale,((fullHeight-1080*cover)/2-homeContainer.position.y)/scale);
+    }
 }

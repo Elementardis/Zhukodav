@@ -36,6 +36,17 @@ export async function initBackend() {
 
 export function currentUserId() { return auth.currentUser?.uid || null; }
 
+// Preferences share the existing progress document; byLevel progress is untouched.
+export async function loadDishPreference() {
+  const uid = currentUserId(); if (!uid) return null;
+  const snap = await getDoc(doc(db, 'progress', uid));
+  return snap.exists() ? snap.data().selectedDishId ?? null : null;
+}
+export async function saveDishPreference(selectedDishId) {
+  const uid = currentUserId(); if (!uid) return;
+  await setDoc(doc(db, 'progress', uid), { selectedDishId }, { merge: true });
+}
+
 /** Удалённая версия уровня (Firestore: levels/{id}) */
 export async function fetchRemoteLevel(levelId) {
   const snap = await getDoc(doc(db, "levels", String(levelId)));

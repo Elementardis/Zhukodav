@@ -34,8 +34,9 @@ for (const [width, height] of [[1920,1080], [960,540], [1280,590], [390,844]]) {
     context.layoutHomeScreen(home, { width, height });
     assert.equal(home.scale.x, home.scale.y);
     assert.ok(home.position.x >= 0 && home.position.y >= 0);
-    assert.ok(home.position.x + 1920 * home.scale.x <= width + 1e-8);
-    assert.ok(home.position.y + 1080 * home.scale.y <= height + 1e-8);
+    const portrait = width < height;
+    assert.ok(home.position.x + (portrait ? 1080 : 1920) * home.scale.x <= width + 1e-8);
+    assert.ok(home.position.y + (portrait ? 1920 : 1080) * home.scale.y <= height + 1e-8);
 }
 const game = fs.readFileSync('game.js', 'utf8');
 const next = game.slice(game.indexOf('function getNextPlayableLevelIndex()'), game.indexOf('function clearProgressPopup()'));
