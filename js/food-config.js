@@ -3,13 +3,13 @@
 // null — закрыто, «Скоро». Например, unlockLevel: 5 открывает блюдо после уровня 5.
 export const FOOD_TYPES = Object.freeze({
     pizza: Object.freeze({ name: 'Пицца', pieces: 8, unlockLevel: 0, partsPath: 'images/food/pizza', filePrefix: 'pizza_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2]) }),
-    cake: Object.freeze({ name: 'Торт', pieces: 6, unlockLevel: null, partsPath: 'images/food/cake', filePrefix: 'cake_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 1, 2]) }),
-    pie: Object.freeze({ name: 'Пирог', pieces: 10, unlockLevel: null, partsPath: 'images/food/pie', filePrefix: 'pie_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2, 9, 10]) }),
-    bundt_cake: Object.freeze({ name: 'Круговой кекс', pieces: 12, unlockLevel: null, partsPath: 'images/food/bundt_cake', filePrefix: 'bundt_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2, 9, 10, 11, 12
+    cake: Object.freeze({ name: 'Торт', pieces: 6, unlockLevel: 30, partsPath: 'images/food/cake', filePrefix: 'cake_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 1, 2]) }),
+    pie: Object.freeze({ name: 'Пирог', pieces: 10, unlockLevel: 7, partsPath: 'images/food/pie', filePrefix: 'pie_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2, 9, 10]) }),
+    bundt_cake: Object.freeze({ name: 'Круговой кекс', pieces: 12, unlockLevel: 16, partsPath: 'images/food/bundt_cake', filePrefix: 'bundt_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2, 9, 10, 11, 12
     ]) }),
-    greek_salad: Object.freeze({ name: 'Греческий салат', pieces: 5, unlockLevel: null, partsPath: 'images/food/greek_salad', filePrefix: 'salad_', removalOrder: Object.freeze([1, 2, 3, 4, 5]), drawOrder: Object.freeze([5, 4, 3, 2, 1]) }),
+    greek_salad: Object.freeze({ name: 'Греческий салат', pieces: 5, unlockLevel: 25, partsPath: 'images/food/greek_salad', filePrefix: 'salad_', removalOrder: Object.freeze([1, 2, 3, 4, 5]), drawOrder: Object.freeze([5, 4, 3, 2, 1]) }),
     // First lost life hides 07, then 06, down to 01.
-    dressed_herring: Object.freeze({ name: 'Селёдка под шубой', pieces: 7, unlockLevel: null, partsPath: 'images/food/dressed_herring', filePrefix: 'dressed_herring_', removalOrder: Object.freeze([7, 6, 5, 4, 3, 2, 1]) })
+    dressed_herring: Object.freeze({ name: 'Селёдка под шубой', pieces: 7, unlockLevel: 35, partsPath: 'images/food/dressed_herring', filePrefix: 'dressed_herring_', removalOrder: Object.freeze([7, 6, 5, 4, 3, 2, 1]) })
 });
 
 export function isFoodUnlocked(food, completedLevels = []) {
@@ -28,8 +28,8 @@ export function getFoodDefinition(level) {
     };
 }
 
-// Only load foods used by levels; catalog entries may await their artwork.
-export function getFoodAssets(levels) {
+// Preload every selectable dish; the player's choice is independent of levels.
+export function getFoodAssets(levels = Object.keys(FOOD_TYPES).map(food => ({ food }))) {
     return [...new Set(levels.map(level => level.food))].flatMap(id => {
         const food = getFoodDefinition({ food: id });
         return Array.from({ length: food.pieces }, (_, i) => ({

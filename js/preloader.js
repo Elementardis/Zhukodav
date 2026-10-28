@@ -11,7 +11,27 @@
     safeProbe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;padding:var(--safe-top,env(safe-area-inset-top,0px)) var(--safe-right,env(safe-area-inset-right,0px)) var(--safe-bottom,env(safe-area-inset-bottom,0px)) var(--safe-left,env(safe-area-inset-left,0px))';
     overlay.appendChild(safeProbe);
     let scene, reveal, fraction = 0, failed = false, disposed = false;
-    let frame = 0, timer = 0, resizeFrame = 0;
+    let frame = 0, timer = 0, resizeFrame = 0, waveTimer = 0, finishing = false, wave = 0;
+    const bugAnimations = new Set();
+    const bugButtons = new Set();
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+    const syncBugMotion = () => {
+        for (const animation of bugAnimations) {
+            if (document.hidden || reducedMotion.matches) animation.pause();
+            else animation.play();
+        }
+    };
+    const stopBugs = () => {
+        clearTimeout(waveTimer);waveTimer=0;
+        for (const animation of bugAnimations) animation.cancel();
+        bugAnimations.clear();
+        for (const button of bugButtons) button.disabled = true;
+        bugButtons.clear();
+        document.removeEventListener('visibilitychange', syncBugMotion);
+        reducedMotion.removeEventListener('change', syncBugMotion);
+    };
+    document.addEventListener('visibilitychange', syncBugMotion);
+    reducedMotion.addEventListener('change', syncBugMotion);
     const root = 'images/ui/loading/';
     const resize = () => {
         if (!scene) return;
@@ -34,6 +54,7 @@
     const error = (message = 'Не удалось загрузить игру. Проверьте соединение и повторите попытку.') => {
         if (disposed) return;
         failed = true;
+        stopBugs();
         overlay.removeAttribute('role');
         overlay.removeAttribute('aria-valuenow');
         clearTimeout(timer);
@@ -56,6 +77,8 @@
     window.visualViewport?.addEventListener('resize', scheduleResize);
     const finish = () => {
         if (failed || disposed) return;
+        finishing = true;
+        stopBugs();
         update(1);
         frame = requestAnimationFrame(() => {
             frame = requestAnimationFrame(() => {
@@ -90,11 +113,17 @@
         if (disposed) return;
         scene = document.createElement('div');
         scene.className = 'loading-scene';
-        scene.setAttribute('aria-hidden', 'true');
         scene.logicalWidth = layout.canvas.width;
         scene.logicalHeight = layout.canvas.height;
         Object.assign(scene.style, { width: `${layout.canvas.width}px`, height: `${layout.canvas.height}px` });
-        entries.forEach((entry, index) => {
+        const spawnWave = () => {
+            waveTimer=0;
+            if(failed||disposed||finishing)return;
+            wave++;
+            entries.forEach((entry,index)=>{if(!entry.rect)renderEntry(entry,index);});
+            syncBugMotion();
+        };
+        const renderEntry = (entry, index) => {
             if (entry.id === 'cloth') return; // Full-viewport CSS background is the only cloth.
             const image = images[index];
             image.style.position = 'absolute';
@@ -115,13 +144,43 @@
                 }
             } else {
                 const scale = Math.min(entry.max_size[0] / image.naturalWidth, entry.max_size[1] / image.naturalHeight);
-                Object.assign(image.style, { left: `${entry.center[0]}px`, top: `${entry.center[1]}px`, width: `${image.naturalWidth * scale}px`, height: `${image.naturalHeight * scale}px`, transform: `translate(-50%, -50%) rotate(${entry.rotation_radians}rad)` });
+                const button = document.createElement('button');
+                button.type = 'button'; button.className = 'loading-bug';
+                button.setAttribute('aria-label', 'Убрать жука');
+                Object.assign(button.style, { position: 'absolute', left: `${entry.center[0]}px`, top: `${entry.center[1]}px`, width: `${image.naturalWidth * scale}px`, height: `${image.naturalHeight * scale}px`, zIndex: entry.z, transform: `translate(-50%, -50%) rotate(${entry.rotation_radians}rad)` });
+                Object.assign(image.style, { position: 'static', width: '100%', height: '100%', pointerEvents: 'none' });
+                button.appendChild(image); scene.appendChild(button); bugButtons.add(button);
+                const angle = Math.atan2(entry.target[1] - entry.center[1], entry.target[0] - entry.center[0]);
+                const dx = Math.cos(angle) * 65, dy = Math.sin(angle) * 65;
+                const pose = (x,y,turn) => `translate(-50%, -50%) translate(${x}px, ${y}px) rotate(${entry.rotation_radians+turn}rad)`;
+                const animation = button.animate([
+                    { transform: pose(0,0,0) }, { transform: pose(dx,dy,-0.12) },
+                    { transform: pose(dx*0.4-dy*0.35,dy*0.4+dx*0.35,0.12) }, { transform: pose(0,0,0) }
+                ], { duration: 3500 + index * 170, iterations: Infinity, easing: 'ease-in-out' });
+                bugAnimations.add(animation);
+                if(wave && !reducedMotion.matches) {
+                    const entrance=button.animate([{transform:pose(entry.center[0]<960?-entry.center[0]-200:2120-entry.center[0],0,0)},{transform:pose(0,0,0)}],{duration:650+index*35,easing:'ease-out'});
+                    bugAnimations.add(entrance);entrance.onfinish=()=>bugAnimations.delete(entrance);
+                }
+                const dismiss = event => {
+                    if (button.disabled || failed || disposed || finishing) return;
+                    event.preventDefault(); event.stopPropagation();
+                    button.disabled = true;
+                    for(const motion of button.getAnimations()){motion.cancel();bugAnimations.delete(motion);}
+                    bugButtons.delete(button);button.remove();
+                    if(!bugButtons.size&&!waveTimer)waveTimer=setTimeout(spawnWave,350);
+                };
+                button.addEventListener('pointerdown', dismiss);
+                button.addEventListener('click', dismiss); // Keyboard activation.
+                return;
             }
             scene.appendChild(image);
-        });
+        };
+        entries.forEach(renderEntry);
         overlay.prepend(scene);
         if (!failed) fallback.hidden = true;
         resize();
+        if (failed) stopBugs(); else syncBugMotion();
     })().catch(error => { console.warn('Loading artwork unavailable; using CSS fallback.', error); });
     window.gamePreloader = { ready, update, error, finish };
 })();

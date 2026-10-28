@@ -754,7 +754,7 @@ const SPRITE_PATHS = [
     ...DISH_ASSETS,
     ...GAMEPLAY_ASSETS,
     ...RESULT_ASSETS,
-    ...getFoodAssets(levels),
+    ...getFoodAssets(),
     { name: 'bug', path: 'images/bugs/bug.png' },
     { name: 'healer', path: 'images/bugs/healer.png' },
     { name: 'bomb', path: 'images/bugs/bomb.png' },
@@ -1816,7 +1816,10 @@ function startLevel(index) {
   removeProgressScreenFromStage();
   app.stage.addChild(gameContainer);
   gameContainer.addChild(rootUI);
-  levelData = levels[index];
+  const food = normalizeDish(selectedDishId, getCompletedLevels());
+  if (food !== selectedDishId) selectDish(food);
+  // Snapshot the selected food for this run; never mutate the level catalog.
+  levelData = { ...levels[index], food };
 
   maxSimultaneousObjects = levelData.params.maxObjects;
 
@@ -2133,6 +2136,7 @@ function hitFoodBug(obj) {
         return;
     }
     playBugClick();
+    if (colored && isColorHeld(type.split('_')[1])) showColorHit(obj, type.split('_')[1]);
     obj.data.clicks = Math.max(0, (obj.data.clicks ?? 1) - 1);
     const count = obj.getChildByName('clickText');
     if (count) count.text = String(obj.data.clicks);
@@ -2238,6 +2242,9 @@ function advanceGameplay(dt) {
             if (effect.animationFrames) {
                 const elapsed = effect.durationMs - effect.remainingMs;
                 effect.texture = effect.animationFrames[Math.min(effect.animationFrames.length - 1, Math.floor(elapsed / 100))];
+            } else if (effect.colorHit) {
+                const progress=1-Math.max(0,effect.remainingMs)/effect.durationMs;
+                effect.alpha=1-progress;effect.scale.set(0.65+progress*0.9);
             } else effect.alpha = Math.max(0, effect.remainingMs / 250);
             if (effect.remainingMs <= 0) effect.destroy({ children: true });
         }
@@ -2277,6 +2284,23 @@ function advanceGameplay(dt) {
     updateUI(dt);
 }
 
+
+function showColorHit(obj, color) {
+    const effect = new PIXI.Graphics();
+    effect.name = 'colorHit'; effect.colorHit = true;
+    const tint = GAMEPLAY_STYLE.tools.find(tool => tool.color === color).fill;
+    const radius = obj.radius * 0.75;
+    effect.lineStyle(4, tint, 0.95).drawCircle(0, 0, radius);
+    for(let i=0;i<6;i++) {
+        const angle=i*Math.PI/3;
+        effect.lineStyle(4,tint).moveTo(Math.cos(angle)*(radius+8),Math.sin(angle)*(radius+8))
+            .lineTo(Math.cos(angle)*(radius+19),Math.sin(angle)*(radius+19));
+    }
+    effect.position.set(obj.x, obj.y + (obj.hop?.y || 0));
+    effect.interactive = false; effect.scale.set(0.65);
+    effect.durationMs = effect.remainingMs = 260;
+    currentGameUI.effects.addChild(effect);
+}
 
 function showExplosion(x, y) {
     const blast = new PIXI.Sprite(bombAnimationFrames[0]);

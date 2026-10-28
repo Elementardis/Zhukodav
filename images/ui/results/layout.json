@@ -88,14 +88,14 @@
     "lose": {
       "art": "assets/illustration_lose.png",
       "title": "Ой! Всё съели…",
-      "caption": "Жуки утащили весь обед!",
+      "caption": "Жуки утащили угощение!",
       "primary": "ПОПРОБОВАТЬ\nЕЩЁ РАЗ",
       "icon": "assets/retry.svg"
     },
     "win": {
       "art": "assets/illustration_win.png",
       "title": "Ура! Вкуснятина!",
-      "caption": "Обед спасён!",
+      "caption": "Праздник спасён!",
       "primary": "СЛЕДУЮЩИЙ\nУРОВЕНЬ",
       "icon": "assets/next.svg"
     }

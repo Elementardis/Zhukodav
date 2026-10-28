@@ -78,6 +78,8 @@ const server = http.createServer((req,res) => {
     try {
         let data = file === path.join(root,'firebase.js') ? backend : fs.readFileSync(file);
         if (file === path.join(root,'game.js')) data = data.toString() + expose;
+        // Gameplay/UI suites are independent of the user's editable story sequence.
+        if (file === path.join(root,'cutscenes.js') && !process.argv.includes('--cutscenes') && !process.argv.includes('--story-layout')) data = 'export const cutscenes = [];';
         // Test fixture only: production unlock levels stay user-configured.
         if (process.argv.includes('--dishes') && file === path.join(root,'js','food-config.js')) {
             data = data.toString().replace("name: 'Пирог', pieces: 10, unlockLevel: null", "name: 'Пирог', pieces: 10, unlockLevel: 2");
@@ -117,6 +119,19 @@ async function main() {
     const deadline=Date.now()+45000;
     while(!await evaluate('!!window.gameTest?.ready()')) {if(Date.now()>deadline)throw Error('Loading timeout: '+await evaluate('document.querySelector(' + JSON.stringify('[role=status]') + ')?.textContent')+' '+errors.join('\n'));await new Promise(r=>setTimeout(r,250));}
     assert.equal(await evaluate('document.fonts.check(\'700 32px "Balsamiq Sans"\')'),true);
+    if (process.argv.includes('--story-layout')) {
+        await evaluate('localStorage.removeItem("zhukodav.cutscenes.v1");gameTest.start()');
+        const deadline=Date.now()+10000;
+        while(!await evaluate('gameTest.cutscene?.imageCount')){if(Date.now()>deadline)throw Error('Story image timeout');await new Promise(r=>setTimeout(r,100));}
+        for(const [width,height] of [[1920,1080],[1912,905],[852,393],[2560,1080]]) {
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+            await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+            await evaluate('gameTest.render()');
+            assert.equal(await evaluate(`(()=>{const t=gameTest.cutscene.root.getChildByName('cutsceneTable'),b=t.getBounds(),c=gameTest.cutscene.root.getChildByName('cutsceneContent');return t.scale.x===c.scale.x&&t.scale.y===c.scale.y&&Math.abs(b.x+b.width-${width})<.01&&Math.abs(b.y+b.height-${height})<.01;})()`),true);
+            const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts',`story-layout-${width}.png`),Buffer.from(data,'base64'));
+        }
+        assert.deepEqual(errors,[]);console.log('Story layout passed: four viewports, actual configured mascot, table covers viewport edges.');await send('Browser.close');return;
+    }
     if (process.argv.includes('--cutscenes')) {
         const click=async()=>{await evaluate('gameTest.cutscene.root.getChildByName("cutsceneContent").getChildByName("cutsceneNext").emit("pointertap")');};
         await evaluate('gameTest.start()');
@@ -215,6 +230,24 @@ async function main() {
         await evaluate(`document.body.innerHTML = ${JSON.stringify(markup.match(/<body>([\s\S]*)<\/body>/)[1])}; delete window.gamePreloader;`);
         await evaluate(fs.readFileSync(path.join(root,'js/preloader.js'),'utf8'));
         await evaluate('gamePreloader.ready');
+        const bugCount=await evaluate('document.querySelectorAll(".loading-bug").length');
+        assert.ok(bugCount>1);
+        const pose=await evaluate('getComputedStyle(document.querySelector(".loading-bug")).transform');
+        await new Promise(r=>setTimeout(r,200));
+        assert.notEqual(await evaluate('getComputedStyle(document.querySelector(".loading-bug")).transform'),pose);
+        const bugPoint=await evaluate('(()=>{const b=document.querySelector(".loading-bug").getBoundingClientRect();return {x:b.x+b.width/2,y:b.y+b.height/2};})()');
+        await cdp('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...bugPoint});
+        await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...bugPoint});
+        assert.equal(await evaluate('document.querySelectorAll(".loading-bug").length'),bugCount-1);
+        const touchPoint=await evaluate('(()=>{const b=document.querySelector(".loading-bug").getBoundingClientRect();return {x:b.x+b.width/2,y:b.y+b.height/2};})()');
+        await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...touchPoint,id:1}]});
+        await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+        assert.equal(await evaluate('document.querySelectorAll(".loading-bug").length'),bugCount-2);
+        await evaluate('document.querySelectorAll(".loading-bug").forEach(b=>b.click())');
+        assert.equal(await evaluate('document.querySelectorAll(".loading-bug").length'),0);
+        await new Promise(r=>setTimeout(r,500));
+        assert.equal(await evaluate('document.querySelectorAll(".loading-bug").length'),bugCount);
+        assert.equal(await evaluate('document.getElementById("preloader").getAttribute("aria-valuenow")'),'0');
         for (const [width,height] of [[1920,1080],[1280,720],[852,393],[844,390],[1024,768],[2560,1080],[390,844]]) {
             await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
             await evaluate('window.dispatchEvent(new Event("resize"))');
@@ -231,6 +264,7 @@ async function main() {
             assert.deepEqual(widths,[1072,progress*100]);
         }
         await evaluate('gamePreloader.error()');
+        assert.equal(await evaluate('document.querySelector(".loading-scene").getAnimations({subtree:true}).length'),0);
         assert.equal(await evaluate('document.querySelector(".loading-fallback button").hidden'),false);
         assert.equal(await evaluate('document.querySelectorAll("#preloader").length'),1);
         assert.deepEqual(errors,[]);
@@ -303,6 +337,7 @@ async function main() {
                 if(kind==='dishes')await evaluate('gameTest.dishes()');
                 await evaluate('gameTest.render()');
                 const scene=kind==='home'?'homeScene':'dishScene';
+                if(kind==='home')assert.equal(await evaluate(`(()=>{const b=gameTest.homeScene.getChildByName('05_table').getBounds();return b.x+b.width>=${width}-.01;})()`),true);
                 assert.equal(await evaluate(`(()=>{const b=gameTest.${scene}.getChildByName('01_background').getBounds();return b.x<=0.01&&b.y<=0.01&&b.x+b.width>=${width}-.01&&b.y+b.height>=${height}-.01;})()`),true);
                 const names=kind==='home'?['07_button_settings','08_button_dishes','09_button_play']:['dishCard_pizza','dishCard_pie','dishCard_cake','dishCard_bundt_cake','dishCard_greek_salad','dishCard_dressed_herring','dishBack'];
                 for(const name of names)assert.equal(await evaluate(`(()=>{const b=gameTest.${scene}.getChildByName('${name}').getBounds();return b.x>=19&&b.y>=-1&&b.x+b.width<=${width}+1&&b.y+b.height<=${height}+1;})()`),true,`${kind} ${name} ${width}x${height}`);
@@ -341,17 +376,27 @@ async function main() {
         })()`);
         await evaluate('localStorage.setItem("completedLevels","[1]")');
         assert.equal(await evaluate('gameTest.selectDish("pie")'),true);
+        await evaluate('gameTest.start()');
+        assert.equal(await evaluate('gameTest.snapshot().life'),10);
+        assert.equal(await evaluate('gameTest.indicators().slices'),10);
+        await evaluate('gameTest.start()');
+        assert.equal(await evaluate('gameTest.snapshot().life'),10);
+        await evaluate('gameTest.home();gameTest.dishes()');
         await evaluate('gameTest.dishScene.getChildByName("dishBack").emit("pointertap");gameTest.dishes();gameTest.dishScene.getChildByName("dishBack").emit("pointertap")');
         assert.equal(await evaluate('gameTest.isHome()'),true);
         await cdp('Page.reload');
         const reloadEnd=Date.now()+45000;
         while(!await evaluate('!!window.gameTest?.ready()')){if(Date.now()>reloadEnd)throw Error('reload timeout');await new Promise(r=>setTimeout(r,250));}
         assert.equal(await evaluate('gameTest.selectedDish'),'pie');
+        await evaluate('gameTest.start()');
+        assert.equal(await evaluate('gameTest.indicators().slices'),10);
         await evaluate('localStorage.setItem("selectedDishId","invalid")');
         await cdp('Page.reload');
         const end=Date.now()+45000;
         while(!await evaluate('!!window.gameTest?.ready()')){if(Date.now()>end)throw Error('reload timeout');await new Promise(r=>setTimeout(r,250));}
         assert.equal(await evaluate('gameTest.selectedDish'),'pizza');
+        await evaluate('gameTest.start()');
+        assert.equal(await evaluate('gameTest.snapshot().life'),8);
         assert.deepEqual(errors,[]);
         console.log('Dishes passed: six cards, three sizes, locked selection, character-level policy, back/reopen, reload and invalid-ID fallback.');
         await send('Browser.close');return;
@@ -472,6 +517,7 @@ async function main() {
         await evaluate(`gameTest.spawn('coloredBug_${color}'); gameTest.hold('${color}'); gameTest.hit(); gameTest.release('${color}');`);
         const pose = await evaluate('gameTest.objects.map(o=>({x:o.x,y:o.y,hop:o.hop.y,alpha:o.alpha,scale:o.body.scale.x}))');
         await check('gameTest.objects[0].alpha',0.3);
+        await check('gameTest.ui.effects.children.some(e=>e.name==="colorHit")',true);
         await check('gameTest.objects[0].interactive',false);
         const scoreBeforeRepeat = await evaluate('gameTest.snapshot().score');
         await evaluate('gameTest.hit();gameTest.step(499)');

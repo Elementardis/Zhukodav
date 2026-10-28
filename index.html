@@ -18,6 +18,8 @@
     canvas { display: block; margin: 0; image-rendering: auto; }
     #preloader { position: fixed; inset: 0; z-index: 9999; background: #65b3c1 url('images/ui/loading/assets/tablecloth_1920x1080.png') center/cover no-repeat; overflow: hidden; transition: opacity 300ms; font-family: Arial, sans-serif; color: #321638; }
     .loading-scene { position: absolute; left: 50%; top: 50%; transform-origin: center; overflow: hidden; pointer-events: none; }
+    .loading-bug { pointer-events: auto; cursor: pointer; border: 0; padding: 0; background: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    .loading-bug:focus-visible { outline: 5px solid #2D1738; outline-offset: 4px; border-radius: 50%; }
     .loading-fallback { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(80vw, 500px); padding: 24px; border-radius: 24px; background: #fffaf0; text-align: center; }
     .loading-fallback [role="progressbar"] { height: 24px; border: 4px solid #321638; border-radius: 20px; overflow: hidden; }
     .loading-fallback [role="progressbar"] > div { width: 0; height: 100%; background: #00c5ba; }

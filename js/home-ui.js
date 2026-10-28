@@ -207,6 +207,11 @@ export function layoutHomeScreen(homeContainer, { width, height, x = 0, y = 0, f
     const scale = Math.min(width / logical.width, height / logical.height);
     homeContainer.scale.set(scale);
     homeContainer.position.set(x+(width-logical.width*scale)/2,y+(height-logical.height*scale)/2);
+    if (home) {
+        const table=homeContainer.children.find(c=>c.name==='05_table');
+        // Extend only the decorative tabletop; keep its height and the dish position.
+        if(table)table.width=Math.max(table.width,(fullWidth-homeContainer.position.x)/scale-table.position.x);
+    }
     // Cover the viewport with the room, independently of safe-area content fitting.
     const background=homeContainer.children.find(c=>c.name==='01_background');
     if(background){

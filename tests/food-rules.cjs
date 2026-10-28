@@ -101,8 +101,8 @@ context.advanceApproach(timed,1.000001,rect);
 assert.equal(timed.state,'atFood');
 assert.ok(Math.abs(timed.reactionRemainingMs-400)<0.001);
 vm.runInContext(fs.readFileSync('levels.js','utf8').replace('export default levels;','globalThis.testLevels = levels;'),context);
-assert.ok(context.testLevels.every(level => context.getFoodDefinition(level) && !('lifeCount' in level)));
-for (const asset of context.getFoodAssets(context.testLevels)) {
+assert.ok(context.testLevels.every(level => !('food' in level) && !('lifeCount' in level)));
+for (const asset of context.getFoodAssets()) {
     assert.ok(fs.existsSync(asset.path), `Missing food image: ${asset.path}`);
 }
 for (const asset of vm.runInContext('GAMEPLAY_ASSETS', context)) {
