@@ -7,7 +7,9 @@ import { safeViewport, viewportSize, createAdaptiveBackground } from './js/adapt
 import { DISH_ASSETS, DISH_IDS, normalizeDish, canSelectDish, createDishSelect, fitDishIcon } from './js/dish-select.js';
 import { loadDishPreference, saveDishPreference } from './firebase.js';
 import { RESULT_ASSETS, createResultPopup } from './js/result-popup.js';
-import { getFoodDefinition, getFoodMaxLives, getFoodAssets } from './js/food-config.js';
+import { awardFoodLoot, readFoodProgress, saveFoodProgress } from './js/food-progress.js';
+import { FOOD_TEST_MODE } from './js/food-test-config.js';
+import { getFoodDefinition, getFoodMaxLives, getFoodAssets, getFoodBugLimit } from './js/food-config.js';
 import { GAMEPLAY_ASSETS, GAMEPLAY_STYLE, buildGameplayScene, fitGameplayScene } from './js/gameplay-scene.js';
 import { FOOD_RULES, levelDurationMs, weightedType, shuffledSides, chooseEntry, createApproach, createCrossing, advanceApproach } from './js/food-rules.js';
 import levels from './levels.js';
@@ -550,7 +552,7 @@ function runCutscenes(when, won, continuation) {
     });
 }
 
-// Runtime balance is always derived from base bug config * level multipliers.
+// Runtime movement time combines base bug config, level multiplier and selected food.
 function getLevelLifetimeMultiplier(type) {
     const multiplier = levelData?.params?.lifetimeMultiplier ?? 1;
     if (typeof multiplier === 'number') return multiplier;
@@ -579,9 +581,9 @@ function getRuntimeBugBalance(type) {
     const lifetimeMultiplier = getLevelLifetimeMultiplier(type);
     const spawnIntervalMultiplier = getLevelSpawnIntervalMultiplier(type);
 
-    // Итоговые параметры жука считаются из базовых значений вида * коэффициенты уровня.
+    // Время движения: базовое время вида × коэффициент уровня × коэффициент блюда.
     return {
-        lifetime: baseBalance.lifetime * lifetimeMultiplier,
+        lifetime: baseBalance.lifetime * lifetimeMultiplier * getFoodDefinition(levelData).effects.travelTimeMultiplier,
         spawnInterval: baseBalance.spawnInterval / spawnIntervalMultiplier,
         clicks: baseBalance.clicks,
         scoreValue: baseBalance.scoreValue ?? 1,
@@ -679,17 +681,22 @@ function syncAllColorButtonStates() {
 const levelSelectContainer = new PIXI.Container();
 let progressContainer = null;
 let dishSelectScene = null;
-let selectedDishId = normalizeDish(localStorage.getItem('selectedDishId'), getCompletedLevels());
+let selectedDishId = normalizeDish(FOOD_TEST_MODE ? readFoodProgress().selected : localStorage.getItem('selectedDishId'), getCompletedLevels());
 let dishSelectionRevision = 0;
+let lastFoodReward = null;
 function selectDish(id) {
     if (!canSelectDish(id, getCompletedLevels())) return false;
     selectedDishId = id; dishSelectionRevision++;
-    localStorage.setItem('selectedDishId', id);
-    saveDishPreference(id).catch(() => {});
+    if (!FOOD_TEST_MODE) localStorage.setItem('selectedDishId', id);
+    const foodState=readFoodProgress();foodState.selected=id;saveFoodProgress(foodState);
+    if (!FOOD_TEST_MODE) saveDishPreference(id).catch(() => {});
     updateHomeDish(); return true;
 }
 function updateHomeDish() {
-    const dish = progressContainer?.getChildByName('homeContainer')?.getChildByName('dishContainer');
+    const home=progressContainer?.getChildByName('homeContainer');
+    const foodButton=home?.getChildByName('08_button_dishes');
+    if(foodButton){let badge=foodButton.getChildByName('foodReady');if(!badge){badge=new PIXI.Text('●',{fontSize:52,fill:0xF45D53});badge.name='foodReady';badge.position.set(20,5);foodButton.addChild(badge);}badge.visible=Object.entries(readFoodProgress().foods).some(([id,p])=>!p.completed&&p.collected.length===getFoodMaxLives({food:id}));}
+    const dish = home?.getChildByName('dishContainer');
     if (!dish) return;
     const key = Object.keys(DISH_IDS).find(key => DISH_IDS[key] === selectedDishId);
     const texture = TEXTURES[`dish_${key}`];
@@ -703,7 +710,7 @@ function menuViewport() {
 function closeDishSelect() {
     if (dishSelectScene) { dishSelectScene.destroy(); dishSelectScene = null; }
 }
-function showDishSelect() {
+function showDishSelect(focusId) {
     if (dishSelectScene) return;
     clearProgressPopup();
     app.stage.removeChild(progressContainer);
@@ -712,7 +719,7 @@ function showDishSelect() {
         onSelect: id => { playUiClick(); selectDish(id); },
         onBack: () => { playUiClick(); showProgressScreen(); }
     });
-    app.stage.addChild(dishSelectScene); dishSelectScene.fit(menuViewport()); updateMobilePortraitOverlay();
+    app.stage.addChild(dishSelectScene); dishSelectScene.fit(menuViewport()); if(focusId)dishSelectScene.focus(focusId); updateMobilePortraitOverlay();
 }
 let selectedLevelIndex = null;
 
@@ -933,7 +940,7 @@ initBackend()
   .then(async () => {
       const revision = dishSelectionRevision;
       const remote = await loadDishPreference().catch(() => null);
-      if (revision === dishSelectionRevision) {
+      if (!FOOD_TEST_MODE && revision === dishSelectionRevision) {
           selectedDishId = normalizeDish(localStorage.getItem('selectedDishId') || remote, getCompletedLevels());
           localStorage.setItem('selectedDishId', selectedDishId);
           await saveDishPreference(selectedDishId).catch(() => {});
@@ -1821,7 +1828,7 @@ function startLevel(index) {
   // Snapshot the selected food for this run; never mutate the level catalog.
   levelData = { ...levels[index], food };
 
-  maxSimultaneousObjects = levelData.params.maxObjects;
+  maxSimultaneousObjects = getFoodBugLimit(levelData);
 
   score = 0;
   life = getFoodMaxLives(levelData);
@@ -2039,7 +2046,7 @@ function removeClicksCounter(container) {
 // Integrated into game.js; movement and simulation use logical scene coordinates.
 function spawnObject() {
     if (isPaused || introActive || orientationPauseActive || levelEnded || document.hidden) return;
-    if (activeObjects.filter(obj => obj.state !== 'resolved').length >= levelData.params.maxObjects) {
+    if (activeObjects.filter(obj => obj.state !== 'resolved').length >= getFoodBugLimit(levelData)) {
         scheduleNextSpawn(FOOD_RULES.retrySpawnMs);
         return;
     }
@@ -2067,7 +2074,7 @@ function spawnObject() {
     const container = new PIXI.Container();
     Object.assign(container, data.type === 'bomb'
         ? createCrossing(position, rect, side, radius, data.lifetime)
-        : createApproach(position, food, radius, data.lifetime, levelData.params.foodReactionMs ?? FOOD_RULES.reactionMs));
+        : createApproach(position, food, radius, data.lifetime, getFoodDefinition(levelData).effects.foodWaitSeconds * 1000));
     container.type = data.type;
     container.data = data;
     container.scoreValue = data.scoreValue;
@@ -2391,6 +2398,7 @@ function endGame(won) {
     recalcLeaderboard(levels.length).catch(() => {});
 
     const idx = levels.findIndex(level => level.id === levelData.id);
+    lastFoodReward = won ? awardFoodLoot(levelData) : null;
     if (won) {
         levelsSinceLastAd++;
         if (levelsSinceLastAd >= 2) {
@@ -2449,6 +2457,9 @@ function beginLevelAttempt() {
         spawnWeights,
         levelParams: {
             maxObjects: levelData.params?.maxObjects ?? null,
+            effectiveMaxObjects: getFoodBugLimit(levelData),
+            foodId: levelData.food,
+            foodEffects: getFoodDefinition(levelData).effects,
             lifetimeMultiplier: levelData.params?.lifetimeMultiplier ?? null,
             spawnMultiplier: levelData.params?.spawnMultiplier ?? null,
             objectLifetime: levelData.params?.objectLifetime ?? null,
@@ -2712,10 +2723,13 @@ function showResultPopup({ won, levelIndex }) {
         callback();
     };
     const popup = createResultPopup(TEXTURES, layout, {
-        won, hasNext, theme: loader.resources.intro_layout.data.popupTheme,
+        won, hasNext, reward: won ? lastFoodReward : null,
+        onDishes: foodId => transition(() => {showProgressScreen();showDishSelect(foodId || lastFoodReward?.received.find(r=>r.ready)?.foodId);}),
+        theme: loader.resources.intro_layout.data.popupTheme,
         onMenu: () => transition(showProgressScreen),
         onPrimary: () => transition(() => {
-            if (!won) startLevel(levelIndex);
+            if(won && lastFoodReward?.received.some(r=>r.ready)){showProgressScreen();showDishSelect(lastFoodReward.received.find(r=>r.ready).foodId);}
+            else if (!won) startLevel(levelIndex);
             else if (hasNext) startLevel(levelIndex + 1);
             else {
                 showProgressScreen();

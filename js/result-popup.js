@@ -1,13 +1,18 @@
+
+import { createWinPopup } from './win-popup.js';
 import { popupSurface } from './intro-popup.js';
 import { HEADING_FONT } from './typography.js';
 export const RESULT_ASSETS = [
+    { name: 'result_mascot', path: 'images/story/mascot_show_pizza.png', optional: true },
+    { name: 'result_mascot_happy', path: 'images/story/mascot_loves_pizza.png', optional: true },
     ...['illustration_win.png', 'illustration_lose.png', 'panel.svg', 'button_menu.svg', 'button_primary.svg', 'home.svg', 'next.svg', 'retry.svg']
         .map(file => ({ name: `result_${file.split('.')[0]}`, path: `images/ui/results/assets/${file}`, optional: true })),
     { name: 'intro_layout', path: 'images/ui/results/intro-layout.json', dataResource: true },
     { name: 'result_layout', path: 'images/ui/results/layout.json', dataResource: true }
 ];
 
-export function createResultPopup(textures, layout, { won, hasNext, onMenu, onPrimary, theme }) {
+export function createResultPopup(textures, layout, { won, hasNext, onMenu, onPrimary, theme, reward, onDishes }) {
+    if (won) return createWinPopup(textures, { hasNext, onMenu, onPrimary, theme, reward, onDishes });
     const popup = new PIXI.Container();
     popup.name = won ? 'winPopup' : 'losePopup';
     popup._popupLayout = { width: layout.panelSize[0], height: layout.panelSize[1], reference: { width: layout.baseViewport[0], height: layout.baseViewport[1] } };
@@ -40,7 +45,8 @@ export function createResultPopup(textures, layout, { won, hasNext, onMenu, onPr
     art.scale.set(Math.min(width / art.texture.width, height / art.texture.height));
     popup.addChild(art);
     popup.addChild(text(state.title, { ...layout.title, fontFamily: HEADING_FONT, fill: theme.title, strokeThickness: 0 }, layout.title.center, layout.title.maxWidth));
-    popup.addChild(text(state.caption, layout.caption, layout.caption.center, layout.caption.maxWidth));
+    const caption=text(won?'К блюдам':state.caption,layout.caption,layout.caption.center,layout.caption.maxWidth);popup.addChild(caption);
+    if(won){caption.interactive=caption.buttonMode=true;caption.on('pointertap',()=>{if(!activated){activated=true;onDishes();}});}
     let activated = false;
     const button = (name, geometry, icon, label, callback) => {
         const container = new PIXI.Container();
@@ -69,6 +75,6 @@ export function createResultPopup(textures, layout, { won, hasNext, onMenu, onPr
         popup.addChild(container);
     };
     button('resultMenu', layout.menuButton, 'home', layout.menuText, onMenu);
-    button('resultPrimary', layout.primaryButton, won ? 'next' : 'retry', won && !hasNext ? 'ВЫБОР\nУРОВНЯ' : state.primary, onPrimary);
+    button('resultPrimary', layout.primaryButton, won ? 'next' : 'retry', won && reward?.received.some(r=>r.ready) ? 'Собрать блюдо' : won && !hasNext ? 'ВЫБОР\nУРОВНЯ' : state.primary, onPrimary);
     return popup;
 }

@@ -20,6 +20,7 @@ export function popupTransform(viewport, width, height, appearance = 1, referenc
 
 export function fitPopup(popup, viewport, width, height) {
     viewport = safeViewport(viewport);
+    popup.reflow?.(viewport);
     if (width !== undefined) popup._popupLayout = { width, height };
     const size = popup._popupLayout;
     if (!size) return;

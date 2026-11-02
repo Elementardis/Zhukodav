@@ -1,7 +1,24 @@
+// История: уровни 1–40. Уровни 41–80 сохранены как резерв, без сюжетного лута.
+// Полные комплекты: салат — 6, селёдка — 14, пирог — 24, кекс — 36, торт — 40.
+// Пицца доступна сразу. Остальные блюда выбираются после ручной сборки пазла.
+// Пример награды уровня 1: foodId: 'greek_salad', pieceId: 'greek_salad_01'.
+// Каждый сюжетный уровень выдаёт один уникальный кусочек при первой победе.
 const levels = [
   {
     id: 1,
-    durationSeconds: 10,
+    lootRequired: true,
+    loot: [{ id: 'story-1', type: 'foodPiece', foodId: 'greek_salad', pieceId: 'greek_salad_01' }],
+    // Пример награды за победу: раскомментируй и назначь нужный кусочек.
+    // lootRequired: true, // Проверка контента потребует непустой loot у этого уровня.
+    // loot: [
+    //   { id: 'cake-first', type: 'foodPiece', foodId: 'cake', pieceId: 'cake_01' },
+    // ],
+    // foodId — ключ блюда из js/food-config.js; pieceId — foodId + номер с двумя цифрами.
+    // Например, у торта 6 частей: cake_01 … cake_06. Назначай каждую только одному уровню.
+    // id записи оставляй стабильным. Повторная победа не выдаёт награду снова,
+    // даже если изменить loot уже награждённого уровня. Без loot уровень не даёт кусочков.
+
+    durationSeconds: 13,
     params: {
       maxObjects: 3,
       lifetimeMultiplier: 1.1,
@@ -13,6 +30,8 @@ const levels = [
   },
   {
     id: 2,
+    lootRequired: true,
+    loot: [{ id: 'story-2', type: 'foodPiece', foodId: 'greek_salad', pieceId: 'greek_salad_02' }],
     durationSeconds: 15,
     params: {
       maxObjects: 3,
@@ -25,6 +44,8 @@ const levels = [
   },
   {
     id: 3,
+    lootRequired: true,
+    loot: [{ id: 'story-3', type: 'foodPiece', foodId: 'dressed_herring', pieceId: 'dressed_herring_01' }],
     durationSeconds: 20,
     params: {
       maxObjects: 3,
@@ -42,6 +63,8 @@ const levels = [
   },
   {
     id: 4,
+    lootRequired: true,
+    loot: [{ id: 'story-4', type: 'foodPiece', foodId: 'greek_salad', pieceId: 'greek_salad_03' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -55,6 +78,8 @@ const levels = [
   },
   {
     id: 5,
+    lootRequired: true,
+    loot: [{ id: 'story-5', type: 'foodPiece', foodId: 'greek_salad', pieceId: 'greek_salad_04' }],
     durationSeconds: 20,
     params: {
       maxObjects: 3,
@@ -71,6 +96,8 @@ const levels = [
   },
   {
     id: 6,
+    lootRequired: true,
+    loot: [{ id: 'story-6', type: 'foodPiece', foodId: 'greek_salad', pieceId: 'greek_salad_05' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -84,6 +111,8 @@ const levels = [
   },
   {
     id: 7,
+    lootRequired: true,
+    loot: [{ id: 'story-7', type: 'foodPiece', foodId: 'dressed_herring', pieceId: 'dressed_herring_02' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -98,6 +127,8 @@ const levels = [
   },
   {
     id: 8,
+    lootRequired: true,
+    loot: [{ id: 'story-8', type: 'foodPiece', foodId: 'pie', pieceId: 'pie_01' }],
     durationSeconds: 30,
     params: {
       maxObjects: 5,
@@ -116,6 +147,8 @@ const levels = [
   },
   {
     id: 9,
+    lootRequired: true,
+    loot: [{ id: 'story-9', type: 'foodPiece', foodId: 'dressed_herring', pieceId: 'dressed_herring_03' }],
     durationSeconds: 30,
     params: {
       maxObjects: 5,
@@ -130,6 +163,8 @@ const levels = [
   },
   {
     id: 10,
+    lootRequired: true,
+    loot: [{ id: 'story-10', type: 'foodPiece', foodId: 'dressed_herring', pieceId: 'dressed_herring_04' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -143,6 +178,8 @@ const levels = [
   },
   {
     id: 11,
+    lootRequired: true,
+    loot: [{ id: 'story-11', type: 'foodPiece', foodId: 'pie', pieceId: 'pie_02' }],
     durationSeconds: 30,
     params: {
       maxObjects: 3,
@@ -160,6 +197,8 @@ const levels = [
   },
   {
     id: 12,
+    lootRequired: true,
+    loot: [{ id: 'story-12', type: 'foodPiece', foodId: 'dressed_herring', pieceId: 'dressed_herring_05' }],
     durationSeconds: 30,
     params: {
       maxObjects: 3,
@@ -173,6 +212,8 @@ const levels = [
   },
   {
     id: 13,
+    lootRequired: true,
+    loot: [{ id: 'story-13', type: 'foodPiece', foodId: 'dressed_herring', pieceId: 'dressed_herring_06' }],
     durationSeconds: 35,
     params: {
       maxObjects: 4,
@@ -187,6 +228,8 @@ const levels = [
   },
   {
     id: 14,
+    lootRequired: true,
+    loot: [{ id: 'story-14', type: 'foodPiece', foodId: 'dressed_herring', pieceId: 'dressed_herring_07' }],
     durationSeconds: 30,
     params: {
       maxObjects: 3,
@@ -202,6 +245,8 @@ const levels = [
   },
   {
     id: 15,
+    lootRequired: true,
+    loot: [{ id: 'story-15', type: 'foodPiece', foodId: 'pie', pieceId: 'pie_03' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -217,6 +262,8 @@ const levels = [
   },
   {
     id: 16,
+    lootRequired: true,
+    loot: [{ id: 'story-16', type: 'foodPiece', foodId: 'bundt_cake', pieceId: 'bundt_cake_01' }],
     durationSeconds: 30,
     params: {
       maxObjects: 5,
@@ -234,6 +281,8 @@ const levels = [
   },
   {
     id: 17,
+    lootRequired: true,
+    loot: [{ id: 'story-17', type: 'foodPiece', foodId: 'pie', pieceId: 'pie_04' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -248,6 +297,8 @@ const levels = [
   },
   {
     id: 18,
+    lootRequired: true,
+    loot: [{ id: 'story-18', type: 'foodPiece', foodId: 'pie', pieceId: 'pie_05' }],
     durationSeconds: 30,
     params: {
       maxObjects: 3,
@@ -261,6 +312,8 @@ const levels = [
   },
   {
     id: 19,
+    lootRequired: true,
+    loot: [{ id: 'story-19', type: 'foodPiece', foodId: 'bundt_cake', pieceId: 'bundt_cake_02' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -276,6 +329,8 @@ const levels = [
   },
   {
     id: 20,
+    lootRequired: true,
+    loot: [{ id: 'story-20', type: 'foodPiece', foodId: 'pie', pieceId: 'pie_06' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -294,6 +349,8 @@ const levels = [
   },
   {
     id: 21,
+    lootRequired: true,
+    loot: [{ id: 'story-21', type: 'foodPiece', foodId: 'pie', pieceId: 'pie_07' }],
     durationSeconds: 30,
     params: {
       maxObjects: 5,
@@ -310,6 +367,8 @@ const levels = [
   },
   {
     id: 22,
+    lootRequired: true,
+    loot: [{ id: 'story-22', type: 'foodPiece', foodId: 'pie', pieceId: 'pie_08' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -325,6 +384,8 @@ const levels = [
   },
   {
     id: 23,
+    lootRequired: true,
+    loot: [{ id: 'story-23', type: 'foodPiece', foodId: 'pie', pieceId: 'pie_09' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -339,6 +400,8 @@ const levels = [
   },
   {
     id: 24,
+    lootRequired: true,
+    loot: [{ id: 'story-24', type: 'foodPiece', foodId: 'pie', pieceId: 'pie_10' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -354,6 +417,8 @@ const levels = [
   },
   {
     id: 25,
+    lootRequired: true,
+    loot: [{ id: 'story-25', type: 'foodPiece', foodId: 'bundt_cake', pieceId: 'bundt_cake_03' }],
     durationSeconds: 30,
     params: {
       maxObjects: 5,
@@ -369,6 +434,8 @@ const levels = [
   },
   {
     id: 26,
+    lootRequired: true,
+    loot: [{ id: 'story-26', type: 'foodPiece', foodId: 'bundt_cake', pieceId: 'bundt_cake_04' }],
     durationSeconds: 30,
     params: {
       maxObjects: 3,
@@ -384,6 +451,8 @@ const levels = [
   },
   {
     id: 27,
+    lootRequired: true,
+    loot: [{ id: 'story-27', type: 'foodPiece', foodId: 'cake', pieceId: 'cake_01' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -400,6 +469,8 @@ const levels = [
   },
   {
     id: 28,
+    lootRequired: true,
+    loot: [{ id: 'story-28', type: 'foodPiece', foodId: 'bundt_cake', pieceId: 'bundt_cake_05' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -420,6 +491,8 @@ const levels = [
   },
   {
     id: 29,
+    lootRequired: true,
+    loot: [{ id: 'story-29', type: 'foodPiece', foodId: 'bundt_cake', pieceId: 'bundt_cake_06' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -436,6 +509,8 @@ const levels = [
   },
   {
     id: 30,
+    lootRequired: true,
+    loot: [{ id: 'story-30', type: 'foodPiece', foodId: 'bundt_cake', pieceId: 'bundt_cake_07' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -451,6 +526,8 @@ const levels = [
   },
   {
     id: 31,
+    lootRequired: true,
+    loot: [{ id: 'story-31', type: 'foodPiece', foodId: 'bundt_cake', pieceId: 'bundt_cake_08' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -465,6 +542,8 @@ const levels = [
   },
   {
     id: 32,
+    lootRequired: true,
+    loot: [{ id: 'story-32', type: 'foodPiece', foodId: 'cake', pieceId: 'cake_02' }],
     durationSeconds: 30,
     params: {
       maxObjects: 4,
@@ -480,6 +559,8 @@ const levels = [
   },
   {
     id: 33,
+    lootRequired: true,
+    loot: [{ id: 'story-33', type: 'foodPiece', foodId: 'bundt_cake', pieceId: 'bundt_cake_09' }],
     durationSeconds: 60,
     params: {
       maxObjects: 4,
@@ -497,6 +578,8 @@ const levels = [
   },
   {
     id: 34,
+    lootRequired: true,
+    loot: [{ id: 'story-34', type: 'foodPiece', foodId: 'bundt_cake', pieceId: 'bundt_cake_10' }],
     durationSeconds: 60,
     params: {
       maxObjects: 4,
@@ -510,6 +593,8 @@ const levels = [
   },
   {
     id: 35,
+    lootRequired: true,
+    loot: [{ id: 'story-35', type: 'foodPiece', foodId: 'bundt_cake', pieceId: 'bundt_cake_11' }],
     durationSeconds: 60,
     params: {
       maxObjects: 4,
@@ -525,6 +610,8 @@ const levels = [
   },
   {
     id: 36,
+    lootRequired: true,
+    loot: [{ id: 'story-36', type: 'foodPiece', foodId: 'bundt_cake', pieceId: 'bundt_cake_12' }],
     durationSeconds: 60,
     params: {
       maxObjects: 4,
@@ -540,6 +627,8 @@ const levels = [
   },
   {
     id: 37,
+    lootRequired: true,
+    loot: [{ id: 'story-37', type: 'foodPiece', foodId: 'cake', pieceId: 'cake_03' }],
     durationSeconds: 60,
     params: {
       maxObjects: 4,
@@ -556,6 +645,8 @@ const levels = [
   },
   {
     id: 38,
+    lootRequired: true,
+    loot: [{ id: 'story-38', type: 'foodPiece', foodId: 'cake', pieceId: 'cake_04' }],
     durationSeconds: 60,
     params: {
       maxObjects: 4,
@@ -571,6 +662,8 @@ const levels = [
   },
   {
     id: 39,
+    lootRequired: true,
+    loot: [{ id: 'story-39', type: 'foodPiece', foodId: 'cake', pieceId: 'cake_05' }],
     durationSeconds: 60,
     params: {
       maxObjects: 4,
@@ -589,6 +682,8 @@ const levels = [
   },
   {
     id: 40,
+    lootRequired: true,
+    loot: [{ id: 'story-40', type: 'foodPiece', foodId: 'cake', pieceId: 'cake_06' }],
     durationSeconds: 60,
     params: {
       maxObjects: 3,

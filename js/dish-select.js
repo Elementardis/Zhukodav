@@ -1,11 +1,14 @@
-import { FOOD_TYPES, isFoodUnlocked } from './food-config.js';
+import { readFoodProgress, prepareFoodTest } from './food-progress.js';
+import { FOOD_TEST_MODE } from './food-test-config.js';
+import { createFoodPuzzle } from './food-puzzle.js';
+import { FOOD_TYPES, isFoodUnlocked, describeFoodEffects } from './food-config.js';
 import { HOME_LAYOUT, layoutHomeScreen } from './home-ui.js';
 import { HEADING_FONT } from './typography.js';
 
 export const DISH_IDS = { pizza: 'pizza', pie: 'pie', cake: 'cake', bundt: 'bundt_cake', salad: 'greek_salad', dressed_herring: 'dressed_herring' };
 export function canSelectDish(id, completedLevels = []) {
     if (id === 'pizza') return true;
-    return isFoodUnlocked(FOOD_TYPES[id], completedLevels);
+    return isFoodUnlocked(FOOD_TYPES[id], readFoodProgress());
 }
 export function normalizeDish(id, completedLevels = []) {
     const internal = DISH_IDS[id] || id;
@@ -35,6 +38,9 @@ export function fitDishIcon(sprite, rect, bottomAligned = false) {
 }
 export function createDishSelect(textures, layout, { getSelected, getCompletedLevels, onSelect, onBack }) {
     const scene=new PIXI.Container(); scene.name='dishSelect';
+    let puzzle=null;
+    const closePuzzle=()=>{puzzle?.destroy();puzzle=null;scene.refresh();};
+    const openPuzzle=id=>{if(puzzle)return;puzzle=createFoodPuzzle(textures,id,{onClose:closePuzzle,onSelect:id=>{onSelect(id);closePuzzle();}});scene.addChild(puzzle);puzzle.fit(scene.logicalSize || {width:1920,height:1080});};
     const filters=[]; const buttons=[];
     const sprite=(key,rect) => {
         if (!textures[key]?.valid) return new PIXI.Container();
@@ -57,7 +63,7 @@ export function createDishSelect(textures, layout, { getSelected, getCompletedLe
         for(const e of ['pointerout','pointerup','pointerupoutside','pointercancel'])b.on(e,()=>b.scale.set(1));
         b.on('pointertap',()=>{if(scene.parent)callback();});buttons.push(b);host.addChild(b);return b;
     };
-    const heading=label('ВЫБЕРИ БЛЮДО',layout.headerRect,layout.fontSizes.header);scene.addChild(heading);
+    const heading=label(FOOD_TEST_MODE?'ТЕСТ СБОРКИ БЛЮД':'ВЫБЕРИ БЛЮДО',layout.headerRect,layout.fontSizes.header);scene.addChild(heading);
     const back=button(scene,'dishBack','НАЗАД',[...layout.backRect],'dish_back_button',onBack);
     back.addChild(sprite('dish_back_arrow',[15,30,40,40]));
     const cards=[];
@@ -66,33 +72,58 @@ export function createDishSelect(textures, layout, { getSelected, getCompletedLe
         card.position.set(layout.grid.start[0]+i%3*(528+28),layout.grid.start[1]+Math.floor(i/3)*(430+25));
         card.addChild(surface('dish_card',[0,0,528,430]));
         const accent=new PIXI.Graphics().lineStyle(7,0x30D5C1).drawRoundedRect(8,8,510,410,30);card.addChild(accent);
-        card.addChild(label(dish.name,layout.localCard.nameRect,34));
+        card.addChild(label(FOOD_TYPES[id].name,layout.localCard.nameRect,34));
         let icon=null, filter=null;
         if(textures[`dish_${dish.id}`]?.valid){icon=new PIXI.Sprite(textures[`dish_${dish.id}`]);fitDishIcon(icon,layout.localCard.iconRect);filter=new PIXI.filters.ColorMatrixFilter();filter.desaturate();filters.push(filter);card.addChild(icon);}
         const health=new PIXI.Container();health.addChild(sprite('dish_heart',[110,248,30,26]),label(`Жизни: ${FOOD_TYPES[id].pieces}`,layout.localCard.healthRect,28));card.addChild(health);
-        const effect=label(FOOD_TYPES[id].effect || '',layout.localCard.effectRect,24);card.addChild(effect);
+        const effect=label(describeFoodEffects(id),[28,276,472,40],20);card.addChild(effect);
         const lock=sprite('dish_lock',layout.localCard.lockRect);card.addChild(lock);
-        const unlock=label(FOOD_TYPES[id].unlockLevel==null?'Скоро':`После уровня ${FOOD_TYPES[id].unlockLevel}`,layout.localCard.unlockRect,40);unlock.name='unlockLabel';card.addChild(unlock);
+        const unlock=label('',[30,280,468,32],24);unlock.name='unlockLabel';card.addChild(unlock);
         const selected=new PIXI.Container();selected.addChild(label('ВЫБРАНО',[110,318,320,84],34),sprite('dish_check',[75,340,45,40]));card.addChild(selected);
         const select=button(card,`select_${id}`,'ВЫБРАТЬ',layout.localCard.buttonRect,'result_button_primary',()=>{
-            if(!canSelectDish(id,getCompletedLevels()))return;
+            if(!canSelectDish(id,getCompletedLevels())){if(readFoodProgress().foods[id].collected.length===FOOD_TYPES[id].maxLives)openPuzzle(id);return;}
             onSelect(id);scene.refresh();
         });
-        cards.push({id,card,accent,health,effect,lock,unlock,selected,select,icon,filter});scene.addChild(card);
+        const bar=new PIXI.Graphics();card.addChild(bar);
+        if(FOOD_TEST_MODE && !FOOD_TYPES[id].starter){
+            if(icon)fitDishIcon(icon,[60,60,408,125]);
+            button(card,`testFood_${id}`,'Тест: собрать заново',[94,190,340,50],'test_button',()=>{
+                if(!prepareFoodTest(id))return;
+                if(getSelected()===id)onSelect('pizza');
+                scene.refresh();openPuzzle(id);
+            });
+        }
+        cards.push({id,card,accent,health,effect,lock,unlock,selected,select,icon,filter,bar});scene.addChild(card);
     }
     scene.refresh=()=>{for(const c of cards){const open=canSelectDish(c.id,getCompletedLevels()), chosen=open&&getSelected()===c.id;
-        c.accent.visible=c.selected.visible=chosen;c.health.visible=c.effect.visible=open;c.lock.visible=c.unlock.visible=!open;
-        c.select.visible=c.select.interactive=open&&!chosen;
-        if(c.icon){c.icon.filters=open?null:[c.filter];c.icon.alpha=open?1:0.35;}
+        c.accent.visible=c.selected.visible=chosen;c.accent.tint=0xFFFFFF;c.health.visible=true;c.effect.visible=open;c.lock.visible=false;c.unlock.visible=!open;
+        const progress=readFoodProgress().foods[c.id],total=FOOD_TYPES[c.id].maxLives,ready=progress.collected.length===total;
+        c.unlock.text=ready?'Можно собрать!':progress.collected.length+'/ '+total+' кусочков — найди остальные';
+        c.bar.clear();if(!open)c.bar.beginFill(0x2D1738,.15).drawRoundedRect(90,310,348,5,2).endFill().beginFill(0x30D5C1).drawRoundedRect(90,310,348*progress.collected.length/total,5,2).endFill();
+        const caption=c.select.children[1];caption.text=open?'ВЫБРАТЬ':progress.placed.length?'Продолжить сборку':'Собрать';
+        caption.scale.set(Math.min(1,280/caption.texture.width));
+        // Draw the brand color directly: tint multiplies the turquoise texture into dark brown.
+        if(c.select._assemblyStyle!==!open){
+            c.select._assemblyStyle=!open;
+            c.select.removeChildAt(0).destroy();
+            const [, , w,h]=layout.localCard.buttonRect;
+            const background=open?surface('result_button_primary',[0,0,w,h]):new PIXI.Graphics()
+                .beginFill(0x2D1738).drawRoundedRect(0,6,w,h-6,26).endFill()
+                .lineStyle(5,0x2D1738).beginFill(0xF45D53).drawRoundedRect(3,3,w-6,h-12,24).endFill();
+            c.select.addChildAt(background,0);
+        }
+        c.select.visible=c.select.interactive=(open||ready)&&!chosen;
+        if(c.icon){c.icon.filters=open||ready?null:[c.filter];c.icon.alpha=open||ready?1:0.35;}
     }};
+    scene.focus=id=>{const c=cards.find(c=>c.id===id);if(c){c.accent.visible=true;c.accent.tint=0xF45D53;}};
     scene.refresh();scene.fit=viewport=>{
         const portrait=viewport.width<viewport.height;
         scene.logicalSize=portrait?{width:1140,height:1680}:{width:1920,height:1080};
         cards.forEach((c,i)=>c.card.position.set(portrait?28+i%2*556:140+i%3*556,portrait?280+Math.floor(i/2)*455:145+Math.floor(i/3)*455));
         heading.position.set(portrait?570:1040,portrait?190:66);
         back.position.set(portrait?178:190,74);
-        layoutHomeScreen(scene,viewport);
+        layoutHomeScreen(scene,viewport);puzzle?.fit(scene.logicalSize);
     };
-    const destroy=scene.destroy.bind(scene);scene.destroy=()=>{buttons.forEach(b=>gsap.killTweensOf(b.scale));cards.forEach(c=>{if(c.icon)c.icon.filters=null;});filters.forEach(f=>f.destroy());destroy({children:true});};
+    const destroy=scene.destroy.bind(scene);scene.destroy=()=>{puzzle?.destroy();buttons.forEach(b=>gsap.killTweensOf(b.scale));cards.forEach(c=>{if(c.icon)c.icon.filters=null;});filters.forEach(f=>f.destroy());destroy({children:true});};
     return scene;
 }

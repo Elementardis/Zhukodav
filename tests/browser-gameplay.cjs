@@ -115,10 +115,123 @@ async function main() {
     await cdp('Emulation.setDeviceMetricsOverride',{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
     const debugSelect = process.argv.includes('--debug-select');
     if (!process.argv.includes('--cutscenes')) await cdp('Page.addScriptToEvaluateOnNewDocument',{source:'localStorage.setItem("zhukodav.cutscenes.v1",JSON.stringify(["welcome"]))'});
-    await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/${debugSelect ? '?debug=1' : ''}`});
+    await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/${process.argv.includes('--food-test') ? '?foodTest=1' : debugSelect ? '?debug=1' : ''}`});
     const deadline=Date.now()+45000;
     while(!await evaluate('!!window.gameTest?.ready()')) {if(Date.now()>deadline)throw Error('Loading timeout: '+await evaluate('document.querySelector(' + JSON.stringify('[role=status]') + ')?.textContent')+' '+errors.join('\n'));await new Promise(r=>setTimeout(r,250));}
     assert.equal(await evaluate('document.fonts.check(\'700 32px "Balsamiq Sans"\')'),true);
+    if (process.argv.includes('--food-effects')) {
+        await evaluate(`(async()=>{window.fp=await import('./js/food-progress.js');window.fc=await import('./js/food-config.js');const s=fp.readFoodProgress();for(const [id,f] of Object.entries(fc.FOOD_TYPES)){s.foods[id]={collected:f.puzzlePieces.map(p=>p.id),placed:f.puzzlePieces.map(p=>p.id),completed:true};}fp.saveFoodProgress(s);gameTest.levels[0].params.maxObjects=20;gameTest.levels[0].params.lifetimeMultiplier=2;})()`);
+        let baseLifetime;
+        for(const [id,hp,k,seconds,limit] of [['pizza',8,1,1.5,5],['pie',10,1,.5,4],['greek_salad',5,.8,3,3],['bundt_cake',12,1.1,1,4],['dressed_herring',7,.9,2,4],['cake',6,1,3,4]]){
+            await evaluate(`gameTest.home();gameTest.selectDish('${id}');gameTest.start();gameTest.stopSpawns();gameTest.spawn('bug');`);
+            const data=await evaluate(`({life:gameTest.snapshot().life,lifetime:gameTest.objects[0].data.lifetime,wait:gameTest.objects[0].reactionRemainingMs})`);
+            assert.equal(data.life,hp);assert.equal(data.wait,seconds*1000);
+            if(id==='pizza')baseLifetime=data.lifetime;
+            assert.ok(Math.abs(data.lifetime-baseLifetime*k)<1e-7);
+            await evaluate(`for(let i=0;i<100;i++)gameTest.spawn('bug')`);
+            assert.equal(await evaluate('gameTest.objects.length'),limit);
+            // Reach the food naturally, then verify the configured alert countdown causes one damage.
+            await evaluate(`(()=>{gameTest.home();gameTest.start();gameTest.stopSpawns();gameTest.spawn('bug');const o=gameTest.objects[0];o.x=o.targetX;o.y=o.targetY;gameTest.step(1);gameTest.stopSpawns();})()`);
+            assert.equal(await evaluate(`gameTest.objects[0].state`),'atFood');
+            await evaluate(`gameTest.step(${seconds*1000-2})`);assert.equal(await evaluate('gameTest.snapshot().life'),hp);
+            await evaluate('gameTest.step(2)');assert.equal(await evaluate('gameTest.snapshot().life'),hp-1);
+        }
+        await evaluate(`gameTest.home();gameTest.levels[0].params.maxObjects=2;gameTest.start();gameTest.stopSpawns();for(let i=0;i<100;i++)gameTest.spawn('bug')`);
+        assert.equal(await evaluate('gameTest.objects.length'),2);
+        assert.equal(await evaluate('gameTest.levels[0].params.lifetimeMultiplier'),2);
+        assert.deepEqual(errors,[]);console.log('Food effects passed: all six dishes, health, movement multipliers, alert duration and damage, food cap and lower level cap.');await send('Browser.close');return;
+    }
+    if (process.argv.includes('--food-test')) {
+        await evaluate(`(async()=>{window.fp=await import('./js/food-progress.js');window.fc=await import('./js/food-config.js');localStorage.setItem('foodPuzzleProgress.v1','{"sentinel":true}');localStorage.setItem('selectedDishId','pie');gameTest.dishes();})()`);
+        for(const id of ['cake','pie','bundt_cake','greek_salad','dressed_herring']){
+            await evaluate(`gameTest.dishScene.getChildByName('dishCard_${id}').getChildByName('testFood_${id}').emit('pointertap')`);
+            assert.equal(await evaluate(`!!gameTest.dishScene.getChildByName('foodPuzzle')`),true);
+            assert.equal(await evaluate(`fp.readFoodProgress().foods['${id}'].collected.length===fc.FOOD_TYPES['${id}'].maxLives`),true);
+            assert.equal(await evaluate(`gameTest.selectDish('${id}')`),false);
+            if(['greek_salad','dressed_herring'].includes(id)){
+                await evaluate(`window.dropLayer=(index,x,y)=>{const panel=gameTest.dishScene.getChildByName('foodPuzzle').getChildByName('puzzlePanel'),tray=panel.getChildByName('puzzleTray'),plate=panel.getChildByName('puzzlePlate'),root=gameTest.dishScene.getChildByName('foodPuzzle'),piece=tray.children[index];piece.emit('pointerdown',{data:{pointerId:1,global:piece.toGlobal(new PIXI.Point(70,55))}});const event={data:{pointerId:1,global:plate.toGlobal(new PIXI.Point(x,y))}};root.emit('pointermove',event);root.emit('pointerup',event);};`);
+                await evaluate('dropLayer(1,320,35)');
+                assert.equal(await evaluate(`fp.readFoodProgress().foods['${id}'].placed.length`),0,'wrong layer rejected');
+                await evaluate('dropLayer(0,5,5)');
+                assert.equal(await evaluate(`fp.readFoodProgress().foods['${id}'].placed.length`),0,'outside plate rejected');
+                await evaluate('dropLayer(0,320,35)');
+                assert.equal(await evaluate(`fp.readFoodProgress().foods['${id}'].placed.length`),1,'plate rim accepts correct layer outside its image');
+                await evaluate(`(()=>{const panel=gameTest.dishScene.getChildByName('foodPuzzle').getChildByName('puzzlePanel'),piece=panel.getChildByName('puzzleTray').children[0],plate=panel.getChildByName('puzzlePlate');piece.emit('pointerdown',{data:{pointerId:2,global:piece.toGlobal(new PIXI.Point(70,55))}});plate.emit('pointertap',{data:{global:plate.toGlobal(new PIXI.Point(605,320))}});})()`);
+                assert.equal(await evaluate(`fp.readFoodProgress().foods['${id}'].placed.length`),2,'tap on plate accepts next layer');
+            }
+            await evaluate(`fc.FOOD_TYPES['${id}'].assemblyOrder.forEach(p=>fp.placeFoodPiece('${id}',p));gameTest.selectDish('${id}');gameTest.home();gameTest.dishes();`);
+            assert.equal(await evaluate('gameTest.selectedDish'),id);
+            await evaluate(`gameTest.dishScene.getChildByName('dishCard_${id}').getChildByName('testFood_${id}').emit('pointertap')`);
+            assert.equal(await evaluate(`fp.readFoodProgress().foods['${id}'].placed.length`),0);
+            assert.equal(await evaluate('gameTest.selectedDish'),'pizza');
+            await evaluate('gameTest.home();gameTest.dishes()');
+        }
+        assert.equal(await evaluate(`localStorage.getItem('foodPuzzleProgress.v1')`),'{"sentinel":true}');
+        assert.equal(await evaluate(`localStorage.getItem('selectedDishId')`),'pie');
+        assert.deepEqual(errors,[]);console.log('Food test mode passed: five dishes, full kits, manual completion gate, restart and isolated collection/selection.');await send('Browser.close');return;
+    }
+    if (process.argv.includes('--win-reward')) {
+        await evaluate(`(async()=>{window.fp=await import('./js/food-progress.js');window.fc=await import('./js/food-config.js');localStorage.removeItem(fp.FOOD_SAVE_KEY);gameTest.levels[0].loot=[{id:'test-cake',type:'foodPiece',foodId:'cake',pieceId:'cake_01'}];gameTest.start();gameTest.end(true);})()`);
+        const popup=`gameTest.ui.scene.parent.parent.getChildByName('winPopup')`;
+        assert.deepEqual(await evaluate(`${popup}.rewardProgress`),{collected:1,total:6,ratio:1/6});
+        assert.equal(await evaluate(`${popup}.getChildByName('rewardWholeDish').texture===gameTest.textures.dish_cake`),true);
+        const before=await evaluate(`localStorage.getItem(fp.FOOD_SAVE_KEY)`);
+        for(const [width,height] of [[1920,1080],[960,540],[390,844]]){
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+            await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+            await evaluate('gameTest.render()');
+            assert.equal(await evaluate(`(()=>{const p=${popup},b=p.getBounds();return b.x>=0&&b.y>=0&&b.x+b.width<=${width}+1&&b.y+b.height<=${height}+1&&p.getChildByName('winMascot').scale.x===p.getChildByName('winMascot').scale.y;})()`),true);
+            const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts',`win-reward-1of6-${width}.png`),Buffer.from(data,'base64'));
+        }
+        await evaluate(`gameTest.showTestPopup('win');gameTest.showTestPopup('win')`);
+        assert.equal(await evaluate(`localStorage.getItem(fp.FOOD_SAVE_KEY)`),before);
+        await evaluate(`${popup}.getChildByName('resultDishes').emit('pointertap')`);
+        assert.equal(await evaluate(`!!gameTest.dishScene`),true);
+        await evaluate(`gameTest.home();gameTest.start();gameTest.end(true)`);
+        assert.equal(await evaluate(`${popup}.getChildByName('rewardStatus').text`),'Награда уже получена');
+        await evaluate(`gameTest.resultButton('resultMenu').emit('pointertap')`);assert.equal(await evaluate('gameTest.isHome()'),true);
+        await evaluate(`localStorage.removeItem(fp.FOOD_SAVE_KEY);gameTest.start();gameTest.end(true);gameTest.resultButton('resultPrimary').emit('pointertap')`);
+        assert.equal(await evaluate('gameTest.debugState().levelId'),2);
+        await evaluate(`gameTest.home();localStorage.removeItem(fp.FOOD_SAVE_KEY);fc.FOOD_TYPES.cake.puzzlePieces.slice(1).forEach((p,i)=>fp.awardFoodLoot({id:'fixture-'+i,loot:[{type:'foodPiece',foodId:'cake',pieceId:p.id}]}));gameTest.start();gameTest.end(true);`);
+        assert.deepEqual(await evaluate(`${popup}.rewardProgress`),{collected:6,total:6,ratio:1});
+        assert.equal(await evaluate(`gameTest.selectDish('cake')`),false);
+        await cdp('Emulation.setDeviceMetricsOverride',{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
+        await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));');await evaluate('gameTest.render()');
+        {const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts','win-reward-6of6.png'),Buffer.from(data,'base64'));}
+        await evaluate(`gameTest.resultButton('resultPrimary').emit('pointertap')`);
+        assert.equal(await evaluate(`!!gameTest.dishScene && !gameTest.dishScene.getChildByName('foodPuzzle')`),true);
+        assert.deepEqual(errors,[]);console.log('Victory reward passed: 1/6, 6/6, whole dish, responsive mascot, all transitions, repeat and redraw idempotence, manual puzzle gate.');await send('Browser.close');return;
+    }
+    if (process.argv.includes('--food-puzzle')) {
+        await evaluate(`(async()=>{window.fp=await import('./js/food-progress.js');window.fc=await import('./js/food-config.js');localStorage.removeItem(fp.FOOD_SAVE_KEY);})()`);
+        assert.equal(await evaluate(`fp.awardFoodLoot({id:'test-1',loot:[{type:'foodPiece',foodId:'cake',pieceId:'cake_01'}]}).received.length`),1);
+        assert.equal(await evaluate(`fp.awardFoodLoot({id:'test-1',loot:[{type:'foodPiece',foodId:'cake',pieceId:'cake_02'}]}).received.length`),0);
+        await evaluate(`fc.FOOD_TYPES.cake.puzzlePieces.slice(1).forEach((p,i)=>fp.awardFoodLoot({id:'cake-'+i,loot:[{type:'foodPiece',foodId:'cake',pieceId:p.id}]}));gameTest.home();gameTest.dishes();`);
+        assert.equal(await evaluate(`gameTest.selectDish('cake')`),false);
+        await evaluate(`gameTest.dishScene.getChildByName('dishCard_cake').getChildByName('select_cake').emit('pointertap')`);
+        for (const [width,height,touch] of [[1920,1080,false],[960,540,true]]) {
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:touch});
+            await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+            const points=await evaluate(`(()=>{const root=gameTest.dishScene.getChildByName('foodPuzzle'),panel=root.getChildByName('puzzlePanel'),tray=panel.getChildByName('puzzleTray'),piece=tray.children[0],id=piece.name,def=fc.FOOD_TYPES.cake.puzzlePieces.find(p=>p.id===id),tex=gameTest.textures[def.texture],c=document.createElement('canvas');c.width=tex.width;c.height=tex.height;const ctx=c.getContext('2d');ctx.drawImage(tex.baseTexture.resource.source,0,0);const d=ctx.getImageData(0,0,c.width,c.height).data;let sx=0,sy=0,n=0;for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++)if(d[(y*c.width+x)*4+3]>128){sx+=x;sy+=y;n++;}const a=piece.toGlobal(new PIXI.Point(70,55)),b=panel.getChildByName('puzzlePlate').toGlobal(new PIXI.Point(40+sx/n/c.width*560,40+sy/n/c.height*560));return {a:{x:a.x,y:a.y},b:{x:b.x,y:b.y}};})()`);
+            if(touch){await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...points.a,id:1}]});await cdp('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{...points.b,id:1}]});await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});}
+            else {for(const p of [points.a,points.b]){await cdp('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...p});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...p});}}
+        }
+        assert.equal(await evaluate(`fp.readFoodProgress().foods.cake.placed.length`),2);
+        await cdp('Page.reload');
+        const reloadDeadline=Date.now()+45000;
+        while(!await evaluate('!!window.gameTest?.ready()')){if(Date.now()>reloadDeadline)throw Error('Food reload timeout');await new Promise(r=>setTimeout(r,200));}
+        await evaluate(`(async()=>{window.fp=await import('./js/food-progress.js');window.fc=await import('./js/food-config.js');gameTest.home();gameTest.dishes();})()`);
+        assert.equal(await evaluate(`fp.readFoodProgress().foods.cake.placed.length`),2);
+        await evaluate(`fc.FOOD_TYPES.cake.puzzlePieces.forEach(p=>fp.placeFoodPiece('cake',p.id))`);
+        assert.equal(await evaluate(`gameTest.selectedDish`),'pizza');
+        assert.equal(await evaluate(`gameTest.selectDish('cake')`),true);
+        assert.equal(await evaluate(`fp.validateFoodLoot(gameTest.levels).length>0`),true);
+        await evaluate(`(async()=>{(await import('./cutscenes.js')).cutscenes.splice(0);fc.FOOD_TYPES.pie.puzzlePieces.slice(1).forEach((p,i)=>fp.awardFoodLoot({id:'pie-'+i,loot:[{type:'foodPiece',foodId:'pie',pieceId:p.id}]}));gameTest.levels[0].loot=[{id:'pie-first',type:'foodPiece',foodId:'pie',pieceId:'pie_01'}];gameTest.start();gameTest.end(true);})()`);
+        assert.equal(await evaluate(`gameTest.resultButton('resultPrimary').children.some(c=>c.text==='СОБРАТЬ БЛЮДО')`),true);
+        await evaluate(`gameTest.resultButton('resultPrimary').emit('pointertap')`);
+        assert.equal(await evaluate(`!!gameTest.dishScene && !gameTest.dishScene.getChildByName('foodPuzzle')`),true);
+        assert.deepEqual(errors,[]);console.log('Food puzzle passed: unique rewards, changed loot replay, selection gate, mouse tap, touch drag, scaled viewport, saved placement, completion and explicit selection.');await send('Browser.close');return;
+    }
     if (process.argv.includes('--story-layout')) {
         await evaluate('localStorage.removeItem("zhukodav.cutscenes.v1");gameTest.start()');
         const deadline=Date.now()+10000;
