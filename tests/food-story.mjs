@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import levels from '../levels.js';
+import { FOOD_TYPES } from '../js/food-config.js';
+import { FOOD_STORIES } from '../js/food-story-config.js';
+import { pendingFoodStories, validateFoodStories } from '../js/food-story.js';
+import { readFoodProgress, saveFoodProgress, awardFoodLoot, FOOD_SAVE_KEY } from '../js/food-progress.js';
+const storage = () => { const data = new Map(); return { getItem: k => data.get(k) ?? null, setItem: (k,v) => data.set(k,v) }; };
+assert.deepEqual(validateFoodStories(levels), []);
+assert.equal(Object.values(FOOD_STORIES).flat().length, 40);
+assert.equal(new Set(Object.values(FOOD_STORIES).flat().map(l=>l.id)).size,40);
+for (const line of Object.values(FOOD_STORIES).flat()) assert.ok(fs.existsSync(line.image));
+const db=storage();
+function give(id,foodId,pieceId,store=db){return awardFoodLoot({id,loot:[{type:'foodPiece',foodId,pieceId}]},store);}
+give(1,'greek_salad','greek_salad_05');give(2,'pie','pie_07');give(3,'greek_salad','greek_salad_02');
+assert.deepEqual(pendingFoodStories(readFoodProgress(db)).map(s=>s.id),['greek_salad_memory_01','pie_memory_01','greek_salad_memory_02']);
+const before=db.getItem(FOOD_SAVE_KEY);
+assert.equal(give(1,'greek_salad','greek_salad_05').received.length,0);
+give(4,'greek_salad','greek_salad_05');
+assert.equal(readFoodProgress(db).story.events.length,3);
+const resumed=storage();resumed.setItem(FOOD_SAVE_KEY,before);
+assert.deepEqual(pendingFoodStories(readFoodProgress(resumed)).map(s=>s.id),pendingFoodStories(readFoodProgress(db)).map(s=>s.id));
+let state=readFoodProgress(db);state.story.seen.push('greek_salad_memory_01');saveFoodProgress(state,db);
+assert.equal(pendingFoodStories(readFoodProgress(db))[0].id,'pie_memory_01');
+const legacy=storage();legacy.setItem(FOOD_SAVE_KEY,JSON.stringify({foods:{cake:{collected:['cake_04','cake_02'],placed:['cake_04']}}}));
+assert.equal(pendingFoodStories(readFoodProgress(legacy)).length,0);
+give(7,'cake','cake_06',legacy);
+assert.equal(pendingFoodStories(readFoodProgress(legacy))[0].id,'cake_memory_03');
+assert.deepEqual(readFoodProgress(legacy).foods.cake.placed,['cake_04']);
+const finale=storage();for(const p of FOOD_TYPES.cake.puzzlePieces)give(p.id,'cake',p.id,finale);
+assert.equal(pendingFoodStories(readFoodProgress(finale)).length,4);
+for(const [id,f] of Object.entries(FOOD_TYPES).filter(([id])=>id!=='cake'&&id!=='pizza'))for(const p of f.puzzlePieces)give(p.id,id,p.id,finale);
+assert.deepEqual(pendingFoodStories(readFoodProgress(finale)).slice(-2).map(s=>s.id),['cake_memory_05','cake_memory_06']);
+assert.equal(pendingFoodStories(readFoodProgress(finale)).at(-1).frames[0].text,'Держи кусочек. Я так ждал этой встречи. Спасибо, что ты пришёл!');
+const early=storage();for(const p of FOOD_TYPES.cake.puzzlePieces.slice(0,5))give(p.id,'cake',p.id,early);
+for(const [id,f] of Object.entries(FOOD_TYPES).filter(([id])=>id!=='cake'&&id!=='pizza'))for(const p of f.puzzlePieces)give(p.id,id,p.id,early);
+assert.ok(!pendingFoodStories(readFoodProgress(early)).some(s=>s.finale),'early finale waits for all five complete sets');
+give('last','cake','cake_06',early);
+assert.deepEqual(pendingFoodStories(readFoodProgress(early)).slice(-2).map(s=>s.id),['cake_memory_05','cake_memory_06']);
+// Current campaign delivers both final cake lines after all other sets (levels 39 and 40).
+const campaign=storage();for(const level of levels.slice(0,40)){awardFoodLoot(level,campaign);const pending=pendingFoodStories(readFoodProgress(campaign));if(level.id<39)assert.ok(!pending.some(s=>s.finale));}
+assert.equal(readFoodProgress(campaign).story.events.length,40);
+const intro=await import('../cutscenes.js');assert.equal(intro.cutscenes[0].frames[0].text,'Привет! У меня сегодня день рождения!');
+console.log('Food story: 40 lines/assets, campaign, independent ordering, duplicates, reload, legacy migration, deferred finale, intro preserved.');

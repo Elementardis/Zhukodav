@@ -79,9 +79,12 @@ export function buildGameplayScene(textures, { enabledColors, foodDefinition, le
     const hp = new PIXI.Container();
     hp.name = 'levelTimeBar';
     hp.position.set(style.hp.x, style.hp.y);
-    hp.addChild(sprite('hp_frame', 0, 0, 700, 96));
-    const segments = Array.from({ length: 7 }, (_, i) => sprite('hp_fresh', 34 + 91 * i, 18, 85, 60));
-    segments.forEach(s => hp.addChild(s));
+    const segments = []; // Kept for callers that inspect the old segmented bar.
+    const timerLines = new PIXI.Graphics(); timerLines.name = 'timerLines';
+    const timerNumber = new PIXI.Text('0', { fontFamily: 'Balsamiq Sans', fontSize: 64, fontWeight: 'bold',
+        fill: style.outline, stroke: 0xF7F7F3, strokeThickness: 5 });
+    timerNumber.name = 'timerNumber'; timerNumber.anchor.set(.5); timerNumber.position.set(350,48);timerNumber.resolution=2;
+    hp.addChild(timerLines,timerNumber);
     scene.addChild(hp);
     const levelLabel = new PIXI.Text(`уровень ${levelNumber}`, {
         fontFamily: 'Arial', fontSize: 42, fontWeight: 'bold', fill: style.outline
@@ -99,6 +102,21 @@ export function buildGameplayScene(textures, { enabledColors, foodDefinition, le
 
     const buttons = {};
     for (const tool of style.tools) {
+        if (!enabledColors.includes(tool.color)) {
+            // Quiet side panels occupy unused tool slots and frame the bugs' entry edges.
+            const placeholder = new PIXI.Container();
+            placeholder.name = `toolPlaceholder_${tool.color}`;
+            placeholder.position.set(tool.x, tool.y);
+            placeholder.interactive = placeholder.interactiveChildren = false;
+            const backing = new PIXI.Graphics()
+                .beginFill(style.outline).drawRoundedRect(0, style.shadowY, style.buttonWidth, style.buttonHeight, style.radius).endFill()
+                .lineStyle(style.border, style.outline, 1, 0).beginFill(0xDDD6C9)
+                .drawRoundedRect(0, 0, style.buttonWidth, style.buttonHeight, style.radius).endFill();
+            const inset = new PIXI.Graphics().lineStyle(3, 0xB9AFBE, .6)
+                .drawRoundedRect(20, 20, style.buttonWidth - 40, style.buttonHeight - 40, style.radius - 12);
+            placeholder.addChild(backing, inset);
+            scene.addChild(placeholder);
+        }
         const button = new PIXI.Container();
         button.name = `colorButton_${tool.color}`;
         button.position.set(tool.x, tool.y);
@@ -176,12 +194,22 @@ export function buildGameplayScene(textures, { enabledColors, foodDefinition, le
         feedbackColor = kind === 'damage' ? 0xF65C70 : kind === 'heal' ? 0x9ED52A : 0xFFFFFF;
     };
     return {
-        scene, field, effects, hp, buttons, feedback, slices, segments, foodAccent,
+        scene, field, effects, hp, buttons, feedback, slices, segments, foodAccent, timerNumber, timerLines,
         update({ life, remainingMs, durationMs, activeColor, specialEffects = [], clockMs = 0, dt = 0 }) {
             if (lastLife !== null && life !== lastLife) feedback(life < lastLife ? 'damage' : 'heal');
             lastLife = life;
-            const dirty = elapsedSegments(remainingMs, durationMs);
-            segments.forEach((segment, i) => { segment.texture = textures[i >= 7 - dirty ? 'gameplay_hp_dirty' : 'gameplay_hp_fresh']; });
+            const fraction = Math.max(0,Math.min(1,remainingMs/Math.max(1,durationMs)));
+            timerNumber.text=String(Math.ceil(Math.max(0,remainingMs)/1000));
+            timerNumber.scale.set(Math.min(1,140/timerNumber.texture.width));
+            const length=240*fraction;
+            timerLines.clear();
+            if(length>0){
+                for(const x of [260-length,440]){
+                    timerLines.beginFill(style.outline).drawRoundedRect(x,36,length,24,Math.min(12,length/2)).endFill();
+                    if(length>6)timerLines.beginFill(0x30D5C1).drawRoundedRect(x+3,39,length-6,18,Math.min(9,(length-6)/2)).endFill();
+                }
+            }
+            hp.remainingFraction=fraction;
             const visible = remainingSliceIndices(life, foodDefinition);
             slices.forEach((slice, i) => { slice.visible = visible.includes(i + 1); });
             feedbackMs = Math.max(0, feedbackMs - dt);

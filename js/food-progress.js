@@ -1,5 +1,6 @@
 import { FOOD_TYPES } from './food-config.js';
 import { FOOD_TEST_MODE } from './food-test-config.js';
+import { restoreFoodStory, recordFoodStory } from './food-story.js';
 
 export const FOOD_SAVE_KEY = FOOD_TEST_MODE ? 'foodPuzzleProgress.test.v1' : 'foodPuzzleProgress.v1';
 export function prepareFoodTest(foodId, storage = localStorage) {
@@ -23,6 +24,7 @@ export function readFoodProgress(storage = localStorage) {
         state.foods[id] = { collected, placed, completed: food.starter || placed.length === food.maxLives };
     }
     if (!state.foods[state.selected]?.completed) state.selected = 'pizza';
+    state.story = restoreFoodStory(raw?.story, state.foods);
     return state;
 }
 export function saveFoodProgress(state, storage = localStorage) { storage.setItem(FOOD_SAVE_KEY, JSON.stringify(state)); }
@@ -39,6 +41,7 @@ export function awardFoodLoot(level, storage = localStorage) {
         const progress = state.foods[food.id];
         if (!progress.collected.includes(entry.pieceId)) {
             progress.collected.push(entry.pieceId);
+            recordFoodStory(state, key, food.id, entry.pieceId);
             received.push({ ...entry, count: progress.collected.length, total: food.maxLives,
                 ready: progress.collected.length === food.maxLives && !progress.completed });
         }

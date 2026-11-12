@@ -23,8 +23,8 @@ function loadImage(path) {
     return images.get(path);
 }
 
-export function playCutscenes({ scenes, host, app, textures, theme, onComplete }) {
-    let disposed=false, sceneIndex=0, frameIndex=0, revision=0, lastTap=-Infinity, currentImage=null;
+export function playCutscenes({ scenes, host, app, textures, theme, onComplete, onSceneComplete = () => {} }) {
+    let disposed=false, finishing=false, completionTimer=null, sceneIndex=0, frameIndex=0, revision=0, lastTap=performance.now(), currentImage=null;
     const root=new PIXI.Container();root.name='cutscene';root.interactive=true;
     const room=new PIXI.Sprite(textures.home_01_background);room.anchor.set(0.5);root.addChild(room);
     // Keep the home-screen scale; anchor the cropped asset to the right/bottom edge.
@@ -35,27 +35,29 @@ export function playCutscenes({ scenes, host, app, textures, theme, onComplete }
     if(textures.dish_pizza?.valid){const pizza=new PIXI.Sprite(textures.dish_pizza);pizza.name='cutscenePizza';fitDishIcon(pizza,[1260,515,380,360],true);content.addChild(pizza);}
     const character=new PIXI.Container();character.name='cutsceneCharacter';content.addChild(character);
     const characterMask=new PIXI.Graphics().beginFill(0xFFFFFF).drawRect(0,0,1920,910).endFill();content.addChild(characterMask);character.mask=characterMask;
-    const panel=new PIXI.Graphics();panel.beginFill(0x2D1738).drawRoundedRect(68,892,1800,180,38).endFill();
-    panel.lineStyle(6,0x2D1738).beginFill(0xF7F7F3).drawRoundedRect(60,880,1800,180,38).endFill();content.addChild(panel);
-    const text=new PIXI.Text('',{fontFamily:HEADING_FONT,fontWeight:'bold',fontSize:42,lineHeight:52,fill:0x2D1738,wordWrap:true,wordWrapWidth:1210,breakWords:true});text.resolution=2;text.position.set(110,910);content.addChild(text);
-    const mask=new PIXI.Graphics().beginFill(0xFFFFFF).drawRect(110,905,1230,125).endFill();content.addChild(mask);text.mask=mask;
-    const scrollArea=new PIXI.Container();scrollArea.position.set(110,905);scrollArea.interactive=true;scrollArea.hitArea=new PIXI.Rectangle(0,0,1230,125);content.addChild(scrollArea);
+    const storyDialogue=scenes.every(scene=>scene.repeat==='story');
+    const panelY=storyDialogue?800:880, panelHeight=1060-panelY, textY=panelY+30, textViewHeight=panelHeight-65;
+    const panel=new PIXI.Graphics();panel.beginFill(0x2D1738).drawRoundedRect(68,panelY+12,1800,panelHeight,38).endFill();
+    panel.lineStyle(6,0x2D1738).beginFill(0xF7F7F3).drawRoundedRect(60,panelY,1800,panelHeight,38).endFill();content.addChild(panel);
+    const text=new PIXI.Text('',{fontFamily:HEADING_FONT,fontWeight:'bold',fontSize:42,lineHeight:52,fill:0x2D1738,wordWrap:true,wordWrapWidth:1210,breakWords:true});text.resolution=2;text.position.set(110,textY);content.addChild(text);
+    const mask=new PIXI.Graphics().beginFill(0xFFFFFF).drawRect(110,textY-5,1230,textViewHeight+10).endFill();content.addChild(mask);text.mask=mask;
+    const scrollArea=new PIXI.Container();scrollArea.position.set(110,textY-5);scrollArea.interactive=true;scrollArea.hitArea=new PIXI.Rectangle(0,0,1230,textViewHeight+10);content.addChild(scrollArea);
     scrollArea.name='cutsceneScroll';
     const track=new PIXI.Graphics();content.addChild(track);
     let scrollY=0, dragY=null;
     const scroll=delta=>{
-        const maximum=Math.max(0,text.height-115);scrollY=Math.max(0,Math.min(maximum,scrollY+delta));text.y=910-scrollY;track.clear();
-        if(maximum){const h=Math.max(15,115*115/text.height);track.beginFill(0x2D1738,0.5).drawRoundedRect(1335,910+scrollY/maximum*(115-h),4,h,2).endFill();}
+        const maximum=Math.max(0,text.height-textViewHeight);scrollY=Math.max(0,Math.min(maximum,scrollY+delta));text.y=textY-scrollY;track.clear();
+        if(maximum){const h=Math.max(15,textViewHeight*textViewHeight/text.height);track.beginFill(0x2D1738,0.5).drawRoundedRect(1335,textY+scrollY/maximum*(textViewHeight-h),4,h,2).endFill();}
     };
     scrollArea.on('pointerdown',e=>{dragY=e.data.getLocalPosition(content).y;});
     scrollArea.on('pointermove',e=>{if(dragY===null)return;const y=e.data.getLocalPosition(content).y;scroll(dragY-y);dragY=y;});
     for(const event of ['pointerup','pointerupoutside','pointercancel'])scrollArea.on(event,()=>{dragY=null;});
     const wheel=e=>{
         if(disposed)return;const rect=app.view.getBoundingClientRect();const p=content.toLocal(new PIXI.Point((e.clientX-rect.left)*app.screen.width/rect.width,(e.clientY-rect.top)*app.screen.height/rect.height));
-        if(p.x<110||p.x>1340||p.y<905||p.y>1030)return;e.preventDefault();scroll(e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?115:1)/content.scale.y);
+        if(p.x<110||p.x>1340||p.y<textY-5||p.y>textY+textViewHeight+5)return;e.preventDefault();scroll(e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?textViewHeight:1)/content.scale.y);
     };
     app.view.addEventListener('wheel',wheel,{passive:false});
-    const button=new PIXI.Container();button.name='cutsceneNext';button.position.set(1390,902);button.interactive=button.buttonMode=true;button.interactiveChildren=false;button.hitArea=new PIXI.Rectangle(0,0,410,135);
+    const button=new PIXI.Container();button.name='cutsceneNext';button.position.set(1390,panelY+(panelHeight-135)/2);button.interactive=button.buttonMode=true;button.interactiveChildren=false;button.hitArea=new PIXI.Rectangle(0,0,410,135);
     button.addChild(popupSurface(textures,'button_primary',[0,0,410,135],theme));
     const caption=new PIXI.Text('',{fontFamily:HEADING_FONT,fontWeight:'bold',fontSize:42,lineHeight:46,fill:0x2D1738,align:'center',wordWrap:true,wordWrapWidth:370,breakWords:true});caption.resolution=2;caption.anchor.set(0.5);caption.position.set(205,67);button.addChild(caption);content.addChild(button);
     function resize(){
@@ -81,14 +83,16 @@ export function playCutscenes({ scenes, host, app, textures, theme, onComplete }
         });
     }
     const destroyRoot=root.destroy.bind(root);
-    function dispose(){if(disposed)return;disposed=true;revision++;app.view.removeEventListener('wheel',wheel);gsap.killTweensOf(button.scale);destroyRoot({children:true});}
+    function dispose(){if(disposed)return;disposed=true;clearTimeout(completionTimer);revision++;app.view.removeEventListener('wheel',wheel);gsap.killTweensOf(button.scale);destroyRoot({children:true});}
     root.destroy=dispose;
-    button.on('pointertap',()=>{
-        const now=performance.now();if(disposed||document.hidden||now-lastTap<350)return;lastTap=now;
+    button.on('pointertap',event=>{
+        event?.stopPropagation?.();
+        const now=performance.now();if(disposed||finishing||document.hidden||now-lastTap<350)return;lastTap=now;
         if(++frameIndex>=scenes[sceneIndex].frames.length){
             const scene=scenes[sceneIndex];if(scene.repeat==='once'){try{localStorage.setItem(CUTSCENE_STORAGE_KEY,JSON.stringify([...new Set([...seenScenes(),scene.id])]));}catch{}}
+            onSceneComplete(scene);
             frameIndex=0;sceneIndex++;
-            if(sceneIndex===scenes.length){dispose();onComplete();return;}
+            if(sceneIndex===scenes.length){finishing=true;completionTimer=setTimeout(()=>{dispose();onComplete();},360);return;}
         }
         showFrame();
     });

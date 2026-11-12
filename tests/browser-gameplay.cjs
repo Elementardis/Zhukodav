@@ -32,6 +32,7 @@ window.gameTest = {
  get homeScene(){return progressContainer.getChildByName('homeContainer');},
  get selectedDish(){return selectedDishId;},
  musicVolume: () => getEffectiveAudioVolume('levelMusic'),
+ musicState: () => ({levelPlaying:!!levelMusicAudio&&!levelMusicAudio.paused,menuPlaying:!!menuMusicAudio&&!menuMusicAudio.paused}),
  stopSpawns: () => { spawnDueAt=null; },
  settings: () => showPausePopup(true),
  get settingsNode(){return progressContainer.getChildByName('pausePopup');},
@@ -79,7 +80,9 @@ const server = http.createServer((req,res) => {
         let data = file === path.join(root,'firebase.js') ? backend : fs.readFileSync(file);
         if (file === path.join(root,'game.js')) data = data.toString() + expose;
         // Gameplay/UI suites are independent of the user's editable story sequence.
-        if (file === path.join(root,'cutscenes.js') && !process.argv.includes('--cutscenes') && !process.argv.includes('--story-layout')) data = 'export const cutscenes = [];';
+        if (file === path.join(root,'cutscenes.js') && !process.argv.includes('--cutscenes') && !process.argv.includes('--story-layout') && !process.argv.includes('--perl-story')) data = 'export const cutscenes = [];';
+        // Narrative sequencing has its own suite; unrelated gameplay tests keep their direct transitions.
+        if (file === path.join(root,'js','food-story-config.js') && !process.argv.includes('--perl-story') && !process.argv.includes('--victory-story')) data = 'export const FOOD_STORIES = {};';
         // Test fixture only: production unlock levels stay user-configured.
         if (process.argv.includes('--dishes') && file === path.join(root,'js','food-config.js')) {
             data = data.toString().replace("name: 'Пирог', pieces: 10, unlockLevel: null", "name: 'Пирог', pieces: 10, unlockLevel: 2");
@@ -115,10 +118,162 @@ async function main() {
     await cdp('Emulation.setDeviceMetricsOverride',{width:1920,height:1080,deviceScaleFactor:1,mobile:false});
     const debugSelect = process.argv.includes('--debug-select');
     if (!process.argv.includes('--cutscenes')) await cdp('Page.addScriptToEvaluateOnNewDocument',{source:'localStorage.setItem("zhukodav.cutscenes.v1",JSON.stringify(["welcome"]))'});
+    if(!process.argv.includes('--tool-tutorial'))await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`localStorage.setItem('zhukodav.toolsLearned.v1',JSON.stringify(['red','yellow','purple','green']))`});
+    if(!process.argv.includes('--bug-tutorial')&&!process.argv.includes('--tool-tutorial'))await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`localStorage.setItem('zhukodav.bugsLearned.v1',JSON.stringify(['bug','fat','healer','frozen','chameleon','neat','bomb',...['red','purple','green','yellow'].flatMap(c=>['coloredBug_'+c,'fatColoredBug_'+c])]))`});
     await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/${process.argv.includes('--food-test') ? '?foodTest=1' : debugSelect ? '?debug=1' : ''}`});
     const deadline=Date.now()+45000;
     while(!await evaluate('!!window.gameTest?.ready()')) {if(Date.now()>deadline)throw Error('Loading timeout: '+await evaluate('document.querySelector(' + JSON.stringify('[role=status]') + ')?.textContent')+' '+errors.join('\n'));await new Promise(r=>setTimeout(r,250));}
     assert.equal(await evaluate('document.fonts.check(\'700 32px "Balsamiq Sans"\')'),true);
+    if (process.argv.includes('--bug-tutorial')) {
+        for(const type of ['bug','fat','healer','frozen','chameleon','neat','bomb','fatColoredBug_red']){
+            await evaluate(`localStorage.removeItem('zhukodav.bugsLearned.v1');gameTest.start();gameTest.configure({${type}:1});gameTest.spawn('${type}');gameTest.step(5000)`);
+            assert.equal(await evaluate(`!!gameTest.ui.scene.getChildByName('toolTutorial')`),true,type);
+            if(type==='bug')assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('toolTutorialText').text`),'А, ну! Кышь от еды\nНАЖМИ на жука, чтобы прихлопнуть его');
+            const frozen=await evaluate('gameTest.snapshot()');await evaluate('gameTest.step(10000)');assert.deepEqual(await evaluate('gameTest.snapshot()'),frozen);
+            if(type==='fatColoredBug_red')await evaluate(`gameTest.hold('red')`);
+            const clicks=await evaluate('gameTest.objects[0].data.clicks');
+            for(let i=0;i<clicks;i++)await evaluate('gameTest.hit()');
+            if(type==='bomb'){
+                assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('toolTutorialText').text.startsWith('Ха! попался!')`),true);
+                const bomb=await evaluate('gameTest.snapshot()');await evaluate('gameTest.step(10000)');assert.deepEqual(await evaluate('gameTest.snapshot()'),bomb);
+                await new Promise(r=>setTimeout(r,400));
+                await evaluate(`gameTest.render()`);const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts','bomb-tutorial.png'),Buffer.from(data,'base64'));
+                await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('bombTutorialContinue').emit('pointertap');gameTest.step(1);gameTest.step(500)`);
+                assert.equal(await evaluate('gameTest.snapshot().life'),7);
+            }
+            assert.equal(await evaluate(`!!gameTest.ui.scene.getChildByName('toolTutorial')`),false);
+            assert.equal(await evaluate(`JSON.parse(localStorage.getItem('zhukodav.bugsLearned.v1')).includes('${type}')`),true);
+        }
+        assert.deepEqual(errors,[]);console.log('Bug tutorials passed: regular greeting, all special species, multi-hit, colored fat, frozen simulation, bomber joke/acknowledgement/attack and saved completion.');await send('Browser.close');return;
+    }
+    if (process.argv.includes('--tool-tutorial')) {
+        for(const color of ['red','yellow','purple','green']){
+            await evaluate(`gameTest.start();gameTest.configure({coloredBug_${color}:1});gameTest.spawn('coloredBug_${color}');gameTest.step(5000);`);
+            assert.equal(await evaluate(`!!gameTest.ui.scene.getChildByName('toolTutorial')`),true);
+            const frozen=await evaluate('gameTest.snapshot()');
+            await evaluate(`gameTest.step(10000);gameTest.spawn('coloredBug_${color}')`);
+            assert.deepEqual(await evaluate('gameTest.snapshot()'),frozen,'time, movement and spawning frozen');
+            await evaluate(`gameTest.hold('${color}',1)`);
+            assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('toolTutorialText').text.startsWith('Теперь')`),true);
+            await evaluate(`gameTest.release('${color}',1)`);
+            assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('toolTutorialText').text.includes('УДЕРЖИВАЙ')`),true);
+            await evaluate('gameTest.hit()');
+            assert.equal(await evaluate(`!!gameTest.ui.scene.getChildByName('toolTutorial')`),true,'wrong hit cannot finish');
+            await evaluate(`gameTest.hold('${color}',2);gameTest.render()`);
+            if(color==='red'){const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts','tool-tutorial.png'),Buffer.from(data,'base64'));}
+            await evaluate(`gameTest.hit();gameTest.release('${color}',2)`);
+            assert.equal(await evaluate(`!!gameTest.ui.scene.getChildByName('toolTutorial')`),false);
+            assert.equal(await evaluate('gameTest.objects.length'),0);
+            assert.equal(await evaluate(`JSON.parse(localStorage.getItem('zhukodav.toolsLearned.v1')).includes('${color}')`),true);
+            await evaluate('gameTest.step(1);gameTest.step(100)');
+            assert.ok((await evaluate('gameTest.snapshot().time'))<frozen.time);
+        }
+        await evaluate(`localStorage.removeItem('zhukodav.toolsLearned.v1');localStorage.removeItem('zhukodav.bugsLearned.v1');gameTest.start();gameTest.configure({coloredBug_red:1});gameTest.spawn('coloredBug_red');gameTest.hold('red');gameTest.hit();gameTest.release('red');gameTest.step(600);gameTest.spawn('coloredBug_red');gameTest.step(2000)`);
+        assert.equal(await evaluate(`!!gameTest.ui.scene.getChildByName('toolTutorial')`),false,'self-discovery skips tutorial');
+        await evaluate(`localStorage.removeItem('zhukodav.toolsLearned.v1');localStorage.removeItem('zhukodav.bugsLearned.v1');gameTest.start();gameTest.configure({coloredBug_red:1});gameTest.spawn('coloredBug_red');gameTest.step(5000);gameTest.home()`);
+        assert.equal(await evaluate('gameTest.isHome()'),true);
+        assert.equal(await evaluate(`JSON.parse(localStorage.getItem('zhukodav.toolsLearned.v1')||'[]').length`),0,'interruption does not complete tutorial');
+        await cdp('Emulation.setDeviceMetricsOverride',{width:852,height:393,deviceScaleFactor:1,mobile:true});
+        await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+        await evaluate(`gameTest.start();gameTest.configure({coloredBug_red:1});gameTest.spawn('coloredBug_red');gameTest.step(5000);gameTest.render()`);
+        const points=await evaluate(`(()=>{const b=gameTest.ui.buttons.red.getBounds(),p=gameTest.objects[0].toGlobal(new PIXI.Point(0,0));return {button:{x:b.x+b.width/2,y:b.y+b.height/2,id:1},bug:{x:p.x,y:p.y,id:2}};})()`);
+        await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[points.button]});
+        assert.equal(await evaluate('gameTest.snapshot().held'),'red');
+        await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[points.button,points.bug]});
+        await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+        assert.equal(await evaluate(`!!gameTest.ui.scene.getChildByName('toolTutorial')`),false,'two-finger touch completes tutorial');
+        assert.deepEqual(errors,[]);console.log('Tool tutorial passed: four tools, halfway trigger, frozen time/movement/spawning, hold/release regression, wrong hit, completion, resume, self-discovery and interruption.');await send('Browser.close');return;
+    }
+    if (process.argv.includes('--victory-story')) {
+        await evaluate(`(async()=>{window.fp=await import('./js/food-progress.js');window.sc=await import('./js/food-story-config.js');gameTest.start();gameTest.stopSpawns();})()`);
+        for(const [remaining,textValue,ratio] of [[20000,'20',1],[10000,'10',.5],[5500,'6',.275],[0,'0',0]]){
+            await evaluate(`gameTest.ui.update({life:8,remainingMs:${remaining},durationMs:20000})`);
+            assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('levelTimeBar').getChildByName('timerNumber').text`),textValue);
+            assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('levelTimeBar').remainingFraction`),ratio);
+            assert.deepEqual(await evaluate(`(()=>{const h=gameTest.ui.scene.getChildByName('levelTimeBar');return [h.x,h.y];})()`),[660,38]);
+        }
+        await evaluate(`gameTest.ui.update({life:8,remainingMs:10000,durationMs:20000});gameTest.render()`);
+        {const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts','timer-lines.png'),Buffer.from(data,'base64'));}
+        await evaluate('gameTest.end(true)');
+        const popup=`gameTest.ui.scene.parent.parent.getChildByName('winPopup')`;
+        const started=await evaluate('performance.now()');
+        assert.equal(await evaluate(`${popup}._appearance<1`),true,'popup opens from center');
+        await evaluate(`gameTest.resultButton('resultPrimary').emit('pointertap');gameTest.resultButton('resultMenu').emit('pointertap');${popup}.getChildByName('resultDishes').emit('pointertap')`);
+        assert.equal(await evaluate('gameTest.resultCounts()'),2,'all transitions locked initially');
+        await new Promise(r=>setTimeout(r,650));
+        if(await evaluate(`performance.now()-${started}<950`)){
+            await evaluate(`gameTest.resultButton('resultPrimary').emit('pointertap')`);
+            assert.equal(await evaluate('gameTest.resultCounts()'),2,'lock outlasts opening animation');
+        }
+        await new Promise(r=>setTimeout(r,450));
+        assert.equal(await evaluate(`${popup}._appearance`),1);
+        assert.equal(await evaluate(`${popup}.getChildByName('victoryStory').text`),await evaluate('sc.FOOD_STORIES.greek_salad[0].text'));
+        assert.equal(await evaluate('gameTest.cutscene===null'),true);
+        assert.equal(await evaluate('fp.readFoodProgress().story.seen.length'),0);
+        for(const [width,height] of [[1920,1080],[852,393],[390,844]]){
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+            await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');await evaluate('gameTest.render()');
+            const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts',`victory-story-${width}.png`),Buffer.from(data,'base64'));
+            assert.equal(await evaluate(`(()=>{const p=${popup},t=p.getChildByName('victoryStory').getBounds(),b=p.getChildByName('resultPrimary').getBounds();return t.y+t.height<b.y;})()`),true);
+        }
+        await evaluate(`gameTest.resultButton('resultPrimary').emit('pointertap')`);
+        assert.equal(await evaluate('fp.readFoodProgress().story.seen.length'),1);
+        assert.equal(await evaluate('gameTest.cutscene===null'),true);
+        assert.equal(await evaluate('gameTest.debugState().levelId'),2);
+        assert.deepEqual(errors,[]);console.log('Victory story and timer passed: embedded text, saved acknowledgement, direct transition, responsive layout, exact timer values/fractions and original position.');await send('Browser.close');return;
+    }
+    if (process.argv.includes('--perl-story')) {
+        const wait=ms=>new Promise(r=>setTimeout(r,ms));
+        const next=async()=>{await wait(380);await evaluate(`gameTest.cutscene.root.getChildByName('cutsceneContent').getChildByName('cutsceneNext').emit('pointertap')`);};
+        const modules=`(async()=>{window.fp=await import('./js/food-progress.js');window.story=await import('./js/food-story.js');window.storyConfig=await import('./js/food-story-config.js');})()`;
+        await evaluate(modules);await evaluate('gameTest.start()');
+        assert.equal(await evaluate('gameTest.cutscene.text'),'Привет! У меня сегодня день рождения!');
+        await wait(500);assert.equal(await evaluate('gameTest.musicState().levelPlaying'),true);
+        for(let i=0;i<8;i++)await next();await wait(400);await evaluate('gameTest.stop();gameTest.end(true)');
+        assert.equal(await evaluate('gameTest.cutscene===null'),true,'reward visible before story');
+        assert.equal(await evaluate('fp.readFoodProgress().story.events.length'),1);
+        await evaluate(`gameTest.resultButton('resultPrimary').emit('pointertap')`);
+        assert.equal(await evaluate('gameTest.cutscene.text'),await evaluate('storyConfig.FOOD_STORIES.greek_salad[0].text'));
+        await wait(1100);assert.equal(await evaluate('gameTest.musicState().levelPlaying'),true,'result timer must not switch music during story');
+        assert.equal(await evaluate('gameTest.musicState().menuPlaying'),false);
+        const before=await evaluate('JSON.stringify(fp.readFoodProgress().foods)');
+        await cdp('Page.reload');
+        const deadline=Date.now()+45000;
+        while(!await evaluate('!!window.gameTest?.cutscene')){if(Date.now()>deadline)throw Error('Pending story recovery timeout');await wait(200);}
+        await evaluate(modules);
+        assert.equal(await evaluate('gameTest.cutscene.text'),await evaluate('storyConfig.FOOD_STORIES.greek_salad[0].text'));
+        assert.equal(await evaluate('JSON.stringify(fp.readFoodProgress().foods)'),before);
+        for(const [width,height] of [[1920,1080],[852,393]]){
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await wait(100);await evaluate('gameTest.render()');
+            const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts',`perl-story-${width}.png`),Buffer.from(data,'base64'));
+        }
+        await wait(400);await evaluate(`(()=>{const b=gameTest.cutscene.root.getChildByName('cutsceneContent').getChildByName('cutsceneNext');b.emit('pointertap');b.emit('pointertap');})()`);await wait(400);
+        assert.equal(await evaluate('gameTest.cutscene===null'),true);assert.equal(await evaluate('gameTest.isHome()'),true);
+        assert.equal(await evaluate('fp.readFoodProgress().story.seen.length'),1);
+        await evaluate(`(async()=>{(await import('./cutscenes.js')).cutscenes.splice(0);gameTest.start();gameTest.end(true);gameTest.resultButton('resultMenu').emit('pointertap');})()`);
+        assert.equal(await evaluate('gameTest.cutscene===null'),true,'replay does not advance story');
+        await evaluate(`gameTest.start(1);gameTest.end(false);gameTest.resultButton('resultPrimary').emit('pointertap');gameTest.stop()`);
+        assert.equal(await evaluate('fp.readFoodProgress().story.events.length'),1,'loss and retry do not grant story');
+        await evaluate(`gameTest.home();for(let n=2;n<=4;n++)fp.awardFoodLoot({id:'fixture-'+n,loot:[{type:'foodPiece',foodId:'greek_salad',pieceId:'greek_salad_0'+n}]});const s=fp.readFoodProgress();s.story.seen=s.story.events.map(e=>e.lineId);fp.saveFoodProgress(s);gameTest.levels[1].loot=[{id:'last-salad',type:'foodPiece',foodId:'greek_salad',pieceId:'greek_salad_05'}];gameTest.start(1);gameTest.end(true);gameTest.resultButton('resultPrimary').emit('pointertap');`);
+        assert.equal(await evaluate('!!gameTest.cutscene && !gameTest.dishScene'),true);
+        assert.equal(await evaluate(`gameTest.selectDish('greek_salad')`),false);
+        await next();await wait(400);
+        assert.equal(await evaluate('!!gameTest.dishScene'),true,'assembly destination retained after story');
+        assert.equal(await evaluate('story.pendingFoodStories(fp.readFoodProgress()).length'),0);
+        // Earn a reward and reload before opening its dialogue.
+        await evaluate(`gameTest.home();fp.awardFoodLoot({id:'long-line',loot:[{type:'foodPiece',foodId:'bundt_cake',pieceId:'bundt_cake_01'}]});const state=fp.readFoodProgress();const longest=Object.values(storyConfig.FOOD_STORIES).flat().sort((a,b)=>b.text.length-a.text.length)[0];state.story.events.at(-1).lineId=longest.id;state.story.events.at(-1).foodId=Object.entries(storyConfig.FOOD_STORIES).find(([,lines])=>lines.includes(longest))[0];fp.saveFoodProgress(state);`);
+        await cdp('Page.reload');
+        const recovery=Date.now()+45000;while(!await evaluate('!!window.gameTest?.cutscene')){if(Date.now()>recovery)throw Error('Before-dialogue recovery timeout');await wait(200);}
+        await evaluate(modules);
+        assert.equal(await evaluate('gameTest.cutscene.text'),await evaluate('Object.values(storyConfig.FOOD_STORIES).flat().sort((a,b)=>b.text.length-a.text.length)[0].text'));
+        for(const [width,height] of [[1920,1080],[852,393]]){
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await wait(400);await evaluate('gameTest.render()');
+            const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts',`perl-story-long-${width}.png`),Buffer.from(data,'base64'));
+            assert.equal(await evaluate(`(()=>{const b=gameTest.cutscene.root.getChildByName('cutsceneContent').getChildByName('cutsceneNext').getBounds();return b.x>=0&&b.y>=0&&b.x+b.width<=${width}&&b.y+b.height<=${height};})()`),true);
+        }
+        await next();await wait(400);
+        assert.deepEqual(errors,[]);console.log('Perl story browser passed: original intro, level music, reward-first sequence, reload recovery, repeat/loss/retry, double tap, responsive text and final-piece assembly transition without SDK.');await send('Browser.close');return;
+    }
     if (process.argv.includes('--food-effects')) {
         await evaluate(`(async()=>{window.fp=await import('./js/food-progress.js');window.fc=await import('./js/food-config.js');const s=fp.readFoodProgress();for(const [id,f] of Object.entries(fc.FOOD_TYPES)){s.foods[id]={collected:f.puzzlePieces.map(p=>p.id),placed:f.puzzlePieces.map(p=>p.id),completed:true};}fp.saveFoodProgress(s);gameTest.levels[0].params.maxObjects=20;gameTest.levels[0].params.lifetimeMultiplier=2;})()`);
         let baseLifetime;

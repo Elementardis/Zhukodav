@@ -11,7 +11,7 @@ const FOOD_CATALOG = {
     pizza: Object.freeze({ name: 'Пицца', pieces: 8, partsPath: 'images/food/pizza', filePrefix: 'pizza_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2]) }),
     cake: Object.freeze({ name: 'Торт', pieces: 6, partsPath: 'images/food/cake', filePrefix: 'cake_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 1, 2]) }),
     pie: Object.freeze({ name: 'Пирог', pieces: 10, partsPath: 'images/food/pie', filePrefix: 'pie_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2, 9, 10]) }),
-    bundt_cake: Object.freeze({ name: 'Круговой кекс', pieces: 12, partsPath: 'images/food/bundt_cake', filePrefix: 'bundt_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2, 9, 10, 11, 12
+    bundt_cake: Object.freeze({ name: 'Десерт старого друга', pieces: 12, partsPath: 'images/food/bundt_cake', filePrefix: 'bundt_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2, 9, 10, 11, 12
     ]) }),
     greek_salad: Object.freeze({ name: 'Греческий салат', pieces: 5, partsPath: 'images/food/greek_salad', filePrefix: 'salad_', removalOrder: Object.freeze([1, 2, 3, 4, 5]), drawOrder: Object.freeze([5, 4, 3, 2, 1]) }),
     // First lost life hides 07, then 06, down to 01.
@@ -25,7 +25,7 @@ const FOOD_PRESENTATION = {
     pizza: { wholeIcon: 'dish_pizza', collectingName: 'пиццу' },
     cake: { wholeIcon: 'dish_cake', collectingName: 'торт' },
     pie: { wholeIcon: 'dish_pie', collectingName: 'пирог' },
-    bundt_cake: { wholeIcon: 'dish_bundt', collectingName: 'круговой кекс' },
+    bundt_cake: { wholeIcon: 'dish_bundt', collectingName: 'десерт старого друга' },
     greek_salad: { wholeIcon: 'dish_salad', collectingName: 'греческий салат' },
     dressed_herring: { wholeIcon: 'dish_dressed_herring', collectingName: 'селёдку под шубой' }
 };

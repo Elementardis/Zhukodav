@@ -8,6 +8,9 @@ import { DISH_ASSETS, DISH_IDS, normalizeDish, canSelectDish, createDishSelect, 
 import { loadDishPreference, saveDishPreference } from './firebase.js';
 import { RESULT_ASSETS, createResultPopup } from './js/result-popup.js';
 import { awardFoodLoot, readFoodProgress, saveFoodProgress } from './js/food-progress.js';
+import { pendingFoodStories } from './js/food-story.js';
+import { needsToolTutorial, tutorialColor, markToolLearned, markBugLearned, createToolTutorial } from './js/tool-tutorial.js';
+import { BUG_TUTORIALS } from './js/bug-tutorial-config.js';
 import { FOOD_TEST_MODE } from './js/food-test-config.js';
 import { getFoodDefinition, getFoodMaxLives, getFoodAssets, getFoodBugLimit } from './js/food-config.js';
 import { GAMEPLAY_ASSETS, GAMEPLAY_STYLE, buildGameplayScene, fitGameplayScene } from './js/gameplay-scene.js';
@@ -66,6 +69,21 @@ const HEALER_MUSIC_GLOW_MS = 700;
 
 // ==== Global Variables ====
 let activeObjects = [];
+let toolTutorial = null;
+function clearToolTutorial() {
+    if(!toolTutorial)return;
+    toolTutorial.view.destroy();toolTutorial=null;levelCountdownLastAt=null;
+    activeObjects.forEach(obj=>obj.animations.forEach(animation=>animation.resume()));
+}
+function beginToolTutorial(obj) {
+    if(toolTutorial || !needsToolTutorial(obj) || isChameleonEffectActive())return false;
+    const color=tutorialColor(obj),tool=GAMEPLAY_STYLE.tools.find(t=>t.color===color);
+    if(color && !currentGameUI.buttons[color]?.visible)return false;
+    toolTutorial={obj,color,view:createToolTutorial(currentGameUI.scene,TEXTURES,obj,tool,()=>{markBugLearned('bomb');clearToolTutorial();})};
+    activeObjects.forEach(other=>other.animations.forEach(animation=>animation.pause()));
+    toolTutorial.view.update(isColorHeld(color));levelCountdownLastAt=null;
+    return true;
+}
 let maxSimultaneousObjects = 4;
 let rootUI = new PIXI.Container();
 let gameContainer = new PIXI.Container();
@@ -294,6 +312,7 @@ function startLevelMusic() {
 }
 
 function startMenuMusic() {
+    if (activeCutscene || gameContainer?.getChildByName('winPopup')?.getChildByName('victoryStory')) { startLevelMusic(); return; }
     if (!musicEnabled) return;
 
     stopLevelMusic();
@@ -428,7 +447,7 @@ function setMusicEnabled(enabled) {
     if (document.hidden) return;
 
     const gameScreenActive = app?.stage?.children?.includes(gameContainer);
-    if (gameScreenActive && levelData && !levelEnded) {
+    if (activeCutscene || (gameScreenActive && levelData && !levelEnded)) {
         if (!isPaused && !orientationPauseActive) {
             startLevelMusic();
         }
@@ -461,20 +480,19 @@ function canShowAd() {
     return true;
 }
 
-function showInterstitialAd() {
-    if (!isYandexGames()) return;
-    if (!canShowAd()) return;
-    if (!window.ysdk?.adv?.showFullscreenAdv) return;
-
-    window.ysdk.adv.showFullscreenAdv({
+let interstitialActive = false;
+function showInterstitialAd(onDone = () => {}) {
+    if (!isYandexGames() || !canShowAd() || !window.ysdk?.adv?.showFullscreenAdv) { onDone(); return; }
+    interstitialActive = true;
+    let finished = false;
+    const finish = () => { if (finished) return; finished = true; interstitialActive = false; lastAdTime = Date.now(); onDone(); };
+    try { window.ysdk.adv.showFullscreenAdv({
         callbacks: {
-            onOpen: () => {},
-            onClose: () => {
-                lastAdTime = Date.now();
-            },
-            onError: () => {}
+            onOpen: () => { pauseLevelMusic(); pauseMenuMusic(); },
+            onClose: finish,
+            onError: finish
         }
-    });
+    }); } catch { finish(); }
 }
 
 function giveExtraLives(amount) {
@@ -546,9 +564,34 @@ function runCutscenes(when, won, continuation) {
     if(!scenes.length){continuation();return;}
     const generation=cutsceneGeneration;
     clearActiveColor();introActive=true;
+    startLevelMusic();
     activeCutscene=playCutscenes({scenes,host:gameContainer,app,textures:TEXTURES,
         theme:loader.resources.intro_layout.data.popupTheme,
-        onComplete(){if(generation!==cutsceneGeneration)return;activeCutscene=null;introActive=false;continuation();}
+        onComplete(){if(generation!==cutsceneGeneration)return;activeCutscene=null;introActive=false;if(levelEnded)startMenuMusic();continuation();}
+    });
+}
+
+function runFoodStories(continuation = () => {}) {
+    if (activeCutscene || interstitialActive) return;
+    const state = readFoodProgress();
+    saveFoodProgress(state); // Persist legacy migration even when the queue is empty.
+    const scenes = pendingFoodStories(state);
+    if (!scenes.length) { continuation(); return; }
+    const generation = cutsceneGeneration;
+    clearActiveColor(); introActive = true;
+    startLevelMusic();
+    activeCutscene = playCutscenes({ scenes, host: app.stage, app, textures: TEXTURES,
+        theme: loader.resources.intro_layout.data.popupTheme,
+        onSceneComplete(scene) {
+            const current = readFoodProgress();
+            if (!current.story.seen.includes(scene.id)) current.story.seen.push(scene.id);
+            saveFoodProgress(current);
+        },
+        onComplete() {
+            if (generation !== cutsceneGeneration) return;
+            activeCutscene = null;
+            introActive = false; startMenuMusic(); continuation();
+        }
     });
 }
 
@@ -675,6 +718,7 @@ function syncAllColorButtonStates() {
     updateBugHighlights();
     updatePlayAreaActiveBorder();
     setAudioDucking(hasAnyActiveColor());
+    toolTutorial?.view.update(isColorHeld(toolTutorial.color));
 }
 
 // ==== UI Containers ====
@@ -1100,6 +1144,7 @@ function freezeActiveObjects() {
 
         // Мгновенное удаление всех активных объектов (без анимаций) - для перехода между уровнями
         function removeAllActiveObjectsImmediate() {
+    clearToolTutorial();
     for (const obj of [...activeObjects]) resolveFoodBug(obj, false);
     activeObjects = [];
 }
@@ -1184,7 +1229,9 @@ document.addEventListener('visibilitychange', () => {
         clearActiveColor();
         pauseLevelMusic();
         pauseMenuMusic();
-    } else if (levelData && !levelEnded && !isPaused && !orientationPauseActive) {
+    } else if (interstitialActive) {
+        return;
+    } else if (activeCutscene || (levelData && !levelEnded && !isPaused && !orientationPauseActive)) {
         startLevelMusic();
     } else {
         startMenuMusic();
@@ -1320,6 +1367,9 @@ function showProgressScreen() {
         app.stage.addChild(progressContainer);
     }
     updateMobilePortraitOverlay();
+    sessionDelay(() => {
+        if (!document.hidden && !activeCutscene && !dishSelectScene && app.stage.children.includes(progressContainer)) runFoodStories();
+    }, 0);
 }
 
 function openDebugLevelSelect() {
@@ -1858,7 +1908,7 @@ function startLevel(index) {
 
   // если в конфиге уровня есть интро-попап — сначала показываем его, спавн не запускаем
   runCutscenes('beforeLevel', null, () => {
-  if (levelData.introPopup) {
+  if (levelData.introPopup && !BUG_TUTORIALS[levelData.introPopup.type]) {
     introActive = true; // ⬅ блокируем спавн
     showIntroPopup(levelData.introPopup, startSpawning);
   } else {
@@ -2045,6 +2095,7 @@ function removeClicksCounter(container) {
 // генерация объекта
 // Integrated into game.js; movement and simulation use logical scene coordinates.
 function spawnObject() {
+    if(toolTutorial)return;
     if (isPaused || introActive || orientationPauseActive || levelEnded || document.hidden) return;
     if (activeObjects.filter(obj => obj.state !== 'resolved').length >= getFoodBugLimit(levelData)) {
         scheduleNextSpawn(FOOD_RULES.retrySpawnMs);
@@ -2076,6 +2127,7 @@ function spawnObject() {
         ? createCrossing(position, rect, side, radius, data.lifetime)
         : createApproach(position, food, radius, data.lifetime, getFoodDefinition(levelData).effects.foodWaitSeconds * 1000));
     container.type = data.type;
+    container.approachDistance=Math.hypot(container.targetX-container.x,container.targetY-container.y);
     container.data = data;
     container.scoreValue = data.scoreValue;
     container.interactive = container.buttonMode = true;
@@ -2117,6 +2169,7 @@ function spawnObject() {
 }
 
 function hitFoodBug(obj) {
+    if(toolTutorial && obj!==toolTutorial.obj)return;
     if (isPaused || introActive || orientationPauseActive || levelEnded || obj.state === 'resolved' || obj.bombTriggered || document.hidden) return;
     const type = obj.type;
     const colored = type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_');
@@ -2140,6 +2193,8 @@ function hitFoodBug(obj) {
         obj.bombTriggered = true;
         obj.interactive = obj.buttonMode = false;
         obj.hop.children[0].rotation = obj.angle - FOOD_RULES.textureForwardAngle;
+        if(toolTutorial?.obj===obj)toolTutorial.view.bombAfterClick();
+        else markBugLearned('bomb');
         return;
     }
     playBugClick();
@@ -2148,10 +2203,14 @@ function hitFoodBug(obj) {
     const count = obj.getChildByName('clickText');
     if (count) count.text = String(obj.data.clicks);
     if (obj.data.clicks > 0) { animateFatBugSquish(obj); return; }
+    const tutorialFinished=toolTutorial?.obj===obj;
+    if(!colored || isColorHeld(type.split('_')[1]))markBugLearned(type);
+    if(colored && isColorHeld(type.split('_')[1]))markToolLearned(type.split('_')[1]);
     score += getObjectScoreValue(obj.data);
     // Resolve before any visual effect, so a click during the warning cannot damage food.
     const holdAfterHit = type === 'bug' || type === 'fat' || colored;
     resolveFoodBug(obj, true, holdAfterHit);
+    if(tutorialFinished){resolveFoodBug(obj,false);clearToolTutorial();}
     if (type === 'healer') {
         changeFoodHealth(Math.max(0, obj.data.healAmount ?? 0));
         playHealerMusicEffect();
@@ -2238,6 +2297,7 @@ function updateBugHop(obj, dt, rate) {
 }
 
 function advanceGameplay(dt) {
+    if(toolTutorial)return;
     // Fixed maximum step preserves contact/timeout ordering at low and high FPS.
     let remaining = Math.min(dt, levelTimeRemainingMs);
     while (remaining > 0 && !levelEnded) {
@@ -2269,6 +2329,7 @@ function advanceGameplay(dt) {
             const movementRate = isFrozenEffectActive() ? FROZEN_LIFETIME_RATE : 1;
             const event = advanceApproach(obj, step, GAMEPLAY_STYLE.playRect, movementRate);
             updateBugHop(obj, step, movementRate);
+            if(beginToolTutorial(obj)){updateUI();return;}
             if (event === 'warning') showFoodWarning(obj);
             if (obj.warning) obj.warning.alpha = 0.65 + Math.sin(gameTimeMs * 0.025) * 0.35;
             if (event === 'damage' || event === 'departed') {
@@ -2335,6 +2396,7 @@ function stopLevelCountdown() {
 }
 
 function tickLevelCountdown(now = performance.now()) {
+    if(toolTutorial){toolTutorial.view.update(isColorHeld(toolTutorial.color));levelCountdownLastAt=null;return;}
     if (levelEnded || isPaused || introActive || orientationPauseActive || document.hidden || getViewportMode() === 'mobile-portrait') {
         levelCountdownLastAt = null;
         return;
@@ -2342,6 +2404,7 @@ function tickLevelCountdown(now = performance.now()) {
     const dt = levelCountdownLastAt === null ? 0 : Math.max(0, now - levelCountdownLastAt);
     levelCountdownLastAt = now;
     advanceGameplay(dt);
+    if(toolTutorial)return;
     if (life <= 0) endGame(false);
     else if (levelTimeRemainingMs === 0) endGame(true);
 }
@@ -2366,6 +2429,7 @@ function updateUI(dt = 0) {
 
 // конец игры
 function endGame(won) {
+    clearToolTutorial();
     if (levelEnded) return;
     clearSessionCallbacks();
     stopLevelCountdown();
@@ -2378,7 +2442,7 @@ function endGame(won) {
     stopLevelMusic();
     playSound(won ? 'victory' : 'defeat');
     sessionDelay(() => {
-        if (levelEnded && !document.hidden) startMenuMusic();
+        if (levelEnded && !document.hidden && !interstitialActive) startMenuMusic();
     }, 900);
     debugSpawn('endGame called', { won, score, life });
     freezeActiveObjects();
@@ -2399,18 +2463,26 @@ function endGame(won) {
 
     const idx = levels.findIndex(level => level.id === levelData.id);
     lastFoodReward = won ? awardFoodLoot(levelData) : null;
+    let requestAd = false;
     if (won) {
         levelsSinceLastAd++;
         if (levelsSinceLastAd >= 2) {
-            showInterstitialAd();
+            requestAd = true;
             levelsSinceLastAd = 0;
         }
         markLevelCompleted(idx);
     } else {
-        showInterstitialAd();
+        requestAd = true;
         levelsSinceLastAd = 0;
     }
-    runCutscenes('afterLevel', won, () => won ? showWinOverlayThenPopup(idx) : showLoseOverlayThenPopup(idx));
+    const generation = cutsceneGeneration;
+    const showResult = () => {
+        if (generation !== cutsceneGeneration) return;
+        runCutscenes('afterLevel', won, () => won ? showWinOverlayThenPopup(idx) : showLoseOverlayThenPopup(idx));
+    };
+    // Story rewards never wait for advertising SDK availability.
+    if (requestAd && !(won && pendingFoodStories(readFoodProgress()).length)) showInterstitialAd(showResult);
+    else showResult();
 
 }
 
@@ -2717,13 +2789,22 @@ function showResultPopup({ won, levelIndex }) {
     overlay.interactive = true;
     gameContainer.addChild(overlay);
     const hasNext = !!levels[levelIndex + 1];
+    let transitioning = false;
     const transition = callback => {
+        if (transitioning) return;
+        transitioning = true;
         playUiClick();
         clearAllPopups();
         callback();
     };
     const popup = createResultPopup(TEXTURES, layout, {
         won, hasNext, reward: won ? lastFoodReward : null,
+        stories: won ? pendingFoodStories(readFoodProgress()) : [],
+        onStorySeen: scene => {
+            const state=readFoodProgress();
+            if(!state.story.seen.includes(scene.id))state.story.seen.push(scene.id);
+            saveFoodProgress(state);
+        },
         onDishes: foodId => transition(() => {showProgressScreen();showDishSelect(foodId || lastFoodReward?.received.find(r=>r.ready)?.foodId);}),
         theme: loader.resources.intro_layout.data.popupTheme,
         onMenu: () => transition(showProgressScreen),
@@ -2739,6 +2820,8 @@ function showResultPopup({ won, levelIndex }) {
     });
     fitPopup(popup, app.screen);
     gameContainer.addChild(popup);
+    if (won && popup.getChildByName('victoryStory')) startLevelMusic();
+    popup.animateOpen?.(() => app.screen);
 }
 function showPausePopup(homeSettings = false) {
     if(activeCutscene)return;

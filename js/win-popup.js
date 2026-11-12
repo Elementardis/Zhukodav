@@ -2,17 +2,40 @@ import { FOOD_TYPES } from './food-config.js';
 import { HEADING_FONT } from './typography.js';
 import { popupSurface } from './intro-popup.js';
 import { fitDishIcon } from './dish-select.js';
+import { fitPopup } from './popup-layout.js';
 
 const PLUM = 0x2D1738;
-export function createWinPopup(textures, { hasNext, onMenu, onPrimary, theme, reward, onDishes }) {
+export function createWinPopup(textures, { hasNext, onMenu, onPrimary, theme, reward, onDishes, stories = [], onStorySeen = () => {} }) {
     const popup = new PIXI.Container(); popup.name = 'winPopup'; popup.interactive = true;
     let activated = false, portrait = null;
+    let blockedUntil = performance.now() + 1000, opening = null;
+    popup.animateOpen = getViewport => {
+        blockedUntil = performance.now() + 1000;
+        const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        popup._appearance = reduced ? 1 : 0.12;
+        popup.alpha = reduced ? 1 : 0;
+        fitPopup(popup, getViewport());
+        opening?.kill();
+        opening = gsap.to(popup, { _appearance: 1, alpha: 1, duration: reduced ? 0 : 0.38, ease: 'power3.out',
+            onUpdate: () => { if (!popup.destroyed) fitPopup(popup, getViewport()); } });
+    };
+    const destroy = popup.destroy.bind(popup);
+    popup.destroy = (...args) => { opening?.kill(); destroy(...args); };
+    let storyIndex=0, lastAction=-Infinity, lastViewport={width:1920,height:1080};
     // Prefer the completed set when a level awards pieces for several dishes.
     const item = reward?.received.find(r => r.ready) || reward?.received.at(-1);
     const food = FOOD_TYPES[item?.foodId];
     const total = food?.maxLives || 0, collected = Math.max(0, Math.min(total, item?.count || 0));
     const ready = !!item?.ready;
-    const action = callback => () => { if (activated || popup.destroyed) return; activated = true; callback(); };
+    const action = callback => () => {
+        if (activated || popup.destroyed || performance.now()<blockedUntil || performance.now()-lastAction<350) return;
+        lastAction=performance.now();
+        if(stories[storyIndex]){
+            onStorySeen(stories[storyIndex]);
+            if(storyIndex<stories.length-1){storyIndex++;portrait=null;popup.reflow(lastViewport);return;}
+        }
+        activated = true; callback();
+    };
     function text(value, name, rect, size, style = {}) {
         const t = new PIXI.Text(value, { fontFamily: HEADING_FONT, fontWeight: 'bold', fontSize: size, fill: PLUM,
             align: 'center', wordWrap: true, wordWrapWidth: rect[2], lineJoin: 'round', ...style });
@@ -32,11 +55,13 @@ export function createWinPopup(textures, { hasNext, onMenu, onPrimary, theme, re
         b.on('pointertap',action(callback));popup.addChild(b);
     }
     popup.reflow = viewport => {
+        lastViewport=viewport;
         const narrow=viewport.width/viewport.height<.8;
         if(portrait===narrow)return;portrait=narrow;
         for(const child of popup.removeChildren())child.destroy({children:true});
-        const w=narrow?740:1140,h=narrow?1210:850;
-        popup._popupLayout={width:w,height:h,reference:{width:narrow?780:1400,height:narrow?1250:1000}};
+        const extra=stories.length?(narrow?240:190):0;
+        const w=narrow?740:1140,h=(narrow?1210:850)+extra;
+        popup._popupLayout={width:w,height:h,reference:{width:narrow?780:1400,height:(narrow?1250:1000)+extra}};
         popup.hitArea=new PIXI.Rectangle(0,0,w,h);
         popup.addChild(popupSurface(textures,'panel',[0,0,w,h],theme));
         text(ready?'НОВОЕ БЛЮДО ГОТОВО!':'Ура! Вкуснятина!','winTitle',[40,22,w-80,90],ready?60:76,{fill:0xF45D53,stroke:PLUM,strokeThickness:4,
@@ -65,9 +90,15 @@ export function createWinPopup(textures, { hasNext, onMenu, onPrimary, theme, re
         link.hitArea=new PIXI.Rectangle(-link.width/2,-30,link.width,60);
         link.on('pointerover',()=>link.tint=0xF45D53);link.on('pointerout',()=>link.tint=0xFFFFFF);link.on('pointerdown',()=>link.alpha=.7);link.on('pointerup',()=>link.alpha=1);
         link.on('pointertap',action(()=>onDishes(food?.id)));
-        const main=ready?'СОБРАТЬ БЛЮДО':hasNext?(narrow?'СЛЕДУЮЩИЙ УРОВЕНЬ':'СЛЕДУЮЩИЙ\nУРОВЕНЬ'):'ВЫБОР УРОВНЯ';
-        button('resultMenu',narrow?[55,990,630,85]:[50,700,500,116],'В ГЛАВНОЕ МЕНЮ','home',false,onMenu);
-        button('resultPrimary',narrow?[55,1090,630,85]:[590,700,500,116],main,'next',true,onPrimary);
+        if(stories[storyIndex]){
+            const y=narrow?985:690,sh=narrow?220:170;
+            const speech=new PIXI.Graphics().lineStyle(3,PLUM).beginFill(0xFFF9EE).drawRoundedRect(50,y,w-100,sh,22).endFill();
+            speech.name='victoryStoryPanel';popup.addChild(speech);
+            text(stories[storyIndex].frames[0].text,'victoryStory',[75,y+15,w-150,sh-30],narrow?28:30);
+        }
+        const main=storyIndex<stories.length-1?'ДАЛЕЕ':ready?'СОБРАТЬ БЛЮДО':hasNext?(narrow?'СЛЕДУЮЩИЙ УРОВЕНЬ':'СЛЕДУЮЩИЙ\nУРОВЕНЬ'):'ВЫБОР УРОВНЯ';
+        button('resultMenu',narrow?[55,990+extra,630,85]:[50,700+extra,500,116],'В ГЛАВНОЕ МЕНЮ','home',false,onMenu);
+        button('resultPrimary',narrow?[55,1090+extra,630,85]:[590,700+extra,500,116],main,'next',true,onPrimary);
     };
     popup.reflow({width:1920,height:1080});return popup;
 }

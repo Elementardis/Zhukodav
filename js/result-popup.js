@@ -11,8 +11,8 @@ export const RESULT_ASSETS = [
     { name: 'result_layout', path: 'images/ui/results/layout.json', dataResource: true }
 ];
 
-export function createResultPopup(textures, layout, { won, hasNext, onMenu, onPrimary, theme, reward, onDishes }) {
-    if (won) return createWinPopup(textures, { hasNext, onMenu, onPrimary, theme, reward, onDishes });
+export function createResultPopup(textures, layout, { won, hasNext, onMenu, onPrimary, theme, reward, onDishes, stories, onStorySeen }) {
+    if (won) return createWinPopup(textures, { hasNext, onMenu, onPrimary, theme, reward, onDishes, stories, onStorySeen });
     const popup = new PIXI.Container();
     popup.name = won ? 'winPopup' : 'losePopup';
     popup._popupLayout = { width: layout.panelSize[0], height: layout.panelSize[1], reference: { width: layout.baseViewport[0], height: layout.baseViewport[1] } };
