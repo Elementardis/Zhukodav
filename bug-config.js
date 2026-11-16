@@ -25,7 +25,7 @@ export const BUG_BALANCE = {
     spawnZone: 'full',
   },
   "bomb": {
-    lifetime: 2000,
+    lifetime: 6000,
     spawnInterval: 450,
     clicks: 1,
     scoreValue: 0,

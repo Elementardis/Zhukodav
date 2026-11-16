@@ -1,3 +1,4 @@
+import { HELPER_TYPES, helperCanSpawn, limitHelperWeights, bombCanSpawn, limitBombWeights } from './js/spawn-rules.js';
 import { POPUP_REFERENCE, fitPopup } from './js/popup-layout.js';
 import { createIntroPopup } from './js/intro-popup.js';
 import { createSettingsPopup } from './js/settings-popup.js';
@@ -9,12 +10,12 @@ import { loadDishPreference, saveDishPreference } from './firebase.js';
 import { RESULT_ASSETS, createResultPopup } from './js/result-popup.js';
 import { awardFoodLoot, readFoodProgress, saveFoodProgress } from './js/food-progress.js';
 import { pendingFoodStories } from './js/food-story.js';
-import { needsToolTutorial, tutorialColor, markToolLearned, markBugLearned, createToolTutorial } from './js/tool-tutorial.js';
+import { needsToolTutorial, learnedBugs, tutorialColor, markToolLearned, markBugLearned, createToolTutorial } from './js/tool-tutorial.js';
 import { BUG_TUTORIALS } from './js/bug-tutorial-config.js';
 import { FOOD_TEST_MODE } from './js/food-test-config.js';
 import { getFoodDefinition, getFoodMaxLives, getFoodAssets, getFoodBugLimit } from './js/food-config.js';
 import { GAMEPLAY_ASSETS, GAMEPLAY_STYLE, buildGameplayScene, fitGameplayScene } from './js/gameplay-scene.js';
-import { FOOD_RULES, levelDurationMs, weightedType, shuffledSides, chooseEntry, createApproach, createCrossing, advanceApproach } from './js/food-rules.js';
+import { FOOD_RULES, levelDurationMs, weightedType, shuffledSides, chooseEntry, createApproach, createBombOrbit, advanceApproach } from './js/food-rules.js';
 import levels from './levels.js';
 import { createSoundEffects } from './js/sound-effects.js';
 import { getBugBaseBalance, getBugSpawnZone } from './bug-config.js';
@@ -70,13 +71,16 @@ const HEALER_MUSIC_GLOW_MS = 700;
 // ==== Global Variables ====
 let activeObjects = [];
 let toolTutorial = null;
+let helperSpawnCount = 0, lastHelperSpawnAt = -Infinity;
+let lastBombSpawnAt = -Infinity;
+let tutorialSpeciesQueued = new Set();
 function clearToolTutorial() {
     if(!toolTutorial)return;
     toolTutorial.view.destroy();toolTutorial=null;levelCountdownLastAt=null;
     activeObjects.forEach(obj=>obj.animations.forEach(animation=>animation.resume()));
 }
-function beginToolTutorial(obj) {
-    if(toolTutorial || !needsToolTutorial(obj) || isChameleonEffectActive())return false;
+function beginToolTutorial(obj, immediate = false) {
+    if(toolTutorial || !needsToolTutorial(obj, immediate))return false;
     const color=tutorialColor(obj),tool=GAMEPLAY_STYLE.tools.find(t=>t.color===color);
     if(color && !currentGameUI.buttons[color]?.visible)return false;
     toolTutorial={obj,color,view:createToolTutorial(currentGameUI.scene,TEXTURES,obj,tool,()=>{markBugLearned('bomb');clearToolTutorial();})};
@@ -801,6 +805,7 @@ const UI_ASSET_SLOTS = {
 
 // ==== SPRITE PRELOADER (PIXI.Loader) ====
 const SPRITE_PATHS = [
+    { name: 'tutorial_finger', path: 'images/ui/tutorial_finger.png' },
     ...HOME_ASSETS,
     ...DISH_ASSETS,
     ...GAMEPLAY_ASSETS,
@@ -1883,6 +1888,7 @@ function startLevel(index) {
   score = 0;
   life = getFoodMaxLives(levelData);
   gameTimeMs = 0;
+  helperSpawnCount = 0; lastHelperSpawnAt = -Infinity; lastBombSpawnAt = -Infinity; tutorialSpeciesQueued = new Set();
   spawnSides = [];
   levelTimeRemainingMs = levelDurationMs(levelData);
 
@@ -2029,8 +2035,17 @@ function createGameFieldPopupPanel(width, height, radius = 34, borderColor = THE
 // очередь объектов
 function prepareObjectQueue() {
     objectQueue = [];
-    for (let i = 0; i < 64; i++) {
-        const type = weightedType(levelData.params.spawnWeights);
+    // Queue unseen species once per run so a low weight cannot hide their introduction.
+    const weights = limitHelperWeights(limitBombWeights(levelData.params.spawnWeights));
+    const learned = learnedBugs();
+    for (const [type, weight] of Object.entries(levelData.params.spawnWeights)) {
+        if (weight > 0 && BUG_TUTORIALS[type] && !learned.includes(type) && !tutorialSpeciesQueued.has(type)) {
+            objectQueue.push({ type, ...getRuntimeBugBalance(type) });
+            tutorialSpeciesQueued.add(type);
+        }
+    }
+    for (let i = objectQueue.length; i < 64; i++) {
+        const type = weightedType(weights);
         if (!type) break;
         const balance = getRuntimeBugBalance(type);
         objectQueue.push({ type, ...balance });
@@ -2102,7 +2117,18 @@ function spawnObject() {
         return;
     }
     if (!objectQueue.length) prepareObjectQueue();
-    const data = objectQueue[0];
+    const allowHelper = helperCanSpawn(gameTimeMs, lastHelperSpawnAt, helperSpawnCount, activeObjects);
+    const allowBomb = bombCanSpawn(gameTimeMs, lastBombSpawnAt, activeObjects);
+    const canSpawnType = type => (allowHelper || !HELPER_TYPES.includes(type)) && (allowBomb || type !== 'bomb');
+    let queueIndex = objectQueue.findIndex(item => canSpawnType(item.type));
+    if (queueIndex < 0) {
+        const ordinaryWeights = Object.fromEntries(Object.entries(levelData.params.spawnWeights).filter(([type]) => !HELPER_TYPES.includes(type) && type !== 'bomb'));
+        const type = weightedType(ordinaryWeights);
+        if (!type) { scheduleNextSpawn(FOOD_RULES.retrySpawnMs); return; }
+        objectQueue.push({ type, ...getRuntimeBugBalance(type) });
+        queueIndex = objectQueue.length - 1;
+    }
+    const data = objectQueue[queueIndex];
     if (!data) return;
     const fat = data.type === 'fat' || data.type.startsWith('fatColoredBug_');
     const size = FOOD_RULES.bugSize * (fat ? FOOD_RULES.fatSizeMultiplier : 1);
@@ -2117,14 +2143,16 @@ function spawnObject() {
         y: GAMEPLAY_STYLE.food.y + GAMEPLAY_STYLE.food.size / 2 - rect.y,
         radius: GAMEPLAY_STYLE.food.size / 2
     };
-    const position = chooseEntry(rect, side, radius, activeObjects, Math.random, data.spawnZone, data.type === 'bomb' ? food : null);
+    const position = chooseEntry(rect, side, radius, activeObjects, Math.random, data.spawnZone);
     if (!position) { scheduleNextSpawn(FOOD_RULES.retrySpawnMs); return; }
     spawnSides.splice(sideIndex, 1);
-    objectQueue.shift();
+    objectQueue.splice(queueIndex, 1);
+    if (HELPER_TYPES.includes(data.type)) { helperSpawnCount++; lastHelperSpawnAt = gameTimeMs; }
+    if (data.type === 'bomb') lastBombSpawnAt = gameTimeMs;
     food.radius = GAMEPLAY_STYLE.food.radius;
     const container = new PIXI.Container();
     Object.assign(container, data.type === 'bomb'
-        ? createCrossing(position, rect, side, radius, data.lifetime)
+        ? createBombOrbit(position, { ...food, radius: GAMEPLAY_STYLE.food.size / 2 }, radius, data.lifetime)
         : createApproach(position, food, radius, data.lifetime, getFoodDefinition(levelData).effects.foodWaitSeconds * 1000));
     container.type = data.type;
     container.approachDistance=Math.hypot(container.targetX-container.x,container.targetY-container.y);
@@ -2171,9 +2199,10 @@ function spawnObject() {
 function hitFoodBug(obj) {
     if(toolTutorial && obj!==toolTutorial.obj)return;
     if (isPaused || introActive || orientationPauseActive || levelEnded || obj.state === 'resolved' || obj.bombTriggered || document.hidden) return;
+    if (!toolTutorial && beginToolTutorial(obj, true)) return;
     const type = obj.type;
     const colored = type.startsWith('coloredBug_') || type.startsWith('fatColoredBug_');
-    const wrong = type !== 'bomb' && !isChameleonEffectActive() && (colored ? !isColorHeld(type.split('_')[1]) : hasAnyActiveColor());
+    const wrong = type !== 'bomb' && (!isChameleonEffectActive() || toolTutorial?.obj === obj) && (colored ? !isColorHeld(type.split('_')[1]) : hasAnyActiveColor());
     if (wrong) {
         playWrongBugClick();
         currentGameUI.feedback('wrong');
@@ -2328,6 +2357,7 @@ function advanceGameplay(dt) {
             }
             const movementRate = isFrozenEffectActive() ? FROZEN_LIFETIME_RATE : 1;
             const event = advanceApproach(obj, step, GAMEPLAY_STYLE.playRect, movementRate);
+            obj.hop.children[0].rotation = obj.angle - FOOD_RULES.textureForwardAngle;
             updateBugHop(obj, step, movementRate);
             if(beginToolTutorial(obj)){updateUI();return;}
             if (event === 'warning') showFoodWarning(obj);

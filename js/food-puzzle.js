@@ -28,6 +28,17 @@ export function createFoodPuzzle(textures, foodId, { onClose, onSelect }) {
     const plate = new PIXI.Container(); plate.position.set(10, 180); plate.scale.set(.83); panel.addChild(plate);
     const plateImage = new PIXI.Sprite(textures.gameplay_plate); plateImage.width = plateImage.height = 640;plate.addChild(plateImage);
     const tray = new PIXI.Container(); tray.name='puzzleTray'; panel.addChild(tray);
+    // Shuffle once per opening; selecting or placing a piece keeps the remaining order stable.
+    const placed = readFoodProgress().foods[foodId].placed;
+    const trayPieces = food.puzzlePieces.filter(piece => !placed.includes(piece.id));
+    const originalOrder = [...trayPieces];
+    for (let i = trayPieces.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [trayPieces[i], trayPieces[j]] = [trayPieces[j], trayPieces[i]];
+    }
+    if (trayPieces.length > 1 && trayPieces.every((piece, i) => piece === originalOrder[i])) {
+        trayPieces.push(trayPieces.shift());
+    }
     plate.name='puzzlePlate';panel.name='puzzlePanel';
     let selected = null, drag = null;
     const masks = new Map(), slices = new Map();
@@ -69,7 +80,7 @@ export function createFoodPuzzle(textures, foodId, { onClose, onSelect }) {
         choose.visible=progress.completed;
         for(const [id,s] of slices)s.alpha=progress.placed.includes(id)?1:.12;
         for(const child of tray.removeChildren())child.destroy({children:true});
-        food.puzzlePieces.filter(p=>!progress.placed.includes(p.id)).forEach((p,i)=>{
+        trayPieces.filter(p=>!progress.placed.includes(p.id)).forEach((p,i)=>{
             const b=new PIXI.Container();b.position.set(570+(i%3)*150,190+Math.floor(i/3)*125);b.interactive=b.buttonMode=true;b.hitArea=new PIXI.Rectangle(0,0,140,115);
             const active=selected===p.id;
             b.addChild(new PIXI.Graphics().lineStyle(active?5:2,active?0xF45D53:0x2D1738).beginFill(0xFFFFFF).drawRoundedRect(0,0,140,115,16).endFill());

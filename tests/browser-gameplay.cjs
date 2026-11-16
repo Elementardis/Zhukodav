@@ -15,7 +15,7 @@ window.gameTest = {
  snapshot: () => ({ life, score, time: levelTimeRemainingMs, clock: gameTimeMs, ended: levelEnded, paused: isPaused, active: activeObjects.map(o => ({type:o.type,x:o.x,y:o.y,state:o.state})), held: getActiveColor(), sceneScale: currentGameUI.scene?.scale.x }),
  step: ms => tickLevelCountdown((levelCountdownLastAt ?? performance.now()) + ms),
  configure(weights, hp=8) { levelData = {...levels[0], food:"pizza", durationSeconds:60, params:{...levels[0].params, maxObjects:20, spawnWeights:weights}}; life=hp; levelTimeRemainingMs=60000; removeAllActiveObjectsImmediate(); prepareObjectQueue(); const result=setupPlayArea(); playArea=result.playField; spawnDueAt=null; },
- spawn(type) { const b=getRuntimeBugBalance(type); objectQueue=[{type,...b}]; spawnObject(); spawnDueAt=null; return activeObjects.length; },
+ spawn(type) { if (HELPER_TYPES.includes(type)) gameTimeMs=Math.max(gameTimeMs,5000,lastHelperSpawnAt+12000); const b=getRuntimeBugBalance(type); objectQueue=[{type,...b}]; spawnObject(); spawnDueAt=null; return activeObjects.length; },
  hit(index=0) { hitFoodBug(activeObjects[index]); },
  atFood(index=0, time=400) { const o=activeObjects[index]; o.x=o.targetX; o.y=o.targetY; o.state='atFood'; o.reactionRemainingMs=time; showFoodWarning(o); },
  pause: () => showPausePopup(),
@@ -125,20 +125,32 @@ async function main() {
     while(!await evaluate('!!window.gameTest?.ready()')) {if(Date.now()>deadline)throw Error('Loading timeout: '+await evaluate('document.querySelector(' + JSON.stringify('[role=status]') + ')?.textContent')+' '+errors.join('\n'));await new Promise(r=>setTimeout(r,250));}
     assert.equal(await evaluate('document.fonts.check(\'700 32px "Balsamiq Sans"\')'),true);
     if (process.argv.includes('--bug-tutorial')) {
-        for(const type of ['bug','fat','healer','frozen','chameleon','neat','bomb','fatColoredBug_red']){
+        for(const type of ['bug','fat','healer','frozen','chameleon','neat','bomb',...['red','purple','green','yellow'].map(color=>'fatColoredBug_'+color)]){
             await evaluate(`localStorage.removeItem('zhukodav.bugsLearned.v1');gameTest.start();gameTest.configure({${type}:1});gameTest.spawn('${type}');gameTest.step(5000)`);
             assert.equal(await evaluate(`!!gameTest.ui.scene.getChildByName('toolTutorial')`),true,type);
+            assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('tutorialFinger').targetKind`),type.startsWith('fatColoredBug_')?'tool':'bug');
             if(type==='bug')assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('toolTutorialText').text`),'А, ну! Кышь от еды\nНАЖМИ на жука, чтобы прихлопнуть его');
             const frozen=await evaluate('gameTest.snapshot()');await evaluate('gameTest.step(10000)');assert.deepEqual(await evaluate('gameTest.snapshot()'),frozen);
-            if(type==='fatColoredBug_red')await evaluate(`gameTest.hold('red')`);
+            if(type.startsWith('fatColoredBug_'))await evaluate(`gameTest.hold('${type.split('_')[1]}')`);
             const clicks=await evaluate('gameTest.objects[0].data.clicks');
-            for(let i=0;i<clicks;i++)await evaluate('gameTest.hit()');
+            for(let i=0;i<clicks;i++){
+                if(type==='bomb'){
+                    await evaluate('gameTest.render()');
+                    const point=await evaluate(`(()=>{const p=gameTest.objects[0].toGlobal(new PIXI.Point(0,0));return {x:p.x,y:p.y};})()`);
+                    await cdp('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...point});
+                    await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...point});
+                } else await evaluate('gameTest.hit()');
+            }
             if(type==='bomb'){
                 assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('toolTutorialText').text.startsWith('Ха! попался!')`),true);
+                assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('tutorialFinger').targetKind`),'continue');
                 const bomb=await evaluate('gameTest.snapshot()');await evaluate('gameTest.step(10000)');assert.deepEqual(await evaluate('gameTest.snapshot()'),bomb);
                 await new Promise(r=>setTimeout(r,400));
                 await evaluate(`gameTest.render()`);const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts','bomb-tutorial.png'),Buffer.from(data,'base64'));
-                await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('bombTutorialContinue').emit('pointertap');gameTest.step(1);gameTest.step(500)`);
+                const continuePoint=await evaluate(`(()=>{const p=gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('bombTutorialContinue').toGlobal(new PIXI.Point(200,35));return {x:p.x,y:p.y};})()`);
+                await cdp('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...continuePoint});
+                await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...continuePoint});
+                await evaluate('gameTest.step(1);gameTest.step(500)');
                 assert.equal(await evaluate('gameTest.snapshot().life'),7);
             }
             assert.equal(await evaluate(`!!gameTest.ui.scene.getChildByName('toolTutorial')`),false);
@@ -150,10 +162,16 @@ async function main() {
         for(const color of ['red','yellow','purple','green']){
             await evaluate(`gameTest.start();gameTest.configure({coloredBug_${color}:1});gameTest.spawn('coloredBug_${color}');gameTest.step(5000);`);
             assert.equal(await evaluate(`!!gameTest.ui.scene.getChildByName('toolTutorial')`),true);
+            const fingerBefore = await evaluate(`(()=>{const f=gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('tutorialFinger');return {x:f.x,y:f.y};})()`);
+            await new Promise(resolve=>setTimeout(resolve,180));
+            const fingerAfter = await evaluate(`(()=>{const f=gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('tutorialFinger');return {x:f.x,y:f.y};})()`);
+            assert.ok(Math.hypot(fingerAfter.x-fingerBefore.x,fingerAfter.y-fingerBefore.y)>0.01,'finger animates while game is frozen');
             const frozen=await evaluate('gameTest.snapshot()');
             await evaluate(`gameTest.step(10000);gameTest.spawn('coloredBug_${color}')`);
             assert.deepEqual(await evaluate('gameTest.snapshot()'),frozen,'time, movement and spawning frozen');
+            assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('tutorialFinger').targetKind`),'tool');
             await evaluate(`gameTest.hold('${color}',1)`);
+            assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('tutorialFinger').targetKind`),'bug');
             assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('toolTutorialText').text.startsWith('Теперь')`),true);
             await evaluate(`gameTest.release('${color}',1)`);
             assert.equal(await evaluate(`gameTest.ui.scene.getChildByName('toolTutorial').getChildByName('toolTutorialText').text.includes('УДЕРЖИВАЙ')`),true);
@@ -168,8 +186,8 @@ async function main() {
             await evaluate('gameTest.step(1);gameTest.step(100)');
             assert.ok((await evaluate('gameTest.snapshot().time'))<frozen.time);
         }
-        await evaluate(`localStorage.removeItem('zhukodav.toolsLearned.v1');localStorage.removeItem('zhukodav.bugsLearned.v1');gameTest.start();gameTest.configure({coloredBug_red:1});gameTest.spawn('coloredBug_red');gameTest.hold('red');gameTest.hit();gameTest.release('red');gameTest.step(600);gameTest.spawn('coloredBug_red');gameTest.step(2000)`);
-        assert.equal(await evaluate(`!!gameTest.ui.scene.getChildByName('toolTutorial')`),false,'self-discovery skips tutorial');
+        await evaluate(`localStorage.removeItem('zhukodav.toolsLearned.v1');localStorage.removeItem('zhukodav.bugsLearned.v1');gameTest.start();gameTest.configure({coloredBug_red:1});gameTest.spawn('coloredBug_red');gameTest.hold('red');gameTest.hit();gameTest.hit();gameTest.release('red');gameTest.step(600);gameTest.spawn('coloredBug_red');gameTest.step(2000)`);
+        assert.equal(await evaluate(`!!gameTest.ui.scene.getChildByName('toolTutorial')`),false,'early click opens tutorial; completion is remembered');
         await evaluate(`localStorage.removeItem('zhukodav.toolsLearned.v1');localStorage.removeItem('zhukodav.bugsLearned.v1');gameTest.start();gameTest.configure({coloredBug_red:1});gameTest.spawn('coloredBug_red');gameTest.step(5000);gameTest.home()`);
         assert.equal(await evaluate('gameTest.isHome()'),true);
         assert.equal(await evaluate(`JSON.parse(localStorage.getItem('zhukodav.toolsLearned.v1')||'[]').length`),0,'interruption does not complete tutorial');
@@ -182,7 +200,7 @@ async function main() {
         await cdp('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[points.button,points.bug]});
         await cdp('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
         assert.equal(await evaluate(`!!gameTest.ui.scene.getChildByName('toolTutorial')`),false,'two-finger touch completes tutorial');
-        assert.deepEqual(errors,[]);console.log('Tool tutorial passed: four tools, halfway trigger, frozen time/movement/spawning, hold/release regression, wrong hit, completion, resume, self-discovery and interruption.');await send('Browser.close');return;
+        assert.deepEqual(errors,[]);console.log('Tool tutorial passed: four tools, halfway trigger, frozen time/movement/spawning, hold/release regression, wrong hit, completion, resume, early-click introduction and interruption.');await send('Browser.close');return;
     }
     if (process.argv.includes('--victory-story')) {
         await evaluate(`(async()=>{window.fp=await import('./js/food-progress.js');window.sc=await import('./js/food-story-config.js');gameTest.start();gameTest.stopSpawns();})()`);

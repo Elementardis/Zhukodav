@@ -109,3 +109,39 @@ for (const asset of vm.runInContext('GAMEPLAY_ASSETS', context)) {
     assert.ok(fs.existsSync(asset.path), `Missing gameplay image: ${asset.path}`);
 }
 console.log('Food rules passed: pizza defines eight lives, independent time bar, exact lifetime travel, weighted bombs, spawn sides, collisions, FPS independence, slow effect, warning and one damage.');
+
+// Orbit stays clear of the plate, exits through the nearest edge and respects time scaling.
+for (const side of ['left','right','top','bottom']) {
+    for (const direction of [0.1, 0.9]) {
+        const start = context.chooseEntry(rect, side, 50, [], () => 0.5);
+        const make = () => ({...context.createBombOrbit(start, plate, 50, 6000, () => direction), type:'bomb'});
+        const orbit = make();
+        for (let ms=0; ms<4800; ms+=10) {
+            assert.equal(context.advanceApproach(orbit,10,rect),null);
+            assert.ok(Math.hypot(orbit.x-plate.x,orbit.y-plate.y) > plate.radius+50+context.rules.hopHeight);
+        }
+        const distances = [orbit.x,rect.width-orbit.x,orbit.y,rect.height-orbit.y];
+        const nearest = distances.indexOf(Math.min(...distances));
+        assert.ok([orbit.targetX<0,orbit.targetX>rect.width,orbit.targetY<0,orbit.targetY>rect.height][nearest]);
+        assert.equal(context.advanceApproach(orbit,1200,rect),'departed');
+        assert.equal(context.advanceApproach(orbit,1,rect),null);
+        const one=make(),many=make(),slow=make();
+        context.advanceApproach(one,3500,rect);
+        context.advanceApproach(slow,7000,rect,0.5);
+        for(let i=0;i<350;i++) context.advanceApproach(many,10,rect);
+        for (const other of [many,slow]) assert.ok(Math.hypot(one.x-other.x,one.y-other.y)<1e-7);
+        const paused=make();context.advanceApproach(paused,9000,rect,0);
+        assert.equal(paused.x,start.x);assert.equal(paused.y,start.y);
+        const clicked=make();context.advanceApproach(clicked,3000,rect);
+        Object.assign(clicked,context.createApproach(clicked,plate,0,450,0),{bombTriggered:true});
+        assert.equal(context.advanceApproach(clicked,451,rect),'damage');
+    }
+}
+assert.equal(context.testLevels.length,40);
+for (const [color,first] of [['red',5],['purple',16],['green',23],['yellow',31]]) {
+    const type='coloredBug_'+color;
+    assert.equal(context.testLevels.find(l=>l.params.spawnWeights[type]>0).id,first);
+    assert.deepEqual(Object.keys(context.testLevels[first-1].params.spawnWeights),[type]);
+    for (const level of context.testLevels.slice(36)) assert.ok(level.params.spawnWeights[type]>0);
+}
+console.log('Campaign and bomb orbits passed: four introductions, mixed finale, clearance, nearest exit, frame independence, freeze and triggered damage.');

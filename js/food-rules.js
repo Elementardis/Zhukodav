@@ -67,6 +67,68 @@ export function chooseEntry(rect, side, radius, actors, random = Math.random, zo
     return null;
 }
 
+// Lifetime includes entry (25%), orbit (55%) and exit (20%).
+export function createBombOrbit(position, food, radius, lifetime, random = Math.random) {
+    const orbitRadius = food.radius + radius + FOOD_RULES.hopHeight + 24;
+    const orbitAngle = Math.atan2(position.y - food.y, position.x - food.x);
+    const targetX = food.x + Math.cos(orbitAngle) * orbitRadius;
+    const targetY = food.y + Math.sin(orbitAngle) * orbitRadius;
+    const duration = Math.max(1, lifetime);
+    return {
+        ...position, radius, state: 'entering', targetX, targetY,
+        angle: Math.atan2(targetY - position.y, targetX - position.x),
+        speed: Math.hypot(targetX - position.x, targetY - position.y) / (duration * 0.25),
+        orbit: { x: food.x, y: food.y, radius: orbitRadius, angle: orbitAngle,
+            direction: random() < 0.5 ? -1 : 1, remainingMs: duration * 0.55,
+            exitMs: duration * 0.2, phase: 'entry' }
+    };
+}
+
+function advanceBombOrbit(actor, time, rect) {
+    const orbit = actor.orbit;
+    while (actor.state !== 'resolved') {
+        if (orbit.phase === 'orbit') {
+            const elapsed = Math.min(time, orbit.remainingMs);
+            orbit.angle += orbit.direction * elapsed * Math.PI * 2 / 6000;
+            actor.x = orbit.x + Math.cos(orbit.angle) * orbit.radius;
+            actor.y = orbit.y + Math.sin(orbit.angle) * orbit.radius;
+            actor.angle = orbit.angle + orbit.direction * Math.PI / 2;
+            orbit.remainingMs -= elapsed;
+            time -= elapsed;
+            if (orbit.remainingMs > 1e-7) return null;
+            const offset = actor.radius + FOOD_RULES.entryGap;
+            const exits = [
+                { distance: actor.x, x: -offset, y: actor.y },
+                { distance: rect.width - actor.x, x: rect.width + offset, y: actor.y },
+                { distance: actor.y, x: actor.x, y: -offset },
+                { distance: rect.height - actor.y, x: actor.x, y: rect.height + offset }
+            ];
+            const exit = exits.reduce((a, b) => a.distance <= b.distance ? a : b);
+            actor.targetX = exit.x; actor.targetY = exit.y;
+            actor.angle = Math.atan2(exit.y - actor.y, exit.x - actor.x);
+            actor.speed = Math.hypot(exit.x - actor.x, exit.y - actor.y) / orbit.exitMs;
+            orbit.phase = 'exit';
+        }
+        const distance = Math.hypot(actor.targetX - actor.x, actor.targetY - actor.y);
+        const needed = actor.speed > 0 ? distance / actor.speed : 0;
+        if (time + 1e-7 < needed) {
+            actor.x += Math.cos(actor.angle) * actor.speed * time;
+            actor.y += Math.sin(actor.angle) * actor.speed * time;
+            if (actor.x >= 0 && actor.x <= rect.width && actor.y >= 0 && actor.y <= rect.height) actor.state = 'approaching';
+            return null;
+        }
+        actor.x = actor.targetX; actor.y = actor.targetY;
+        time = Math.max(0, time - needed);
+        if (orbit.phase === 'exit') {
+            actor.state = 'resolved';
+            return 'departed';
+        }
+        orbit.phase = 'orbit';
+        actor.state = 'approaching';
+    }
+    return null;
+}
+
 export function createCrossing(position, rect, side, radius, lifetime) {
     const offset = radius + FOOD_RULES.entryGap;
     const targetX = side === 'left' ? rect.width + offset : side === 'right' ? -offset : position.x;
@@ -94,6 +156,7 @@ export function createApproach(position, food, radius, lifetime, reactionMs = FO
 // No timers or damage callbacks are stored on actors. Resolution is synchronous.
 export function advanceApproach(actor, dt, rect, rate = 1) {
     if (actor.state === 'resolved') return null;
+    if (actor.orbit && !actor.bombTriggered) return advanceBombOrbit(actor, dt * rate, rect);
     let time = dt * rate;
     let arrived = false;
     if (actor.state !== 'atFood') {
