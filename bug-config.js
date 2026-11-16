@@ -104,7 +104,7 @@ export const BUG_BALANCE = {
   "neat": {
     lifetime: 2000,
     spawnInterval: 450,
-    clicks: 2,
+    clicks: 5,
     scoreValue: 1,
     spawnZone: 'full',
   }
