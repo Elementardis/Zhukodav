@@ -1,4 +1,6 @@
-// Runs before Pixi and the game's ES modules, so network errors remain visible.
+import { t } from './i18n.js';
+import { localizedImagePath } from './localized-assets.js';
+// Initialized by bootstrap before game.js, so startup errors remain visible.
 (() => {
     if (window.gamePreloader) return;
     const overlay = document.getElementById('preloader');
@@ -51,7 +53,7 @@
         fallbackFill.style.width = `${fraction * 100}%`;
         if (reveal) reveal.style.width = `${fraction * 100}%`;
     };
-    const error = (message = 'Не удалось загрузить игру. Проверьте соединение и повторите попытку.') => {
+    const error = (message = t('preloader.001')) => {
         if (disposed) return;
         failed = true;
         stopBugs();
@@ -65,8 +67,8 @@
         retry.hidden = false;
     };
     const onError = event => {
-        if (event.target?.tagName === 'SCRIPT') error(`Не удалось загрузить скрипт: ${event.target.src}. Нажмите «Повторить».`);
-        else if (event instanceof ErrorEvent) error(`Не удалось запустить игру: ${event.message}. Нажмите «Повторить».`);
+        if (event.target?.tagName === 'SCRIPT') error(t('preloader.002', { p0: (event.target.src) }));
+        else if (event instanceof ErrorEvent) error(t('preloader.003', { p0: (event.message) }));
     };
     window.addEventListener('error', onError, true);
     const scheduleResize = () => {
@@ -100,7 +102,7 @@
         const image = new Image();
         image.onload = () => resolve(image);
         image.onerror = () => reject(new Error(`Loading artwork: ${file}`));
-        image.src = root + file;
+        image.src = localizedImagePath(root + file);
         image.alt = '';
         image.draggable = false;
     });
@@ -146,7 +148,7 @@
                 const scale = Math.min(entry.max_size[0] / image.naturalWidth, entry.max_size[1] / image.naturalHeight);
                 const button = document.createElement('button');
                 button.type = 'button'; button.className = 'loading-bug';
-                button.setAttribute('aria-label', 'Убрать жука');
+                button.setAttribute('aria-label', t('preloader.004'));
                 Object.assign(button.style, { position: 'absolute', left: `${entry.center[0]}px`, top: `${entry.center[1]}px`, width: `${image.naturalWidth * scale}px`, height: `${image.naturalHeight * scale}px`, zIndex: entry.z, transform: `translate(-50%, -50%) rotate(${entry.rotation_radians}rad)` });
                 Object.assign(image.style, { position: 'static', width: '100%', height: '100%', pointerEvents: 'none' });
                 button.appendChild(image); scene.appendChild(button); bugButtons.add(button);

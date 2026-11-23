@@ -1,3 +1,4 @@
+import { t, formatNumber } from './i18n.js';
 // Food defines health: one visible piece is exactly one life.
 // Пример: cake с pieces: 6 получает maxLives: 6 и части cake_01 … cake_06.
 // Награда в levels.js: loot: [{ id: 'cake-first', type: 'foodPiece', foodId: 'cake', pieceId: 'cake_01' }].
@@ -8,26 +9,26 @@
 // greek_salad_05 → greek_salad_04 → … → greek_salad_01.
 // geometry ниже назначает салатам layers, остальным блюдам sectors; starter — только пицце.
 const FOOD_CATALOG = {
-    pizza: Object.freeze({ name: 'Пицца', pieces: 8, partsPath: 'images/food/pizza', filePrefix: 'pizza_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2]) }),
-    cake: Object.freeze({ name: 'Торт', pieces: 6, partsPath: 'images/food/cake', filePrefix: 'cake_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 1, 2]) }),
-    pie: Object.freeze({ name: 'Пирог', pieces: 10, partsPath: 'images/food/pie', filePrefix: 'pie_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2, 9, 10]) }),
-    bundt_cake: Object.freeze({ name: 'Десерт старого друга', pieces: 12, partsPath: 'images/food/bundt_cake', filePrefix: 'bundt_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2, 9, 10, 11, 12
+    pizza: Object.freeze({ name: t('food_config.001'), pieces: 8, partsPath: 'images/food/pizza', filePrefix: 'pizza_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2]) }),
+    cake: Object.freeze({ name: t('food_config.002'), pieces: 6, partsPath: 'images/food/cake', filePrefix: 'cake_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 1, 2]) }),
+    pie: Object.freeze({ name: t('food_config.003'), pieces: 10, partsPath: 'images/food/pie', filePrefix: 'pie_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2, 9, 10]) }),
+    bundt_cake: Object.freeze({ name: t('food_config.004'), pieces: 12, partsPath: 'images/food/bundt_cake', filePrefix: 'bundt_slice_', removalOrder: Object.freeze([3, 4, 5, 6, 7, 8, 1, 2, 9, 10, 11, 12
     ]) }),
-    greek_salad: Object.freeze({ name: 'Греческий салат', pieces: 5, partsPath: 'images/food/greek_salad', filePrefix: 'salad_', removalOrder: Object.freeze([1, 2, 3, 4, 5]), drawOrder: Object.freeze([5, 4, 3, 2, 1]) }),
+    greek_salad: Object.freeze({ name: t('food_config.005'), pieces: 5, partsPath: 'images/food/greek_salad', filePrefix: 'salad_', removalOrder: Object.freeze([1, 2, 3, 4, 5]), drawOrder: Object.freeze([5, 4, 3, 2, 1]) }),
     // First lost life hides 07, then 06, down to 01.
-    dressed_herring: Object.freeze({ name: 'Селёдка под шубой', pieces: 7, partsPath: 'images/food/dressed_herring', filePrefix: 'dressed_herring_', removalOrder: Object.freeze([7, 6, 5, 4, 3, 2, 1]) })
+    dressed_herring: Object.freeze({ name: t('food_config.006'), pieces: 7, partsPath: 'images/food/dressed_herring', filePrefix: 'dressed_herring_', removalOrder: Object.freeze([7, 6, 5, 4, 3, 2, 1]) })
 };
 
 // Пример для торта: wholeIcon: 'dish_cake' — уже загруженная целая иконка
 // images/dishes/icons/cake_icon.png; collectingName: 'торт' → «Собираем торт».
 // Это иллюстрация коллекции, она не открывает блюдо и не меняет прогресс.
 const FOOD_PRESENTATION = {
-    pizza: { wholeIcon: 'dish_pizza', collectingName: 'пиццу' },
-    cake: { wholeIcon: 'dish_cake', collectingName: 'торт' },
-    pie: { wholeIcon: 'dish_pie', collectingName: 'пирог' },
-    bundt_cake: { wholeIcon: 'dish_bundt', collectingName: 'десерт старого друга' },
-    greek_salad: { wholeIcon: 'dish_salad', collectingName: 'греческий салат' },
-    dressed_herring: { wholeIcon: 'dish_dressed_herring', collectingName: 'селёдку под шубой' }
+    pizza: { wholeIcon: 'dish_pizza', collectingName: t('food_config.007') },
+    cake: { wholeIcon: 'dish_cake', collectingName: t('food_config.008') },
+    pie: { wholeIcon: 'dish_pie', collectingName: t('food_config.009') },
+    bundt_cake: { wholeIcon: 'dish_bundt', collectingName: t('food_config.010') },
+    greek_salad: { wholeIcon: 'dish_salad', collectingName: t('food_config.011') },
+    dressed_herring: { wholeIcon: 'dish_dressed_herring', collectingName: t('food_config.012') }
 };
 
 // Эффекты выбранной еды. Пример для пиццы:
@@ -99,6 +100,6 @@ export function getFoodBugLimit(level) {
 
 export function describeFoodEffects(id) {
     const e = FOOD_TYPES[id].effects;
-    const number = value => String(value).replace('.', ',');
-    return `Время пути ×${number(e.travelTimeMultiplier)} · У еды ${number(e.foodWaitSeconds)} с\nНа поле не больше ${e.maxBugs} жуков`;
+    const number = formatNumber;
+    return t('food_config.013', { p0: (number(e.travelTimeMultiplier)), p1: (number(e.foodWaitSeconds)), p2: (e.maxBugs) });
 }

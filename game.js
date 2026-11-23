@@ -1,15 +1,17 @@
+import { t, localizeResource } from './js/i18n.js';
 import { HELPER_TYPES, helperCanSpawn, limitHelperWeights, bombCanSpawn, limitBombWeights } from './js/spawn-rules.js';
 import { POPUP_REFERENCE, fitPopup } from './js/popup-layout.js';
 import { createIntroPopup } from './js/intro-popup.js';
 import { createSettingsPopup } from './js/settings-popup.js';
 import { HEADING_FONT, headingFontReady } from './js/typography.js';
-import { matchingCutscenes, playCutscenes } from './js/cutscene-player.js';
+import { matchingCutscenes, playCutscenes, preloadCutsceneImages } from './js/cutscene-player.js';
 import { safeViewport, viewportSize, createAdaptiveBackground } from './js/adaptive-background.js';
 import { DISH_ASSETS, DISH_IDS, normalizeDish, canSelectDish, createDishSelect, fitDishIcon } from './js/dish-select.js';
 import { loadDishPreference, saveDishPreference } from './firebase.js';
 import { RESULT_ASSETS, createResultPopup } from './js/result-popup.js';
 import { awardFoodLoot, readFoodProgress, saveFoodProgress } from './js/food-progress.js';
 import { pendingFoodStories } from './js/food-story.js';
+import { FOOD_STORIES } from './js/food-story-config.js';
 import { needsToolTutorial, learnedBugs, tutorialColor, markToolLearned, markBugLearned, createToolTutorial } from './js/tool-tutorial.js';
 import { BUG_TUTORIALS } from './js/bug-tutorial-config.js';
 import { FOOD_TEST_MODE } from './js/food-test-config.js';
@@ -17,6 +19,7 @@ import { getFoodDefinition, getFoodMaxLives, getFoodAssets, getFoodBugLimit } fr
 import { GAMEPLAY_ASSETS, GAMEPLAY_STYLE, buildGameplayScene, fitGameplayScene } from './js/gameplay-scene.js';
 import { FOOD_RULES, levelDurationMs, weightedType, shuffledSides, chooseEntry, createApproach, createBombOrbit, advanceApproach } from './js/food-rules.js';
 import levels from './levels.js';
+import { endlessUnlocked, createEndlessLevel } from './js/endless-mode.js';
 import { createSoundEffects } from './js/sound-effects.js';
 import { getBugBaseBalance, getBugSpawnZone } from './bug-config.js';
 import { initBackend, fetchRemoteLevel, saveProgress, trackEvent, recalcLeaderboard, rcNumber, createLevelAttempt, finishLevelAttempt } from './firebase.js';
@@ -28,7 +31,7 @@ import {
     createLabelSprite as createLabelSpriteUI,
     syncMobilePortraitOverlay,
 } from './js/game-ui.js';
-import { HOME_ASSETS, createHomeScreen, layoutHomeScreen } from './js/home-ui.js';
+import { HOME_ASSETS, createHomeScreen, layoutHomeScreen, setEndlessGreeting } from './js/home-ui.js';
 const MOBILE_MAX_VIEWPORT = 1366;
 const MOBILE_LANDSCAPE_MIN_RATIO = 1.15;
 const MOBILE_OVERLAY_ID = 'mobile-orientation-overlay';
@@ -950,7 +953,7 @@ function updateMobilePortraitOverlay() {
     syncMobilePortraitOverlay({
         overlayId: MOBILE_OVERLAY_ID,
         shouldShow,
-        message: 'Поверни телефон горизонтально, чтобы играть',
+        message: t('game.001'),
         setGameVisible: (visible) => {
             if (isGameScreen) rootUI.visible = visible;
         },
@@ -1006,12 +1009,10 @@ SPRITE_PATHS.forEach(({ name, path }) => {
 });
 
 const audioNames = Object.keys(AUDIO_PATHS);
-let loadedAudioCount = 0;
 let preparedTextureProgress = 0;
 function updatePreloadProgress() {
-    const loadedSprites = SPRITE_PATHS.length * loader.progress / 100;
     // Reserve the final 20% for GPU preparation, not just network downloads.
-    const progress = Math.floor(80 * (loadedSprites + loadedAudioCount) / (SPRITE_PATHS.length + audioNames.length)
+    const progress = Math.floor(0.8 * loader.progress
         + 20 * preparedTextureProgress);
     loadingScreen.update(Math.min(progress / 100, 0.99));
 }
@@ -1019,20 +1020,21 @@ function updatePreloadProgress() {
 async function prepareLoadedTextures() {
     const baseTextures = [...new Set(Object.values(TEXTURES).map(texture => texture.baseTexture))];
     const prepare = app.renderer.plugins.prepare;
-    for (let index = 0; index < baseTextures.length; index += 1) {
-        // Pixi's prepare queue uploads outside gameplay, yielding between textures.
-        await new Promise(resolve => prepare.upload(baseTextures[index], resolve));
-        preparedTextureProgress = (index + 1) / baseTextures.length;
+    for (let index = 0; index < baseTextures.length; index += 16) {
+        // Fill Pixi's queue so its per-frame upload budget can actually be used.
+        const batch = baseTextures.slice(index, index + 16);
+        for (const texture of batch) prepare.add(texture);
+        await new Promise(resolve => prepare.upload(resolve));
+        preparedTextureProgress = (index + batch.length) / baseTextures.length;
         updatePreloadProgress();
     }
     preparedTextureProgress = 1;
     updatePreloadProgress();
 }
 
-const audioReady = Promise.all(audioNames.map((name) => preloadAudio(name).then(() => {
-    loadedAudioCount += 1;
-    updatePreloadProgress();
-})));
+// Mobile browsers may wait for a gesture before loading audio. Never gate the UI on it.
+void Promise.all(audioNames.map(name => preloadAudio(name)))
+    .catch(error => console.warn('Audio preload failed:', error));
 
 let requiredResourceFailed = false;
 const onLoadProgress = () => updatePreloadProgress();
@@ -1043,7 +1045,7 @@ const onLoadError = (error, loader, resource) => {
     }
     console.error('Required sprite unavailable:', resource?.url, error);
     if (!requiredResourceFailed) {
-        loadingScreen.error(`Не удалось загрузить файл: ${resource?.url || resource?.name || 'неизвестный ресурс'}. Проверьте путь к файлу и нажмите «Повторить».`);
+        loadingScreen.error(t('game.002', { p0: (resource?.url || resource?.name || t('loading.unknown')) }));
     }
     requiredResourceFailed = true;
 };
@@ -1058,6 +1060,7 @@ loadingScreen.ready.then(() => loader.load(async () => {
         for (const { name, path, optional, dataResource } of SPRITE_PATHS) {
             if (dataResource) {
                 if (!loader.resources[name]?.data) throw new Error(`Missing data: ${name}`);
+                loader.resources[name].data = localizeResource(loader.resources[name].data);
                 continue;
             }
             let texture = loader.resources[name]?.texture;
@@ -1076,7 +1079,7 @@ loadingScreen.ready.then(() => loader.load(async () => {
             TEXTURES.bomb_animation.baseTexture, new PIXI.Rectangle(index * 142, 0, 142, 200)
         ));
         adaptiveBackground.setTexture(TEXTURES.gameplay_tablecloth);
-        await Promise.all([audioReady, prepareLoadedTextures()]);
+        await prepareLoadedTextures();
         showProgressScreen();
         resizeGame();
         if (DEBUG_LEVEL_SELECT) {
@@ -1085,6 +1088,12 @@ loadingScreen.ready.then(() => loader.load(async () => {
         }
         app.renderer.render(app.stage);
         loadingScreen.finish();
+        const warmStoryImages = () => {
+            void preloadCutsceneImages(Object.values(FOOD_STORIES).flat().map(line => line.image))
+                .catch(error => console.warn('Story preload failed:', error));
+        };
+        if (window.requestIdleCallback) window.requestIdleCallback(warmStoryImages, { timeout: 2000 });
+        else setTimeout(warmStoryImages, 0);
     } catch (error) {
         console.error('Game startup failed:', error);
         loadingScreen.error();
@@ -1296,7 +1305,7 @@ function showAllLevelsCompletedPopup() {
     bg.endFill();
     popup.addChild(bg);
 
-    const title = new PIXI.Text('ВСЕ УРОВНИ\nПРОЙДЕНЫ!', {
+    const title = new PIXI.Text(t('game.003'), {
         fontSize: Math.max(28, Math.min(42, popupWidth * 0.09)),
         fill: THEME.textDark,
         fontWeight: '900',
@@ -1308,7 +1317,7 @@ function showAllLevelsCompletedPopup() {
     title.y = popupHeight * 0.42;
     popup.addChild(title);
 
-    const ok = createButton(popupWidth * 0.55, Math.max(44, popupHeight * 0.24), 'OK', clearProgressPopup, 'secondary', Math.max(20, popupHeight * 0.12));
+    const ok = createButton(popupWidth * 0.55, Math.max(44, popupHeight * 0.24), t('common.ok'), clearProgressPopup, 'secondary', Math.max(20, popupHeight * 0.12));
     ok.x = popupWidth / 2;
     ok.y = popupHeight * 0.78;
     popup.addChild(ok);
@@ -1317,6 +1326,10 @@ function showAllLevelsCompletedPopup() {
 }
 
 function continueGameFromProgress() {
+    if (endlessUnlocked(levels, getCompletedLevels(), readFoodProgress())) {
+        startLevel(-1, createEndlessLevel());
+        return;
+    }
     const nextLevelIndex = getNextPlayableLevelIndex();
     if (nextLevelIndex < 0) {
         showAllLevelsCompletedPopup();
@@ -1367,6 +1380,7 @@ function showProgressScreen() {
     }
     app.renderer.backgroundColor = 0xE5E8E6;
     updateHomeDish();
+    setEndlessGreeting(progressContainer.getChildByName('homeContainer'), endlessUnlocked(levels, getCompletedLevels(), readFoodProgress()));
     layoutHomeScreen(progressContainer.getChildByName('homeContainer'), menuViewport());
     if (!app.stage.children.includes(progressContainer)) {
         app.stage.addChild(progressContainer);
@@ -1394,7 +1408,7 @@ function installDebugLevelButton() {
     const button = document.createElement('button');
     button.id = 'debug-level-select';
     button.type = 'button';
-    button.textContent = 'Тест: выбор уровня';
+    button.textContent = t('game.004');
     button.style.cssText = 'position:fixed;bottom:8px;left:50%;transform:translateX(-50%);z-index:10001;padding:8px 14px;border:2px solid #2D1738;border-radius:12px;background:#F7F7F3;color:#2D1738;font:600 14px Arial;cursor:pointer;';
     button.addEventListener('click', () => {
         openDebugLevelSelect();
@@ -1435,7 +1449,7 @@ function showLevelSelect() {
 
     levelSelectContainer.addChild(createCoverBackground('bg_levels', screenW, screenH, 0xFFD984));
 
-    const title = new PIXI.Text("ВЫБЕРИ УРОВЕНЬ", {
+    const title = new PIXI.Text(t('game.005'), {
         fontSize: Math.max(38, Math.min(68, screenW * 0.085)),
         fill: THEME.textDark,
         fontWeight: '900',
@@ -1785,7 +1799,7 @@ function showLevelEntryPopup(levelIndex) {
         popup.addChild(entryIcon);
     }
 
-    const title = new PIXI.Text(`Уровень ${levelIndex + 1}`, {
+    const title = new PIXI.Text(t('game.006', { p0: (levelIndex + 1) }), {
         fontSize: Math.max(22, Math.min(40, Math.round(Math.min(popupWidth * 0.088, popupHeight * 0.13)))),
         fill: THEME.textDark,
         fontWeight: 'bold',
@@ -1797,7 +1811,7 @@ function showLevelEntryPopup(levelIndex) {
     title.y = titleBaseY;
     popup.addChild(title);
 
-    const subtitle = new PIXI.Text('Готов начать уровень?', {
+    const subtitle = new PIXI.Text(t('game.007'), {
         fontSize: Math.max(16, Math.min(26, Math.round(Math.min(popupWidth * 0.055, popupHeight * 0.095)))),
         fill: THEME.textDark,
         fontFamily: 'Arial',
@@ -1822,7 +1836,7 @@ function showLevelEntryPopup(levelIndex) {
     const btnHeight = buttonLayout.itemHeight;
     const btnFontSize = Math.max(22, Math.min(30, Math.round(btnHeight * 0.42)));
 
-    const playBtn = createButton(btnWidth, btnHeight, 'ИГРАТЬ', () => {
+    const playBtn = createButton(btnWidth, btnHeight, t('game.008'), () => {
         const index = selectedLevelIndex;
         closeLevelEntryPopup();
         if (index !== null) {
@@ -1833,7 +1847,7 @@ function showLevelEntryPopup(levelIndex) {
     playBtn.y = buttonLayout.startY;
     popup.addChild(playBtn);
 
-    const backBtn = createButton(btnWidth, btnHeight, 'НАЗАД', () => {
+    const backBtn = createButton(btnWidth, btnHeight, t('game.009'), () => {
         closeLevelEntryPopup();
     }, 'secondary', btnFontSize);
     backBtn.x = popupWidth / 2;
@@ -1844,7 +1858,7 @@ function showLevelEntryPopup(levelIndex) {
 }
 
 // запускаем уровень
-function startLevel(index) {
+function startLevel(index, customLevel = null) {
     cancelCutscene();
     closeDishSelect();
     clearAllPopups();
@@ -1881,7 +1895,7 @@ function startLevel(index) {
   const food = normalizeDish(selectedDishId, getCompletedLevels());
   if (food !== selectedDishId) selectDish(food);
   // Snapshot the selected food for this run; never mutate the level catalog.
-  levelData = { ...levels[index], food };
+  levelData = { ...(customLevel || levels[index]), food };
 
   maxSimultaneousObjects = getFoodBugLimit(levelData);
 
@@ -2039,7 +2053,7 @@ function prepareObjectQueue() {
     const weights = limitHelperWeights(limitBombWeights(levelData.params.spawnWeights));
     const learned = learnedBugs();
     for (const [type, weight] of Object.entries(levelData.params.spawnWeights)) {
-        if (weight > 0 && BUG_TUTORIALS[type] && !learned.includes(type) && !tutorialSpeciesQueued.has(type)) {
+        if (weight > 0 && (levelData.ensureAllTypes || (BUG_TUTORIALS[type] && !learned.includes(type))) && !tutorialSpeciesQueued.has(type)) {
             objectQueue.push({ type, ...getRuntimeBugBalance(type) });
             tutorialSpeciesQueued.add(type);
         }
@@ -2117,7 +2131,7 @@ function spawnObject() {
         return;
     }
     if (!objectQueue.length) prepareObjectQueue();
-    const allowHelper = helperCanSpawn(gameTimeMs, lastHelperSpawnAt, helperSpawnCount, activeObjects);
+    const allowHelper = helperCanSpawn(gameTimeMs, lastHelperSpawnAt, helperSpawnCount, activeObjects, levelData.params.helperLimit);
     const allowBomb = bombCanSpawn(gameTimeMs, lastBombSpawnAt, activeObjects);
     const canSpawnType = type => (allowHelper || !HELPER_TYPES.includes(type)) && (allowBomb || type !== 'bomb');
     let queueIndex = objectQueue.findIndex(item => canSpawnType(item.type));
@@ -2483,7 +2497,7 @@ function endGame(won) {
     for (const effect of currentGameUI.effects.removeChildren()) effect.destroy({ children: true });
 
     // --- backend: прогресс, события, лидерборд (fire-and-forget) ---
-    saveProgress(levelData.id, score, won).catch(() => {});
+    if (!levelData.endless) saveProgress(levelData.id, score, won).catch(() => {});
     trackEvent(won ? 'level_win' : 'level_lose', {
         levelId: levelData.id,
         score,
@@ -2492,7 +2506,7 @@ function endGame(won) {
     recalcLeaderboard(levels.length).catch(() => {});
 
     const idx = levels.findIndex(level => level.id === levelData.id);
-    lastFoodReward = won ? awardFoodLoot(levelData) : null;
+    lastFoodReward = won && !levelData.endless ? awardFoodLoot(levelData) : null;
     let requestAd = false;
     if (won) {
         levelsSinceLastAd++;
@@ -2500,7 +2514,7 @@ function endGame(won) {
             requestAd = true;
             levelsSinceLastAd = 0;
         }
-        markLevelCompleted(idx);
+        if (!levelData.endless) markLevelCompleted(idx);
     } else {
         requestAd = true;
         levelsSinceLastAd = 0;
@@ -2818,7 +2832,8 @@ function showResultPopup({ won, levelIndex }) {
         .drawRect(0, 0, app.screen.width, app.screen.height).endFill();
     overlay.interactive = true;
     gameContainer.addChild(overlay);
-    const hasNext = !!levels[levelIndex + 1];
+    const endless = !!levelData?.endless;
+    const hasNext = endless || !!levels[levelIndex + 1];
     let transitioning = false;
     const transition = callback => {
         if (transitioning) return;
@@ -2839,6 +2854,7 @@ function showResultPopup({ won, levelIndex }) {
         theme: loader.resources.intro_layout.data.popupTheme,
         onMenu: () => transition(showProgressScreen),
         onPrimary: () => transition(() => {
+            if (endless) { startLevel(-1, won ? createEndlessLevel() : levelData); return; }
             if(won && lastFoodReward?.received.some(r=>r.ready)){showProgressScreen();showDishSelect(lastFoodReward.received.find(r=>r.ready).foodId);}
             else if (!won) startLevel(levelIndex);
             else if (hasNext) startLevel(levelIndex + 1);
@@ -2887,7 +2903,7 @@ function showPausePopup(homeSettings = false) {
         onSound(enabled) { setSoundEnabled(enabled); if (enabled) playUiClick(); },
         onMusic(enabled) { playUiClick(); setMusicEnabled(enabled); },
         onClose() { playUiClick(); close(); if (!homeSettings) resumeGame(); },
-        onRetry() { playUiClick(); closeLevelAttempt('exit', 'restart'); close(); startLevel(levelData.id - 1); },
+        onRetry() { playUiClick(); closeLevelAttempt('exit', 'restart'); close(); startLevel(levelData.id - 1, levelData.endless ? levelData : null); },
         onMenu() { playUiClick(); closeLevelAttempt('exit', 'menu'); close(); showProgressScreen(); }
     });
     fitPopup(popup, app.screen);

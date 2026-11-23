@@ -1,3 +1,4 @@
+import { t, language, changeLanguage } from './i18n.js';
 import { popupSurface } from './intro-popup.js';
 import { HEADING_FONT } from './typography.js';
 
@@ -17,7 +18,7 @@ export function createSettingsPopup(textures, theme, fontStack, { homeSettings, 
         label.anchor.set(0.5); label.position.set(x, y);
         return label;
     };
-    popup.addChild(text(homeSettings ? 'НАСТРОЙКИ' : 'ПАУЗА', 76, 570, 100, true));
+    popup.addChild(text(homeSettings ? t('settings_popup.001') : t('settings_popup.002'), 76, 570, 100, true));
 
     const toggle = (name, title, y, enabled, callback, music) => {
         const row = new PIXI.Container();
@@ -40,7 +41,7 @@ export function createSettingsPopup(textures, theme, fontStack, { homeSettings, 
         const switchShape = new PIXI.Graphics();
         const redraw = () => {
             row.enabled = enabled;
-            status.text = enabled ? 'ВКЛ.' : 'ВЫКЛ.';
+            status.text = enabled ? t('settings_popup.003') : t('settings_popup.004');
             switchShape.clear().lineStyle(4, ink).beginFill(enabled ? mint : gray)
                 .drawRoundedRect(735, 24, 130, 64, 32).endFill();
             switchShape.lineStyle(0).beginFill(ink).drawCircle(enabled ? 833 : 767, 56, 23).endFill();
@@ -51,8 +52,20 @@ export function createSettingsPopup(textures, theme, fontStack, { homeSettings, 
         row.on('pointerout', () => { background.alpha = 1; });
         redraw(); popup.addChild(row);
     };
-    toggle('soundToggle', 'ЗВУКИ', 215, soundEnabled, onSound, false);
-    toggle('musicToggle', 'МУЗЫКА', 350, musicEnabled, onMusic, true);
+    toggle('soundToggle', t('settings_popup.005'), 215, soundEnabled, onSound, false);
+    toggle('musicToggle', t('settings_popup.006'), 350, musicEnabled, onMusic, true);
+    if (homeSettings) {
+        popup.addChild(text(t('settings.language'), 30, 570, 505));
+        for (const [index, code, label] of [[0, 'ru', t('language.ru')], [1, 'en', t('language.en')]]) {
+            const option = new PIXI.Container(); option.name = `language_${code}`;
+            option.position.set(170 + index * 420, 540);
+            option.interactive = option.buttonMode = true; option.interactiveChildren = false;
+            option.hitArea = new PIXI.Rectangle(0, 0, 380, 80);
+            option.addChild(new PIXI.Graphics().lineStyle(4, ink).beginFill(language === code ? mint : gray)
+                .drawRoundedRect(0, 0, 380, 80, 20).endFill(), text(label, 32, 190, 40));
+            option.on('pointertap', () => changeLanguage(code)); popup.addChild(option);
+        }
+    }
 
     let activated = false;
     const button = (name, label, x, y, primary, callback) => {
@@ -70,11 +83,11 @@ export function createSettingsPopup(textures, theme, fontStack, { homeSettings, 
         });
         popup.addChild(item);
     };
-    if (homeSettings) button('settingsClose', 'ЗАКРЫТЬ', 327, 655, true, onClose);
+    if (homeSettings) button('settingsClose', t('settings_popup.007'), 327, 655, true, onClose);
     else {
-        button('pauseContinue', 'ПРОДОЛЖИТЬ', 327, 485, true, onClose);
-        button('pauseRetry', 'ЗАНОВО', 64, 655, false, onRetry);
-        button('pauseMenu', 'МЕНЮ', 590, 655, false, onMenu);
+        button('pauseContinue', t('settings_popup.008'), 327, 485, true, onClose);
+        button('pauseRetry', t('settings_popup.009'), 64, 655, false, onRetry);
+        button('pauseMenu', t('settings_popup.010'), 590, 655, false, onMenu);
     }
     return popup;
 }

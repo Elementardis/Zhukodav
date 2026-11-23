@@ -92,32 +92,32 @@
   "dishes": [
     {
       "id": "pizza",
-      "name": "Пицца",
+      "name": "@i18n:food_config.001",
       "icon": "icons/pizza_icon.png"
     },
     {
       "id": "pie",
-      "name": "Вишнёвый пирог",
+      "name": "@i18n:dishes_layout.dishes.1.name",
       "icon": "icons/pie_icon.png"
     },
     {
       "id": "cake",
-      "name": "Торт",
+      "name": "@i18n:food_config.002",
       "icon": "icons/cake_icon.png"
     },
     {
       "id": "bundt",
-      "name": "Десерт старого друга",
+      "name": "@i18n:food_config.004",
       "icon": "icons/bundt_icon.png"
     },
     {
       "id": "salad",
-      "name": "Греческий салат",
+      "name": "@i18n:food_config.005",
       "icon": "icons/salad_icon.png"
     },
     {
       "id": "dressed_herring",
-      "name": "Селёдка под шубой",
+      "name": "@i18n:food_config.006",
       "icon": "icons/dressed_herring_icon.png"
     }
   ],

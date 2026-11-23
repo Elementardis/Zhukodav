@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 export function isMobileDevice(maxViewport) {
     const ua = navigator.userAgent || '';
     const mobileUa = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(ua);
@@ -279,7 +280,7 @@ export function buildDesktopLevelHeader({ wrapper, level, layout, theme, heartSi
        .endFill();
     header.addChild(bar);
 
-    const lvlText = new PIXI.Text(`Уровень ${level.id}`, {
+    const lvlText = new PIXI.Text(t('game_ui.001', { p0: (level.id) }), {
         fontSize: headerH * 0.35,
         fill: theme.textDark,
         fontWeight: 'bold',
@@ -329,7 +330,7 @@ export function buildMobileLevelHeader({ layout, level, theme, textures, score }
     header.x = layout.header.x;
     header.y = layout.header.y;
 
-    const cornerLevelText = new PIXI.Text(`УРОВЕНЬ ${level.id}`, {
+    const cornerLevelText = new PIXI.Text(t('game_ui.002', { p0: (level.id) }), {
         fontSize: Math.max(16, Math.min(24, layout.header.height * 0.24)),
         fill: theme.white,
         fontWeight: '900',
@@ -433,7 +434,7 @@ export function updateLevelHeaderUI({ currentGameUI, life, levelData, textures, 
             currentGameUI.levelValueText.text = String(levelData.id);
         }
         if (currentGameUI.cornerLevelText) {
-            currentGameUI.cornerLevelText.text = `УРОВЕНЬ ${levelData.id}`;
+            currentGameUI.cornerLevelText.text = t('game_ui.003', { p0: (levelData.id) });
         }
 
 

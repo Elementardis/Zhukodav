@@ -87,20 +87,20 @@
   "states": {
     "lose": {
       "art": "assets/illustration_lose.png",
-      "title": "Ой! Всё съели…",
-      "caption": "Жуки утащили угощение!",
-      "primary": "ПОПРОБОВАТЬ\nЕЩЁ РАЗ",
+      "title": "@i18n:results_layout.states.lose.title",
+      "caption": "@i18n:results_layout.states.lose.caption",
+      "primary": "@i18n:results_layout.states.lose.primary",
       "icon": "assets/retry.svg"
     },
     "win": {
       "art": "assets/illustration_win.png",
-      "title": "Ура! Вкуснятина!",
-      "caption": "Праздник спасён!",
-      "primary": "СЛЕДУЮЩИЙ\nУРОВЕНЬ",
+      "title": "@i18n:win_popup.002",
+      "caption": "@i18n:results_layout.states.win.caption",
+      "primary": "@i18n:win_popup.015",
       "icon": "assets/next.svg"
     }
   },
-  "menuText": "В ГЛАВНОЕ МЕНЮ",
+  "menuText": "@i18n:win_popup.017",
   "fontStack": [
     "Arial Rounded MT Bold",
     "Arial",

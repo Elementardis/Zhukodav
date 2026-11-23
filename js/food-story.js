@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 import { FOOD_STORIES } from './food-story-config.js';
 import { FOOD_TYPES } from './food-config.js';
 
@@ -38,16 +39,16 @@ export function pendingFoodStories(state) {
         const line = FOOD_STORIES[event.foodId]?.find(line => line.id === event.lineId);
         if (!line || state.story.seen.includes(line.id) || (line.finale && !(event.deferFinale ? campaignComplete : othersComplete))) return [];
         return [{ id: line.id, repeat: 'story', foodId: event.foodId,
-            frames: [{ image: line.image, text: line.text, buttonText: 'Далее' }], finale: !!line.finale }];
+            frames: [{ image: line.image, text: line.text, buttonText: t('food_story.001') }], finale: !!line.finale }];
     }).sort((a,b) => Number(a.finale) - Number(b.finale));
 }
 
 export function validateFoodStories(levels) {
     const errors = [];
     for (const [id, lines] of Object.entries(FOOD_STORIES)) {
-        if (lines.length !== FOOD_TYPES[id]?.maxLives) errors.push(`${id}: ${lines.length} реплик, ${FOOD_TYPES[id]?.maxLives} частей`);
+        if (lines.length !== FOOD_TYPES[id]?.maxLives) errors.push(t('food_story.002', { p0: (id), p1: (lines.length), p2: (FOOD_TYPES[id]?.maxLives) }));
         const assigned = new Set(levels.flatMap(l => (l.loot || []).filter(r => r.type === 'foodPiece' && r.foodId === id).map(r => r.pieceId)));
-        if (assigned.size !== FOOD_TYPES[id]?.maxLives) errors.push(`${id}: в наградах ${assigned.size} уникальных частей`);
+        if (assigned.size !== FOOD_TYPES[id]?.maxLives) errors.push(t('food_story.003', { p0: (id), p1: (assigned.size) }));
     }
     return errors;
 }

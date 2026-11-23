@@ -9,6 +9,9 @@ const root = path.resolve(__dirname, '..');
 const backend = ['initBackend','fetchRemoteLevel','saveProgress','trackEvent','recalcLeaderboard','createLevelAttempt','finishLevelAttempt','loadDishPreference','saveDishPreference'].map(name => `export async function ${name}(){window.backendCalls??={};window.backendCalls['${name}']=(window.backendCalls['${name}']||0)+1;return null;}`).join('\n') + '\nexport function rcNumber(key,fallback){return fallback;}';
 const expose = `
 window.gameTest = {
+ texts() {const result=[];const visit=node=>{if(node.text)result.push(node.text);for(const child of node.children||[])visit(child);};visit(app.stage);return result;},
+ get currentLevel(){return levelData;},
+ get queuedTypes(){return objectQueue.map(item=>item.type);},
  ready: () => !!TEXTURES.gameplay_plate && !!progressContainer,
  start(index=0) { startLevel(index); app.ticker.stop(); },
  stop: () => app.ticker.stop(),
@@ -82,7 +85,7 @@ const server = http.createServer((req,res) => {
         // Gameplay/UI suites are independent of the user's editable story sequence.
         if (file === path.join(root,'cutscenes.js') && !process.argv.includes('--cutscenes') && !process.argv.includes('--story-layout') && !process.argv.includes('--perl-story')) data = 'export const cutscenes = [];';
         // Narrative sequencing has its own suite; unrelated gameplay tests keep their direct transitions.
-        if (file === path.join(root,'js','food-story-config.js') && !process.argv.includes('--perl-story') && !process.argv.includes('--victory-story')) data = 'export const FOOD_STORIES = {};';
+        if (file === path.join(root,'js','food-story-config.js') && !process.argv.includes('--perl-story') && !process.argv.includes('--victory-story') && !process.argv.includes('--localization')) data = 'export const FOOD_STORIES = {};';
         // Test fixture only: production unlock levels stay user-configured.
         if (process.argv.includes('--dishes') && file === path.join(root,'js','food-config.js')) {
             data = data.toString().replace("name: 'Пирог', pieces: 10, unlockLevel: null", "name: 'Пирог', pieces: 10, unlockLevel: 2");
@@ -120,10 +123,84 @@ async function main() {
     if (!process.argv.includes('--cutscenes')) await cdp('Page.addScriptToEvaluateOnNewDocument',{source:'localStorage.setItem("zhukodav.cutscenes.v1",JSON.stringify(["welcome"]))'});
     if(!process.argv.includes('--tool-tutorial'))await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`localStorage.setItem('zhukodav.toolsLearned.v1',JSON.stringify(['red','yellow','purple','green']))`});
     if(!process.argv.includes('--bug-tutorial')&&!process.argv.includes('--tool-tutorial'))await cdp('Page.addScriptToEvaluateOnNewDocument',{source:`localStorage.setItem('zhukodav.bugsLearned.v1',JSON.stringify(['bug','fat','healer','frozen','chameleon','neat','bomb',...['red','purple','green','yellow'].flatMap(c=>['coloredBug_'+c,'fatColoredBug_'+c])]))`});
-    await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/${process.argv.includes('--food-test') ? '?foodTest=1' : debugSelect ? '?debug=1' : ''}`});
+    await cdp('Page.navigate',{url:`http://127.0.0.1:${port}/${process.argv.includes('--localization') ? '?lang=en' : process.argv.includes('--food-test') ? '?foodTest=1' : debugSelect ? '?debug=1' : ''}`});
     const deadline=Date.now()+45000;
     while(!await evaluate('!!window.gameTest?.ready()')) {if(Date.now()>deadline)throw Error('Loading timeout: '+await evaluate('document.querySelector(' + JSON.stringify('[role=status]') + ')?.textContent')+' '+errors.join('\n'));await new Promise(r=>setTimeout(r,250));}
     assert.equal(await evaluate('document.fonts.check(\'700 32px "Balsamiq Sans"\')'),true);
+    if (process.argv.includes('--localization')) {
+        await evaluate(`new Promise(resolve=>{const check=()=>document.getElementById('preloader')?requestAnimationFrame(check):resolve();check();})`);
+        const capture=async name=>{await evaluate('gameTest.render()');const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),`localization-${name}.png`),Buffer.from(data,'base64'));};
+        assert.equal(await evaluate('document.title'),'Bug Clicker: Food Defense');
+        assert.equal(await evaluate('document.documentElement.lang'),'en');
+        for (const name of ['03_banner','08_button_dishes','09_button_play']) {
+            assert.equal(await evaluate(`gameTest.homeScene.getChildByName('${name}').texture.baseTexture.resource.source.src.endsWith('images/home/en/${name}.png')`),true);
+            assert.equal(await evaluate(`gameTest.homeScene.getChildByName('${name}').children.filter(child=>child.name!=='foodReady').length`),0,'no replacement lettering is drawn over localized PNG');
+        }
+        assert.ok(!(await evaluate('gameTest.texts()')).some(text=>/[А-Яа-яЁё]/.test(text)));
+        await capture('en-home');
+        await evaluate('gameTest.settings()');await capture('en-settings');
+        assert.ok((await evaluate('gameTest.texts()')).includes('Language'));
+        await evaluate(`gameTest.settingsNode.getChildByName('settingsClose').emit('pointertap');gameTest.dishes()`);
+        assert.ok((await evaluate('gameTest.texts()')).includes('Greek Salad'));
+        assert.ok(!(await evaluate('gameTest.texts()')).some(text=>/[А-Яа-яЁё]/.test(text)));
+        await capture('en-dishes');
+        await evaluate('gameTest.home();gameTest.start();gameTest.end(true)');
+        await new Promise(resolve=>setTimeout(resolve,1100));
+        assert.ok((await evaluate('gameTest.texts()')).some(text=>text.startsWith('The guys across')));
+        assert.ok(!(await evaluate('gameTest.texts()')).some(text=>/[А-Яа-яЁё]/.test(text)));
+        for(const [width,height] of [[1920,1080],[390,844]]){
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+            await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');await capture(`en-victory-${width}`);
+        }
+        const saved=await evaluate(`localStorage.getItem('foodPuzzleProgress.v1')`);
+        await evaluate('gameTest.home();gameTest.settings()');
+        await evaluate(`gameTest.settingsNode.getChildByName('language_ru').emit('pointertap')`);
+        const deadline=Date.now()+45000;
+        while(!await evaluate(`document.documentElement.lang==='ru' && !!window.gameTest?.ready()`)) {
+            if(Date.now()>deadline)throw Error('Language reload timeout');await new Promise(resolve=>setTimeout(resolve,100));
+        }
+        assert.equal(await evaluate('document.title'),'Кликер: Жуки против еды');
+        for (const name of ['03_banner','08_button_dishes','09_button_play']) {
+            assert.equal(await evaluate(`gameTest.textures['home_${name}'].baseTexture.resource.source.src.endsWith('images/home/${name}.png')`),true,'Russian uses original PNG');
+        }
+        assert.equal(await evaluate(`localStorage.getItem('foodPuzzleProgress.v1')`),saved);
+        assert.equal(await evaluate(`localStorage.getItem('bugClicker.language')`),'ru');
+        assert.deepEqual(errors,[]);console.log('Localization browser: English home/settings/dishes/victory, portrait layout, Russian switch/reload and saved progress passed.');await send('Browser.close');return;
+    }
+    if (process.argv.includes('--endless')) {
+        await evaluate(`(async()=>{
+            window.fp=await import('./js/food-progress.js');
+            const {FOOD_TYPES}=await import('./js/food-config.js');
+            localStorage.setItem('completedLevels',JSON.stringify(gameTest.levels.map((_,i)=>i)));
+            const state=fp.readFoodProgress();
+            state.foods.cake.collected=FOOD_TYPES.cake.puzzlePieces.map(p=>p.id);
+            state.foods.cake.placed=[];fp.saveFoodProgress(state);gameTest.home();
+        })()`);
+        assert.equal(await evaluate(`!!gameTest.homeScene.getChildByName('endlessGreeting')?.visible`),false);
+        await evaluate(`const state=fp.readFoodProgress();state.foods.cake.placed=[...state.foods.cake.collected];fp.saveFoodProgress(state);gameTest.home();`);
+        assert.equal(await evaluate(`gameTest.homeScene.getChildByName('endlessGreeting').children[1].text`),'Да будет же веселье бесконечно!');
+        const saved=await evaluate(`localStorage.getItem('completedLevels')+'|'+localStorage.getItem('foodPuzzleProgress.v1')`);
+        await evaluate(`gameTest.homeScene.getChildByName('09_button_play').emit('pointertap');gameTest.stop()`);
+        assert.equal(await evaluate('gameTest.currentLevel.endless'),true);
+        assert.equal(await evaluate('gameTest.currentLevel.durationSeconds'),90);
+        assert.equal(await evaluate('gameTest.ui.buttons.green.x<gameTest.ui.buttons.yellow.x'),true);
+        const first=await evaluate('JSON.stringify(gameTest.currentLevel.params.spawnWeights)');
+        await evaluate('gameTest.end(true)');
+        await new Promise(resolve=>setTimeout(resolve,1100));
+        await evaluate(`gameTest.resultButton('resultPrimary').emit('pointertap');gameTest.stop()`);
+        assert.equal(await evaluate('gameTest.currentLevel.endless'),true);
+        assert.notEqual(await evaluate('JSON.stringify(gameTest.currentLevel.params.spawnWeights)'),first);
+        assert.equal(await evaluate(`localStorage.getItem('completedLevels')+'|'+localStorage.getItem('foodPuzzleProgress.v1')`),saved);
+        await evaluate('gameTest.home();gameTest.start(39)');
+        assert.deepEqual(await evaluate('gameTest.queuedTypes.slice(0,15).sort()'),await evaluate('Object.keys(gameTest.currentLevel.params.spawnWeights).sort()'));
+        await evaluate('gameTest.home()');
+        for(const [width,height] of [[1920,1080],[390,844]]){
+            await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+            await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');await evaluate('gameTest.render()');
+            const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(os.tmpdir(),`endless-home-${width}.png`),Buffer.from(data,'base64'));
+        }
+        assert.deepEqual(errors,[]);console.log('Endless browser flow: assembled cake gate, greeting, random play/next, unchanged progress, tools, all final-level species passed.');await send('Browser.close');return;
+    }
     if (process.argv.includes('--bug-tutorial')) {
         for(const type of ['bug','fat','healer','frozen','chameleon','neat','bomb',...['red','purple','green','yellow'].map(color=>'fatColoredBug_'+color)]){
             await evaluate(`localStorage.removeItem('zhukodav.bugsLearned.v1');gameTest.start();gameTest.configure({${type}:1});gameTest.spawn('${type}');gameTest.step(5000)`);
@@ -226,12 +303,19 @@ async function main() {
         await new Promise(r=>setTimeout(r,450));
         assert.equal(await evaluate(`${popup}._appearance`),1);
         assert.equal(await evaluate(`${popup}.getChildByName('victoryStory').text`),await evaluate('sc.FOOD_STORIES.greek_salad[0].text'));
+        const mascotReady = Date.now() + 10000;
+        while (!await evaluate(`${popup}.getChildByName('winMascot')?.texture.baseTexture.resource.source.src.endsWith(sc.FOOD_STORIES.greek_salad[0].image)`)) {
+            if (Date.now() > mascotReady) throw Error('Victory mascot did not match the story image');
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
         assert.equal(await evaluate('gameTest.cutscene===null'),true);
         assert.equal(await evaluate('fp.readFoodProgress().story.seen.length'),0);
         for(const [width,height] of [[1920,1080],[852,393],[390,844]]){
             await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
             await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');await evaluate('gameTest.render()');
             const {data}=await cdp('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'tests/artifacts',`victory-story-${width}.png`),Buffer.from(data,'base64'));
+            assert.equal(await evaluate(`${popup}.getChildByName('winMascot').texture.baseTexture.resource.source.src.endsWith(sc.FOOD_STORIES.greek_salad[0].image)`),true);
+            assert.equal(await evaluate(`(()=>{const m=${popup}.getChildByName('winMascot');return !!m.mask && m.scale.x===m.scale.y;})()`),true,'story mascot keeps waist-up framing without stretching');
             assert.equal(await evaluate(`(()=>{const p=${popup},t=p.getChildByName('victoryStory').getBounds(),b=p.getChildByName('resultPrimary').getBounds();return t.y+t.height<b.y;})()`),true);
         }
         await evaluate(`gameTest.resultButton('resultPrimary').emit('pointertap')`);

@@ -1,10 +1,10 @@
 const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
-const context = vm.createContext({});
-vm.runInContext(fs.readFileSync('js/food-config.js','utf8').replace(/export /g,'') + '\nglobalThis.pizza = FOOD_TYPES.pizza;', context);
-vm.runInContext(fs.readFileSync('js/food-rules.js','utf8').replace(/export /g,'') + '\nglobalThis.rules = FOOD_RULES;', context);
-vm.runInContext(fs.readFileSync('js/gameplay-scene.js','utf8').replace(/export /g,''), context);
+const context = vm.createContext({ t: key => JSON.parse(fs.readFileSync('locales/ru.json','utf8'))[key] });
+vm.runInContext(fs.readFileSync('js/food-config.js','utf8').replace(/^import .*;$/gm,'').replace(/export /g,'') + '\nglobalThis.pizza = FOOD_TYPES.pizza;', context);
+vm.runInContext(fs.readFileSync('js/food-rules.js','utf8').replace(/^import .*;$/gm,'').replace(/export /g,'') + '\nglobalThis.rules = FOOD_RULES;', context);
+vm.runInContext(fs.readFileSync('js/gameplay-scene.js','utf8').replace(/^import .*;$/gm,'').replace(/export /g,''), context);
 const rect = {width:1340,height:926};
 assert.equal(context.levelDurationMs({durationSeconds:10}),10000);
 assert.equal(context.levelDurationMs({}),30000);
@@ -100,7 +100,7 @@ assert.notEqual(timed.state,'atFood');
 context.advanceApproach(timed,1.000001,rect);
 assert.equal(timed.state,'atFood');
 assert.ok(Math.abs(timed.reactionRemainingMs-400)<0.001);
-vm.runInContext(fs.readFileSync('levels.js','utf8').replace('export default levels;','globalThis.testLevels = levels;'),context);
+vm.runInContext(fs.readFileSync('levels.js','utf8').replace(/^import .*;$/gm,'').replace('export default levels;','globalThis.testLevels = levels;'),context);
 assert.ok(context.testLevels.every(level => !('food' in level) && !('lifeCount' in level)));
 for (const asset of context.getFoodAssets()) {
     assert.ok(fs.existsSync(asset.path), `Missing food image: ${asset.path}`);

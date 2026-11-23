@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 import { FOOD_TYPES } from './food-config.js';
 import { FOOD_TEST_MODE } from './food-test-config.js';
 import { restoreFoodStory, recordFoodStory } from './food-story.js';
@@ -63,21 +64,21 @@ export function placeFoodPiece(foodId, pieceId, storage = localStorage) {
 export function validateFoodLoot(levels) {
     const errors = [], assigned = new Set();
     for (const food of Object.values(FOOD_TYPES)) {
-        if (new Set(food.puzzlePieces.map(p => p.id)).size !== food.maxLives) errors.push(`${food.id}: число частей не равно maxLives`);
+        if (new Set(food.puzzlePieces.map(p => p.id)).size !== food.maxLives) errors.push(t('food_progress.001', { p0: (food.id) }));
     }
     for (const level of levels) {
-        if (level.lootRequired && !level.loot?.length) errors.push(`Уровень ${level.id}: отсутствует обязательный лут`);
+        if (level.lootRequired && !level.loot?.length) errors.push(t('food_progress.002', { p0: (level.id) }));
         for (const entry of level.loot || []) {
             if (entry.type !== 'foodPiece') continue;
             const key = `${entry.foodId}:${entry.pieceId}`;
-            if (!FOOD_TYPES[entry.foodId]?.puzzlePieces.some(p => p.id === entry.pieceId)) errors.push(`Уровень ${level.id}: неизвестная часть ${key}`);
-            if (assigned.has(key)) errors.push(`Уровень ${level.id}: повторная часть ${key}`);
+            if (!FOOD_TYPES[entry.foodId]?.puzzlePieces.some(p => p.id === entry.pieceId)) errors.push(t('food_progress.003', { p0: (level.id), p1: (key) }));
+            if (assigned.has(key)) errors.push(t('food_progress.004', { p0: (level.id), p1: (key) }));
             assigned.add(key);
         }
     }
     for (const food of Object.values(FOOD_TYPES).filter(f => !f.starter)) {
         const missing = food.puzzlePieces.filter(p => !assigned.has(`${food.id}:${p.id}`));
-        if (missing.length) errors.push(`${food.name}: недостижим полный комплект, не назначено ${missing.length} частей`);
+        if (missing.length) errors.push(t('food_progress.005', { p0: (food.name), p1: (missing.length) }));
     }
     return errors;
 }

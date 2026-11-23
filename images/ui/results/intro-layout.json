@@ -66,10 +66,10 @@
   },
   "runtimeBugTexture": "getTextureForType(cfg.type)",
   "descriptionField": "cfg.descryption",
-  "buttonText": "ПОНЯТНО!",
+  "buttonText": "@i18n:intro_popup.016",
   "runtimeNewArtRequired": false,
   "sample": {
-    "title": "Обычный жук",
-    "description": "Норовит добраться до еды.\nНажми на него, чтобы остановить.\nДостаточно одного нажатия."
+    "title": "@i18n:intro_popup.001",
+    "description": "@i18n:results_intro_layout.sample.description"
   }
 }

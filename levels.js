@@ -1,3 +1,4 @@
+import { t } from './js/i18n.js';
 // 1-22: red/purple; 23-30: green; 31-36: yellow; 37-40: all four tools.
 // Campaign: 40 levels, each with a unique story reward.
 // Полные комплекты: салат — 6, селёдка — 14, пирог — 24, кекс — 36, торт — 40.
@@ -59,7 +60,7 @@ const levels = [
     },
     introPopup: {
       type: "bomb",
-      descryption: "Берегись! Жуки-бомбардиры снимают жизни, если их тронуть",
+      descryption: t('levels.001'),
     },
   },
   {
@@ -92,7 +93,7 @@ const levels = [
     },
     introPopup: {
       type: "coloredBug_red",
-      descryption: "НАЖМИ и Удерживай КРАСНУЮ кнопку и нажми на КРАСНОГО жука!",
+      descryption: t('levels.002'),
     },
   },
   {
@@ -143,7 +144,7 @@ const levels = [
     },
     introPopup: {
       type: "frozen",
-      descryption: "Это твой помощник. ЗАМЕДЛЯЕТ других жуков!",
+      descryption: t('levels.003'),
     },
   },
   {
@@ -194,7 +195,7 @@ const levels = [
     },
     introPopup: {
       type: "fat",
-      descryption: "Нужно нажать 3 раза, чтобы Толстяк убежал",
+      descryption: t('levels.004'),
     },
   },
   {
@@ -345,7 +346,7 @@ const levels = [
     },
     introPopup: {
       type: "chameleon",
-      descryption: "ХАМЕЛЕОН делает поле радужным. можешь нажимать на всех жуков",
+      descryption: t('levels.005'),
     },
   },
   {
@@ -607,12 +608,13 @@ const levels = [
     id: 37,
     lootRequired: true,
     loot: [{ id: 'story-37', type: 'foodPiece', foodId: 'cake', pieceId: 'cake_03' }],
-    durationSeconds: 35,
+    durationSeconds: 45,
     params: {
       maxObjects: 4,
       lifetimeMultiplier: 1.4,
       spawnMultiplier: 1.2,
       spawnWeights: {
+        neat: 0.3,
         coloredBug_red: 1,
         coloredBug_purple: 1,
         coloredBug_green: 1,
@@ -663,12 +665,21 @@ const levels = [
     id: 40,
     lootRequired: true,
     loot: [{ id: 'story-40', type: 'foodPiece', foodId: 'cake', pieceId: 'cake_06' }],
-    durationSeconds: 45,
+    durationSeconds: 90,
+    ensureAllTypes: true,
     params: {
       maxObjects: 5,
       lifetimeMultiplier: 1.3,
       spawnMultiplier: 1.1,
+      helperLimit: 4,
       spawnWeights: {
+        bug: 1,
+        neat: 0.3,
+        chameleon: 0.3,
+        fatColoredBug_red: 0.3,
+        fatColoredBug_purple: 0.3,
+        fatColoredBug_green: 0.3,
+        fatColoredBug_yellow: 0.3,
         coloredBug_red: 1,
         coloredBug_purple: 1,
         coloredBug_green: 1,

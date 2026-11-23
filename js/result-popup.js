@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 
 import { createWinPopup } from './win-popup.js';
 import { popupSurface } from './intro-popup.js';
@@ -45,7 +46,7 @@ export function createResultPopup(textures, layout, { won, hasNext, onMenu, onPr
     art.scale.set(Math.min(width / art.texture.width, height / art.texture.height));
     popup.addChild(art);
     popup.addChild(text(state.title, { ...layout.title, fontFamily: HEADING_FONT, fill: theme.title, strokeThickness: 0 }, layout.title.center, layout.title.maxWidth));
-    const caption=text(won?'К блюдам':state.caption,layout.caption,layout.caption.center,layout.caption.maxWidth);popup.addChild(caption);
+    const caption=text(won?t('result_popup.001'):state.caption,layout.caption,layout.caption.center,layout.caption.maxWidth);popup.addChild(caption);
     if(won){caption.interactive=caption.buttonMode=true;caption.on('pointertap',()=>{if(!activated){activated=true;onDishes();}});}
     let activated = false;
     const button = (name, geometry, icon, label, callback) => {
@@ -75,6 +76,6 @@ export function createResultPopup(textures, layout, { won, hasNext, onMenu, onPr
         popup.addChild(container);
     };
     button('resultMenu', layout.menuButton, 'home', layout.menuText, onMenu);
-    button('resultPrimary', layout.primaryButton, won ? 'next' : 'retry', won && reward?.received.some(r=>r.ready) ? 'Собрать блюдо' : won && !hasNext ? 'ВЫБОР\nУРОВНЯ' : state.primary, onPrimary);
+    button('resultPrimary', layout.primaryButton, won ? 'next' : 'retry', won && reward?.received.some(r=>r.ready) ? t('result_popup.002') : won && !hasNext ? t('result_popup.003') : state.primary, onPrimary);
     return popup;
 }

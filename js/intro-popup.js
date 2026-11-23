@@ -1,17 +1,18 @@
+import { t } from './i18n.js';
 import { HEADING_FONT } from './typography.js';
 export const BUG_NAMES = {
-    bug: 'Обычный жук', bomb: 'Жук-бомбардир', fat: 'Толстяк',
-    healer: 'Жук-лекарь', frozen: 'Жук-замораживатель',
-    chameleon: 'Хамелеон', neat: 'Чистильщик'
+    bug: t('intro_popup.001'), bomb: t('intro_popup.002'), fat: t('intro_popup.003'),
+    healer: t('intro_popup.004'), frozen: t('intro_popup.005'),
+    chameleon: t('intro_popup.006'), neat: t('intro_popup.007')
 };
-const COLORS = { red: 'Красный', purple: 'Фиолетовый', green: 'Зелёный', yellow: 'Жёлтый' };
+const COLORS = { red: t('intro_popup.008'), purple: t('intro_popup.009'), green: t('intro_popup.010'), yellow: t('intro_popup.011') };
 export function bugTitle(cfg) {
     if (cfg?.title?.trim()) return cfg.title;
     const [type, color] = (cfg?.type || 'bug').split('_');
     if (COLORS[color] && ['coloredBug', 'fatColoredBug'].includes(type)) {
-        return `${COLORS[color]} ${type === 'fatColoredBug' ? 'толстяк' : 'жук'}`;
+        return t('intro_popup.012', { p0: COLORS[color], p1: t(type === 'fatColoredBug' ? 'bug.big' : 'bug.normal') });
     }
-    return BUG_NAMES[type] || 'Новый жук';
+    return BUG_NAMES[type] || t('intro_popup.013');
 }
 
 // Shared SVGs have Graphics fallbacks; textures belong to the loader, not the dialog.
@@ -51,7 +52,7 @@ export function createIntroPopup(textures, layout, fontStack, cfg, iconTexture, 
         popup.addChild(text);
         return text;
     };
-    label('НОВЫЙ ЖУК', layout.eyebrowRect, layout.fontSizes.eyebrow, 'introEyebrow');
+    label(t('intro_popup.014'), layout.eyebrowRect, layout.fontSizes.eyebrow, 'introEyebrow');
     const title = label(bugTitle(cfg), layout.titleRect, layout.fontSizes.title, 'introTitle');
     while ((title.height > layout.titleRect[3] || title.height > title.style.lineHeight * 2 + 2) && title.style.fontSize > 12) {
         title.style.fontSize -= 1; title.style.lineHeight = title.style.fontSize * 1.15;
@@ -64,7 +65,7 @@ export function createIntroPopup(textures, layout, fontStack, cfg, iconTexture, 
         popup.addChild(icon);
     }
     const [dx, dy, dw, dh] = layout.descriptionRect;
-    const desc = label(String(cfg?.descryption || 'Познакомься с новым жуком.'), layout.descriptionRect, layout.fontSizes.description, 'introDescription');
+    const desc = label(String(cfg?.descryption || t('intro_popup.015')), layout.descriptionRect, layout.fontSizes.description, 'introDescription');
     desc.anchor.set(0.5, 0); desc.y = dy;
     while (desc.height > dh && desc.style.fontSize > layout.fontSizes.descriptionMin) {
         desc.style.fontSize -= 1; desc.style.lineHeight = desc.style.fontSize * 1.2;
@@ -105,7 +106,7 @@ export function createIntroPopup(textures, layout, fontStack, cfg, iconTexture, 
     button.interactiveChildren = false; button.hitArea = new PIXI.Rectangle(0, 0, bw, bh);
     button.addChild(popupSurface(textures, 'button_primary', [0, 0, bw, bh], theme));
     popup.addChild(button);
-    const caption = label('ПОНЯТНО!', layout.buttonRect, layout.fontSizes.button, 'introConfirmText');
+    const caption = label(t('intro_popup.016'), layout.buttonRect, layout.fontSizes.button, 'introConfirmText');
     popup.removeChild(caption); caption.position.set(bw / 2, bh / 2); button.addChild(caption);
     let confirmed = false;
     button.on('pointertap', () => {

@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // Пример: triggerProgress: 0.5 — подсказка включается на половине пути жука.
 // enabled: false отключает обучение. Успешное использование запоминается отдельно
 // для каждого цвета инструмента; для повторной проверки удали storageKey в localStorage.
@@ -60,12 +61,12 @@ export function createToolTutorial(scene,textures,obj,tool,onBombContinue) {
     PIXI.Ticker.shared.add(pointFinger);
     pointFinger();
     return { root,
-        update(held){heldTool=held;pointFinger();if(!aftermath)text.text=tool&&!held?'Нажми на подсвеченную кнопку\nи УДЕРЖИВАЙ!':BUG_TUTORIALS[obj.type].text;},
+        update(held){heldTool=held;pointFinger();if(!aftermath)text.text=tool&&!held?t('tool_tutorial.001'):BUG_TUTORIALS[obj.type].text;},
         bombAfterClick(){
             aftermath=true;text.text=BUG_TUTORIALS.bomb.afterClick;text.y=y+82;text.style.fontSize=34;
             const button=new PIXI.Container();button.name='bombTutorialContinue';button.position.set(850,y+155);
             button.addChild(new PIXI.Graphics().lineStyle(4,0x2D1738).beginFill(0x30D5C1).drawRoundedRect(0,0,400,70,22).endFill());
-            const caption=new PIXI.Text('Продолжить',{fontFamily:'Balsamiq Sans',fontSize:32,fill:0x2D1738});caption.anchor.set(.5);caption.position.set(200,35);button.addChild(caption);
+            const caption=new PIXI.Text(t('tool_tutorial.002'),{fontFamily:'Balsamiq Sans',fontSize:32,fill:0x2D1738});caption.anchor.set(.5);caption.position.set(200,35);button.addChild(caption);
             root.interactiveChildren=true;button.interactive=button.buttonMode=true;button.interactiveChildren=false;
             button.hitArea=new PIXI.Rectangle(0,0,400,70);
             let readyAt=performance.now()+350,done=false;

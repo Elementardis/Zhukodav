@@ -1,3 +1,4 @@
+import { t } from './js/i18n.js';
 export const cutscenes = [
   {
     id: "intro_before_level_1",
@@ -8,43 +9,43 @@ export const cutscenes = [
     frames: [
       {
         image: "images/story/mascot_welcome.png",
-        text: "Привет! У меня сегодня день рождения!",
-        buttonText: "Привет!"
+        text: t('cutscenes.001'),
+        buttonText: t('cutscenes.002')
       },
       {
         image: "images/story/mascot_shrug.png",
-        text: "Ну, кое-какие блюда ещё не готовы…",
-        buttonText: "Далее"
+        text: t('cutscenes.003'),
+        buttonText: t('cutscenes.004')
       },
       {
         image: "images/story/mascot_show_pizza.png",
-        text: "ЗАТО вот пицца!",
-        buttonText: "Далее"
+        text: t('cutscenes.005'),
+        buttonText: t('cutscenes.006')
       },
       {
         image: "images/story/mascot_loves_pizza.png",
-        text: "Я о-о-очень люблю пиццу!",
-        buttonText: "Далее"
+        text: t('cutscenes.007'),
+        buttonText: t('cutscenes.008')
       },
       {
         image: "images/story/mascot_hears_signal.png",
-        text: "Пам-пам!",
-        buttonText: "Далее"
+        text: t('cutscenes.009'),
+        buttonText: t('cutscenes.010')
       },
       {
         image: "images/story/mascot_asks_help.png",
-        text: "Погоди, присмотри, пожалуйста, за моей пиццей!",
-        buttonText: "Хорошо!"
+        text: t('cutscenes.011'),
+        buttonText: t('cutscenes.012')
       },
       {
         image: "images/story/mascot_leaving.png",
-        text: "А я вернусь через минутку. Или даже быстрее!",
-        buttonText: "Далее"
+        text: t('cutscenes.013'),
+        buttonText: t('cutscenes.014')
       },
       {
         image: "images/story/mascot_leaving.png",    
-        text: "Кыш, жуки…",
-        buttonText: "Начать!"
+        text: t('cutscenes.015'),
+        buttonText: t('cutscenes.016')
       }
     ]
   }

@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 import { readFoodProgress, prepareFoodTest } from './food-progress.js';
 import { FOOD_TEST_MODE } from './food-test-config.js';
 import { createFoodPuzzle } from './food-puzzle.js';
@@ -63,8 +64,8 @@ export function createDishSelect(textures, layout, { getSelected, getCompletedLe
         for(const e of ['pointerout','pointerup','pointerupoutside','pointercancel'])b.on(e,()=>b.scale.set(1));
         b.on('pointertap',()=>{if(scene.parent)callback();});buttons.push(b);host.addChild(b);return b;
     };
-    const heading=label(FOOD_TEST_MODE?'ТЕСТ СБОРКИ БЛЮД':'ВЫБЕРИ БЛЮДО',layout.headerRect,layout.fontSizes.header);scene.addChild(heading);
-    const back=button(scene,'dishBack','НАЗАД',[...layout.backRect],'dish_back_button',onBack);
+    const heading=label(FOOD_TEST_MODE?t('dish_select.001'):t('dish_select.002'),layout.headerRect,layout.fontSizes.header);scene.addChild(heading);
+    const back=button(scene,'dishBack',t('dish_select.003'),[...layout.backRect],'dish_back_button',onBack);
     back.addChild(sprite('dish_back_arrow',[15,30,40,40]));
     const cards=[];
     for(const [i,dish] of layout.dishes.entries()){
@@ -75,19 +76,19 @@ export function createDishSelect(textures, layout, { getSelected, getCompletedLe
         card.addChild(label(FOOD_TYPES[id].name,layout.localCard.nameRect,34));
         let icon=null, filter=null;
         if(textures[`dish_${dish.id}`]?.valid){icon=new PIXI.Sprite(textures[`dish_${dish.id}`]);fitDishIcon(icon,layout.localCard.iconRect);filter=new PIXI.filters.ColorMatrixFilter();filter.desaturate();filters.push(filter);card.addChild(icon);}
-        const health=new PIXI.Container();health.addChild(sprite('dish_heart',[110,248,30,26]),label(`Жизни: ${FOOD_TYPES[id].pieces}`,layout.localCard.healthRect,28));card.addChild(health);
+        const health=new PIXI.Container();health.addChild(sprite('dish_heart',[110,248,30,26]),label(t('dish_select.004', { p0: (FOOD_TYPES[id].pieces) }),layout.localCard.healthRect,28));card.addChild(health);
         const effect=label(describeFoodEffects(id),[28,276,472,40],20);card.addChild(effect);
         const lock=sprite('dish_lock',layout.localCard.lockRect);card.addChild(lock);
         const unlock=label('',[30,280,468,32],24);unlock.name='unlockLabel';card.addChild(unlock);
-        const selected=new PIXI.Container();selected.addChild(label('ВЫБРАНО',[110,318,320,84],34),sprite('dish_check',[75,340,45,40]));card.addChild(selected);
-        const select=button(card,`select_${id}`,'ВЫБРАТЬ',layout.localCard.buttonRect,'result_button_primary',()=>{
+        const selected=new PIXI.Container();selected.addChild(label(t('dish_select.005'),[110,318,320,84],34),sprite('dish_check',[75,340,45,40]));card.addChild(selected);
+        const select=button(card,`select_${id}`,t('dish_select.006'),layout.localCard.buttonRect,'result_button_primary',()=>{
             if(!canSelectDish(id,getCompletedLevels())){if(readFoodProgress().foods[id].collected.length===FOOD_TYPES[id].maxLives)openPuzzle(id);return;}
             onSelect(id);scene.refresh();
         });
         const bar=new PIXI.Graphics();card.addChild(bar);
         if(FOOD_TEST_MODE && !FOOD_TYPES[id].starter){
             if(icon)fitDishIcon(icon,[60,60,408,125]);
-            button(card,`testFood_${id}`,'Тест: собрать заново',[94,190,340,50],'test_button',()=>{
+            button(card,`testFood_${id}`,t('dish_select.007'),[94,190,340,50],'test_button',()=>{
                 if(!prepareFoodTest(id))return;
                 if(getSelected()===id)onSelect('pizza');
                 scene.refresh();openPuzzle(id);
@@ -98,9 +99,9 @@ export function createDishSelect(textures, layout, { getSelected, getCompletedLe
     scene.refresh=()=>{for(const c of cards){const open=canSelectDish(c.id,getCompletedLevels()), chosen=open&&getSelected()===c.id;
         c.accent.visible=c.selected.visible=chosen;c.accent.tint=0xFFFFFF;c.health.visible=true;c.effect.visible=open;c.lock.visible=false;c.unlock.visible=!open;
         const progress=readFoodProgress().foods[c.id],total=FOOD_TYPES[c.id].maxLives,ready=progress.collected.length===total;
-        c.unlock.text=ready?'Можно собрать!':progress.collected.length+'/ '+total+' кусочков — найди остальные';
+        c.unlock.text=ready?t('dish_select.008'):t('dish.remaining', {collected: progress.collected.length, total});
         c.bar.clear();if(!open)c.bar.beginFill(0x2D1738,.15).drawRoundedRect(90,310,348,5,2).endFill().beginFill(0x30D5C1).drawRoundedRect(90,310,348*progress.collected.length/total,5,2).endFill();
-        const caption=c.select.children[1];caption.text=open?'ВЫБРАТЬ':progress.placed.length?'Продолжить сборку':'Собрать';
+        const caption=c.select.children[1];caption.text=open?t('dish_select.010'):progress.placed.length?t('dish_select.011'):t('dish_select.012');
         caption.scale.set(Math.min(1,280/caption.texture.width));
         // Draw the brand color directly: tint multiplies the turquoise texture into dark brown.
         if(c.select._assemblyStyle!==!open){

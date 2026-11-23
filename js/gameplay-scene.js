@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // Logical coordinates from images/gameplay/layout.json.
 export const GAMEPLAY_STYLE = {
     width: 1920, height: 1080, outline: 0x2D1738, radius: 38, border: 6,
@@ -7,9 +8,9 @@ export const GAMEPLAY_STYLE = {
     hp: { x: 660, y: 38, width: 700, height: 96, segments: 7 },
     tools: [
         { id: 'swatter', color: 'red', key: 'q', icon: 'fly_swatter', fill: 0xF65C70, x: 4, y: 6 },
-        { id: 'trap', color: 'yellow', key: 'e', icon: 'insect_trap', fill: 0xF4D447, x: 4, y: 546 },
+        { id: 'trap', color: 'yellow', key: 'e', icon: 'insect_trap', fill: 0xF4D447, x: 1638, y: 546 },
         { id: 'spray', color: 'purple', key: 'w', icon: 'insecticide_spray', fill: 0xB956E8, x: 1638, y: 6 },
-        { id: 'tape', color: 'green', key: 'r', icon: 'sticky_tape', fill: 0x9ED52A, x: 1638, y: 546 }
+        { id: 'tape', color: 'green', key: 'r', icon: 'sticky_tape', fill: 0x9ED52A, x: 4, y: 546 }
     ],
     buttonWidth: 278, buttonHeight: 528
 };
@@ -86,7 +87,7 @@ export function buildGameplayScene(textures, { enabledColors, foodDefinition, le
     timerNumber.name = 'timerNumber'; timerNumber.anchor.set(.5); timerNumber.position.set(350,48);timerNumber.resolution=2;
     hp.addChild(timerLines,timerNumber);
     scene.addChild(hp);
-    const levelLabel = new PIXI.Text(`уровень ${levelNumber}`, {
+    const levelLabel = new PIXI.Text(t('gameplay_scene.001', { p0: (levelNumber) }), {
         fontFamily: 'Arial', fontSize: 42, fontWeight: 'bold', fill: style.outline
     });
     levelLabel.name = 'levelLabel';

@@ -1,3 +1,6 @@
+import { t } from './i18n.js';
+import { loadStoryImage as loadImage } from './story-images.js';
+export { preloadCutsceneImages } from './story-images.js';
 import { cutscenes } from '../cutscenes.js';
 import { HEADING_FONT } from './typography.js';
 import { safeViewport } from './adaptive-background.js';
@@ -14,15 +17,6 @@ export function matchingCutscenes(levelId, when, won, config = cutscenes) {
         (when!=='afterLevel'||s.outcome==='any'||s.outcome===(won?'win':'lose')) &&
         (s.repeat!=='once'||!seen.includes(s.id)) && Array.isArray(s.frames) && s.frames.length);
 }
-const images = new Map();
-function loadImage(path) {
-    if (!path) return Promise.resolve(null);
-    if (!images.has(path)) images.set(path, new Promise(resolve=>{
-        const image=new Image(); image.onload=()=>resolve(PIXI.Texture.from(image)); image.onerror=()=>resolve(null);image.src=path;
-    }));
-    return images.get(path);
-}
-
 export function playCutscenes({ scenes, host, app, textures, theme, onComplete, onSceneComplete = () => {} }) {
     let disposed=false, finishing=false, completionTimer=null, sceneIndex=0, frameIndex=0, revision=0, lastTap=performance.now(), currentImage=null;
     const root=new PIXI.Container();root.name='cutscene';root.interactive=true;
@@ -71,15 +65,17 @@ export function playCutscenes({ scenes, host, app, textures, theme, onComplete, 
     function showFrame(){
         const frame=scenes[sceneIndex].frames[frameIndex], token=++revision;
         text.text=String(frame.text??'');scrollY=0;scroll(0);
-        caption.text=String(frame.buttonText??'Далее');caption.style.fontSize=42;caption.style.lineHeight=46;
+        caption.text=String(frame.buttonText??t('cutscene_player.001'));caption.style.fontSize=42;caption.style.lineHeight=46;
         while(caption.height>92&&caption.style.fontSize>24){caption.style.fontSize--;caption.style.lineHeight=caption.style.fontSize*1.1;}
         caption.scale.set(Math.min(1,370/caption.width,104/caption.height));
         if(currentImage===frame.image&&character.children.length)return;
-        currentImage=frame.image;
-        for(const child of character.removeChildren())child.destroy();
         loadImage(frame.image).then(texture=>{
             if(disposed||token!==revision||!texture)return;
-            const sprite=new PIXI.Sprite(texture);fitDishIcon(sprite,[440,20,1040,1050],true);character.addChild(sprite);
+            const sprite=new PIXI.Sprite(texture);
+            // Fit visible pixels above the dialogue, keeping feet and height stable.
+            fitDishIcon(sprite,storyDialogue?[440,20,1040,panelY-40]:[440,20,1040,1050],true);
+            for(const child of character.removeChildren())child.destroy();
+            character.addChild(sprite);currentImage=frame.image;
         });
     }
     const destroyRoot=root.destroy.bind(root);

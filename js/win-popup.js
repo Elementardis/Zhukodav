@@ -1,13 +1,15 @@
+import { t } from './i18n.js';
 import { FOOD_TYPES } from './food-config.js';
 import { HEADING_FONT } from './typography.js';
 import { popupSurface } from './intro-popup.js';
 import { fitDishIcon } from './dish-select.js';
 import { fitPopup } from './popup-layout.js';
+import { loadStoryImage } from './story-images.js';
 
 const PLUM = 0x2D1738;
 export function createWinPopup(textures, { hasNext, onMenu, onPrimary, theme, reward, onDishes, stories = [], onStorySeen = () => {} }) {
     const popup = new PIXI.Container(); popup.name = 'winPopup'; popup.interactive = true;
-    let activated = false, portrait = null;
+    let activated = false, portrait = null, layoutRevision = 0;
     let blockedUntil = performance.now() + 1000, opening = null;
     popup.animateOpen = getViewport => {
         blockedUntil = performance.now() + 1000;
@@ -58,13 +60,14 @@ export function createWinPopup(textures, { hasNext, onMenu, onPrimary, theme, re
         lastViewport=viewport;
         const narrow=viewport.width/viewport.height<.8;
         if(portrait===narrow)return;portrait=narrow;
+        const revision = ++layoutRevision;
         for(const child of popup.removeChildren())child.destroy({children:true});
         const extra=stories.length?(narrow?240:190):0;
         const w=narrow?740:1140,h=(narrow?1210:850)+extra;
         popup._popupLayout={width:w,height:h,reference:{width:narrow?780:1400,height:(narrow?1250:1000)+extra}};
         popup.hitArea=new PIXI.Rectangle(0,0,w,h);
         popup.addChild(popupSurface(textures,'panel',[0,0,w,h],theme));
-        text(ready?'НОВОЕ БЛЮДО ГОТОВО!':'Ура! Вкуснятина!','winTitle',[40,22,w-80,90],ready?60:76,{fill:0xF45D53,stroke:PLUM,strokeThickness:4,
+        text(ready?t('win_popup.001'):t('win_popup.002'),'winTitle',[40,22,w-80,90],ready?60:76,{fill:0xF45D53,stroke:PLUM,strokeThickness:4,
             dropShadow:true,dropShadowColor:PLUM,dropShadowDistance:4,dropShadowAngle:Math.PI/3,dropShadowBlur:0});
         const mascotRect=narrow?[195,130,350,350]:[38,140,500,530];
         const mascotTexture=ready?textures.result_mascot_happy:textures.result_mascot;
@@ -72,21 +75,44 @@ export function createWinPopup(textures, { hasNext, onMenu, onPrimary, theme, re
             const mascot=new PIXI.Sprite(mascotTexture);mascot.name='winMascot';
             const [x,y,mw,mh]=mascotRect;mascot.scale.set(mw/mascot.texture.width);mascot.position.set(x,y);
             const mask=new PIXI.Graphics().beginFill(0xFFFFFF).drawRect(x,y,mw,mh).endFill();popup.addChild(mascot,mask);mascot.mask=mask;
-        } else text(`Не найден ${ready?'mascot_loves_pizza':'mascot_show_pizza'}.png`,'missingMascot',mascotRect,26);
+        } else text(t('win_popup.003', { p0: (ready?'mascot_loves_pizza':'mascot_show_pizza') }),'missingMascot',mascotRect,26);
+        const storyImage = stories[storyIndex]?.frames[0]?.image;
+        if (storyImage) {
+            // Capture this layout's sprite: a resize or next line invalidates it.
+            const previous = popup.getChildByName('winMascot');
+            const currentStoryIndex = storyIndex;
+            loadStoryImage(storyImage).then(texture => {
+                if (!texture || popup.destroyed || revision !== layoutRevision || storyIndex !== currentStoryIndex ||
+                    (previous && (previous.destroyed || previous.parent !== popup))) return;
+                const mascot = previous || new PIXI.Sprite(texture);
+                if (!previous) { mascot.name = 'winMascot'; popup.addChild(mascot); }
+                mascot.texture = texture;
+                // Preserve the original waist-up portrait framing for every emotion.
+                const [x,y,mw,mh] = mascotRect;
+                mascot.scale.set(mw / texture.width);
+                mascot.position.set(x,y);
+                if (!mascot.mask) {
+                    const mask = new PIXI.Graphics().beginFill(0xFFFFFF).drawRect(x,y,mw,mh).endFill();
+                    popup.addChild(mask); mascot.mask = mask;
+                }
+                const missing = popup.getChildByName('missingMascot');
+                if (missing) { popup.removeChild(missing); missing.destroy(); }
+            });
+        }
         const [cx,cy,cw,ch]=narrow?[55,490,630,475]:[570,140,510,530];
         const card=new PIXI.Graphics().lineStyle(4,PLUM).beginFill(0xEDE5F3).drawRoundedRect(cx,cy,cw,ch,30).endFill();card.name='rewardCard';popup.addChild(card);
         if(food){
             if(textures[food.wholeIcon]?.valid){const icon=new PIXI.Sprite(textures[food.wholeIcon]);icon.name='rewardWholeDish';fitDishIcon(icon,[cx+30,cy+18,cw-60,ch*.48]);popup.addChild(icon);}
-            else text(`Нет изображения: ${food.name}`,'missingDish',[cx+25,cy+20,cw-50,ch*.48],28);
-            text(ready?'Все кусочки найдены!':`Собираем ${food.collectingName}`,'rewardName',[cx+20,cy+ch*.53,cw-40,55],38);
-            text(ready?`${collected}/${total} — собери ${food.collectingName}!`:`Найдено ${collected}/${total} кусочков`,'rewardCount',[cx+20,cy+ch*.65,cw-40,44],32);
+            else text(t('win_popup.004', { p0: (food.name) }),'missingDish',[cx+25,cy+20,cw-50,ch*.48],28);
+            text(ready?t('win_popup.005'):t('win_popup.006', { p0: (food.collectingName) }),'rewardName',[cx+20,cy+ch*.53,cw-40,55],38);
+            text(ready?t('win_popup.007', { p0: (collected), p1: (total), p2: (food.collectingName) }):t('win_popup.008', { p0: (collected), p1: (total) }),'rewardCount',[cx+20,cy+ch*.65,cw-40,44],32);
             const bx=cx+40,by=cy+ch*.77,bw=cw-80,bh=26;
             const track=new PIXI.Graphics().beginFill(0xCDBFD9).drawRoundedRect(bx,by,bw,bh,13).endFill();popup.addChild(track);
             const fill=new PIXI.Graphics().beginFill(0x30D5C1).drawRoundedRect(bx,by,bw*collected/total,bh,Math.min(13,bw*collected/total/2)).endFill();fill.name='rewardProgress';
             popup.addChild(fill);
             popup.rewardProgress={collected,total,ratio:collected/total};
-        }else text(reward?.repeated?'Награда уже получена':'Обед спасён!','rewardStatus',[cx+30,cy+60,cw-60,ch*.6],42);
-        const link=text('К блюдам ›','resultDishes',[cx+25,cy+ch*.85,cw-50,60],34);link.interactive=link.buttonMode=true;
+        }else text(reward?.repeated?t('win_popup.009'):t('win_popup.010'),'rewardStatus',[cx+30,cy+60,cw-60,ch*.6],42);
+        const link=text(t('win_popup.011'),'resultDishes',[cx+25,cy+ch*.85,cw-50,60],34);link.interactive=link.buttonMode=true;
         link.hitArea=new PIXI.Rectangle(-link.width/2,-30,link.width,60);
         link.on('pointerover',()=>link.tint=0xF45D53);link.on('pointerout',()=>link.tint=0xFFFFFF);link.on('pointerdown',()=>link.alpha=.7);link.on('pointerup',()=>link.alpha=1);
         link.on('pointertap',action(()=>onDishes(food?.id)));
@@ -96,8 +122,8 @@ export function createWinPopup(textures, { hasNext, onMenu, onPrimary, theme, re
             speech.name='victoryStoryPanel';popup.addChild(speech);
             text(stories[storyIndex].frames[0].text,'victoryStory',[75,y+15,w-150,sh-30],narrow?28:30);
         }
-        const main=storyIndex<stories.length-1?'ДАЛЕЕ':ready?'СОБРАТЬ БЛЮДО':hasNext?(narrow?'СЛЕДУЮЩИЙ УРОВЕНЬ':'СЛЕДУЮЩИЙ\nУРОВЕНЬ'):'ВЫБОР УРОВНЯ';
-        button('resultMenu',narrow?[55,990+extra,630,85]:[50,700+extra,500,116],'В ГЛАВНОЕ МЕНЮ','home',false,onMenu);
+        const main=storyIndex<stories.length-1?t('win_popup.012'):ready?t('win_popup.013'):hasNext?(narrow?t('win_popup.014'):t('win_popup.015')):t('win_popup.016');
+        button('resultMenu',narrow?[55,990+extra,630,85]:[50,700+extra,500,116],t('win_popup.017'),'home',false,onMenu);
         button('resultPrimary',narrow?[55,1090+extra,630,85]:[590,700+extra,500,116],main,'next',true,onPrimary);
     };
     popup.reflow({width:1920,height:1080});return popup;

@@ -15,9 +15,9 @@ export function limitBombWeights(weights) {
     return result;
 }
 
-export function helperCanSpawn(time, lastTime, count, actors) {
+export function helperCanSpawn(time, lastTime, count, actors, maxPerLevel = HELPER_RULES.maxPerLevel) {
     return time >= HELPER_RULES.firstAtMs && time - lastTime >= HELPER_RULES.cooldownMs
-        && count < HELPER_RULES.maxPerLevel
+        && count < maxPerLevel
         && !actors.some(actor => HELPER_TYPES.includes(actor.type) && actor.state !== 'resolved');
 }
 

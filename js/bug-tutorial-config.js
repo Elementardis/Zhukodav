@@ -1,16 +1,17 @@
+import { t } from './i18n.js';
 // Пример: bug.text — реплика при первой встрече с обычным жуком.
 // Для нового вида добавь запись под его ключом из bug-config.js.
 // bomb.afterClick показывается после нажатия, пока игрок не нажмёт «Продолжить».
 export const BUG_TUTORIALS = {
-    bug: { text: 'А, ну! Кышь от еды\nНАЖМИ на жука, чтобы прихлопнуть его' },
-    fat: { text: 'Этот жук крепкий!\nНажимай на него, пока он не исчезнет.' },
-    healer: { text: 'Этот жук поможет спасти угощение!\nНажми на него — он восстановит жизнь.' },
-    frozen: { text: 'Этот жук замедлит остальных!\nНажми на него.' },
-    chameleon: { text: 'Нажми на жука — цвета временно не важны!\nБомбардиров всё равно не трогай.' },
-    neat: { text: 'Этот жук уберёт остальных с поля!\nНажми на него два раза.' },
-    bomb: { text: 'НАЖМИ на жука, чтобы прихлопнуть его', afterClick: 'Ха! попался!\nЭто бомбардир — его трогать нельзя!' },
+    bug: { text: t('bug_tutorial_config.001') },
+    fat: { text: t('bug_tutorial_config.002') },
+    healer: { text: t('bug_tutorial_config.003') },
+    frozen: { text: t('bug_tutorial_config.004') },
+    chameleon: { text: t('bug_tutorial_config.005') },
+    neat: { text: t('bug_tutorial_config.006') },
+    bomb: { text: t('bug_tutorial_config.007'), afterClick: t('bug_tutorial_config.008') },
     ...Object.fromEntries(['red','purple','green','yellow'].flatMap(color=>[
-        [`coloredBug_${color}`, { text: 'Теперь тыкай на жука!\nПродолжай удерживать кнопку.' }],
-        [`fatColoredBug_${color}`, { text: 'Этот жук крепкий! Нажимай несколько раз.\nПродолжай удерживать кнопку.' }]
+        [`coloredBug_${color}`, { text: t('bug_tutorial_config.009') }],
+        [`fatColoredBug_${color}`, { text: t('bug_tutorial_config.010') }]
     ]))
 };

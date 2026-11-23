@@ -1,0 +1,1054 @@
+{
+  "game.001": {
+    "source": "game.js",
+    "original": "Поверни телефон горизонтально, чтобы играть",
+    "parameters": {}
+  },
+  "game.002": {
+    "source": "game.js",
+    "original": "Не удалось загрузить файл: {p0}. Проверьте путь к файлу и нажмите «Повторить».",
+    "parameters": {
+      "p0": "resource?.url || resource?.name || 'неизвестный ресурс'"
+    }
+  },
+  "game.003": {
+    "source": "game.js",
+    "original": "ВСЕ УРОВНИ\nПРОЙДЕНЫ!",
+    "parameters": {}
+  },
+  "game.004": {
+    "source": "game.js",
+    "original": "Тест: выбор уровня",
+    "parameters": {}
+  },
+  "game.005": {
+    "source": "game.js",
+    "original": "ВЫБЕРИ УРОВЕНЬ",
+    "parameters": {}
+  },
+  "game.006": {
+    "source": "game.js",
+    "original": "Уровень {p0}",
+    "parameters": {
+      "p0": "levelIndex + 1"
+    }
+  },
+  "game.007": {
+    "source": "game.js",
+    "original": "Готов начать уровень?",
+    "parameters": {}
+  },
+  "game.008": {
+    "source": "game.js",
+    "original": "ИГРАТЬ",
+    "parameters": {}
+  },
+  "game.009": {
+    "source": "game.js",
+    "original": "НАЗАД",
+    "parameters": {}
+  },
+  "levels.001": {
+    "source": "levels.js",
+    "original": "Берегись! Жуки-бомбардиры снимают жизни, если их тронуть",
+    "parameters": {}
+  },
+  "levels.002": {
+    "source": "levels.js",
+    "original": "НАЖМИ и Удерживай КРАСНУЮ кнопку и нажми на КРАСНОГО жука!",
+    "parameters": {}
+  },
+  "levels.003": {
+    "source": "levels.js",
+    "original": "Это твой помощник. ЗАМЕДЛЯЕТ других жуков!",
+    "parameters": {}
+  },
+  "levels.004": {
+    "source": "levels.js",
+    "original": "Нужно нажать 3 раза, чтобы Толстяк убежал",
+    "parameters": {}
+  },
+  "levels.005": {
+    "source": "levels.js",
+    "original": "ХАМЕЛЕОН делает поле радужным. можешь нажимать на всех жуков",
+    "parameters": {}
+  },
+  "cutscenes.001": {
+    "source": "cutscenes.js",
+    "original": "Привет! У меня сегодня день рождения!",
+    "parameters": {}
+  },
+  "cutscenes.002": {
+    "source": "cutscenes.js",
+    "original": "Привет!",
+    "parameters": {}
+  },
+  "cutscenes.003": {
+    "source": "cutscenes.js",
+    "original": "Ну, кое-какие блюда ещё не готовы…",
+    "parameters": {}
+  },
+  "cutscenes.004": {
+    "source": "cutscenes.js",
+    "original": "Далее",
+    "parameters": {}
+  },
+  "cutscenes.005": {
+    "source": "cutscenes.js",
+    "original": "ЗАТО вот пицца!",
+    "parameters": {}
+  },
+  "cutscenes.006": {
+    "source": "cutscenes.js",
+    "original": "Далее",
+    "parameters": {}
+  },
+  "cutscenes.007": {
+    "source": "cutscenes.js",
+    "original": "Я о-о-очень люблю пиццу!",
+    "parameters": {}
+  },
+  "cutscenes.008": {
+    "source": "cutscenes.js",
+    "original": "Далее",
+    "parameters": {}
+  },
+  "cutscenes.009": {
+    "source": "cutscenes.js",
+    "original": "Пам-пам!",
+    "parameters": {}
+  },
+  "cutscenes.010": {
+    "source": "cutscenes.js",
+    "original": "Далее",
+    "parameters": {}
+  },
+  "cutscenes.011": {
+    "source": "cutscenes.js",
+    "original": "Погоди, присмотри, пожалуйста, за моей пиццей!",
+    "parameters": {}
+  },
+  "cutscenes.012": {
+    "source": "cutscenes.js",
+    "original": "Хорошо!",
+    "parameters": {}
+  },
+  "cutscenes.013": {
+    "source": "cutscenes.js",
+    "original": "А я вернусь через минутку. Или даже быстрее!",
+    "parameters": {}
+  },
+  "cutscenes.014": {
+    "source": "cutscenes.js",
+    "original": "Далее",
+    "parameters": {}
+  },
+  "cutscenes.015": {
+    "source": "cutscenes.js",
+    "original": "Кыш, жуки…",
+    "parameters": {}
+  },
+  "cutscenes.016": {
+    "source": "cutscenes.js",
+    "original": "Начать!",
+    "parameters": {}
+  },
+  "bug_tutorial_config.001": {
+    "source": "js/bug-tutorial-config.js",
+    "original": "А, ну! Кышь от еды\nНАЖМИ на жука, чтобы прихлопнуть его",
+    "parameters": {}
+  },
+  "bug_tutorial_config.002": {
+    "source": "js/bug-tutorial-config.js",
+    "original": "Этот жук крепкий!\nНажимай на него, пока он не исчезнет.",
+    "parameters": {}
+  },
+  "bug_tutorial_config.003": {
+    "source": "js/bug-tutorial-config.js",
+    "original": "Этот жук поможет спасти угощение!\nНажми на него — он восстановит жизнь.",
+    "parameters": {}
+  },
+  "bug_tutorial_config.004": {
+    "source": "js/bug-tutorial-config.js",
+    "original": "Этот жук замедлит остальных!\nНажми на него.",
+    "parameters": {}
+  },
+  "bug_tutorial_config.005": {
+    "source": "js/bug-tutorial-config.js",
+    "original": "Нажми на жука — цвета временно не важны!\nБомбардиров всё равно не трогай.",
+    "parameters": {}
+  },
+  "bug_tutorial_config.006": {
+    "source": "js/bug-tutorial-config.js",
+    "original": "Этот жук уберёт остальных с поля!\nНажми на него два раза.",
+    "parameters": {}
+  },
+  "bug_tutorial_config.007": {
+    "source": "js/bug-tutorial-config.js",
+    "original": "НАЖМИ на жука, чтобы прихлопнуть его",
+    "parameters": {}
+  },
+  "bug_tutorial_config.008": {
+    "source": "js/bug-tutorial-config.js",
+    "original": "Ха! попался!\nЭто бомбардир — его трогать нельзя!",
+    "parameters": {}
+  },
+  "bug_tutorial_config.009": {
+    "source": "js/bug-tutorial-config.js",
+    "original": "Теперь тыкай на жука!\nПродолжай удерживать кнопку.",
+    "parameters": {}
+  },
+  "bug_tutorial_config.010": {
+    "source": "js/bug-tutorial-config.js",
+    "original": "Этот жук крепкий! Нажимай несколько раз.\nПродолжай удерживать кнопку.",
+    "parameters": {}
+  },
+  "cutscene_player.001": {
+    "source": "js/cutscene-player.js",
+    "original": "Далее",
+    "parameters": {}
+  },
+  "dish_select.001": {
+    "source": "js/dish-select.js",
+    "original": "ТЕСТ СБОРКИ БЛЮД",
+    "parameters": {}
+  },
+  "dish_select.002": {
+    "source": "js/dish-select.js",
+    "original": "ВЫБЕРИ БЛЮДО",
+    "parameters": {}
+  },
+  "dish_select.003": {
+    "source": "js/dish-select.js",
+    "original": "НАЗАД",
+    "parameters": {}
+  },
+  "dish_select.004": {
+    "source": "js/dish-select.js",
+    "original": "Жизни: {p0}",
+    "parameters": {
+      "p0": "FOOD_TYPES[id].pieces"
+    }
+  },
+  "dish_select.005": {
+    "source": "js/dish-select.js",
+    "original": "ВЫБРАНО",
+    "parameters": {}
+  },
+  "dish_select.006": {
+    "source": "js/dish-select.js",
+    "original": "ВЫБРАТЬ",
+    "parameters": {}
+  },
+  "dish_select.007": {
+    "source": "js/dish-select.js",
+    "original": "Тест: собрать заново",
+    "parameters": {}
+  },
+  "dish_select.008": {
+    "source": "js/dish-select.js",
+    "original": "Можно собрать!",
+    "parameters": {}
+  },
+  "dish_select.010": {
+    "source": "js/dish-select.js",
+    "original": "ВЫБРАТЬ",
+    "parameters": {}
+  },
+  "dish_select.011": {
+    "source": "js/dish-select.js",
+    "original": "Продолжить сборку",
+    "parameters": {}
+  },
+  "dish_select.012": {
+    "source": "js/dish-select.js",
+    "original": "Собрать",
+    "parameters": {}
+  },
+  "food_config.001": {
+    "source": "js/food-config.js",
+    "original": "Пицца",
+    "parameters": {}
+  },
+  "food_config.002": {
+    "source": "js/food-config.js",
+    "original": "Торт",
+    "parameters": {}
+  },
+  "food_config.003": {
+    "source": "js/food-config.js",
+    "original": "Пирог",
+    "parameters": {}
+  },
+  "food_config.004": {
+    "source": "js/food-config.js",
+    "original": "Десерт старого друга",
+    "parameters": {}
+  },
+  "food_config.005": {
+    "source": "js/food-config.js",
+    "original": "Греческий салат",
+    "parameters": {}
+  },
+  "food_config.006": {
+    "source": "js/food-config.js",
+    "original": "Селёдка под шубой",
+    "parameters": {}
+  },
+  "food_config.007": {
+    "source": "js/food-config.js",
+    "original": "пиццу",
+    "parameters": {}
+  },
+  "food_config.008": {
+    "source": "js/food-config.js",
+    "original": "торт",
+    "parameters": {}
+  },
+  "food_config.009": {
+    "source": "js/food-config.js",
+    "original": "пирог",
+    "parameters": {}
+  },
+  "food_config.010": {
+    "source": "js/food-config.js",
+    "original": "десерт старого друга",
+    "parameters": {}
+  },
+  "food_config.011": {
+    "source": "js/food-config.js",
+    "original": "греческий салат",
+    "parameters": {}
+  },
+  "food_config.012": {
+    "source": "js/food-config.js",
+    "original": "селёдку под шубой",
+    "parameters": {}
+  },
+  "food_config.013": {
+    "source": "js/food-config.js",
+    "original": "Время пути ×{p0} · У еды {p1} с\nНа поле не больше {p2} жуков",
+    "parameters": {
+      "p0": "number(e.travelTimeMultiplier)",
+      "p1": "number(e.foodWaitSeconds)",
+      "p2": "e.maxBugs"
+    }
+  },
+  "food_progress.001": {
+    "source": "js/food-progress.js",
+    "original": "{p0}: число частей не равно maxLives",
+    "parameters": {
+      "p0": "food.id"
+    }
+  },
+  "food_progress.002": {
+    "source": "js/food-progress.js",
+    "original": "Уровень {p0}: отсутствует обязательный лут",
+    "parameters": {
+      "p0": "level.id"
+    }
+  },
+  "food_progress.003": {
+    "source": "js/food-progress.js",
+    "original": "Уровень {p0}: неизвестная часть {p1}",
+    "parameters": {
+      "p0": "level.id",
+      "p1": "key"
+    }
+  },
+  "food_progress.004": {
+    "source": "js/food-progress.js",
+    "original": "Уровень {p0}: повторная часть {p1}",
+    "parameters": {
+      "p0": "level.id",
+      "p1": "key"
+    }
+  },
+  "food_progress.005": {
+    "source": "js/food-progress.js",
+    "original": "{p0}: недостижим полный комплект, не назначено {p1} частей",
+    "parameters": {
+      "p0": "food.name",
+      "p1": "missing.length"
+    }
+  },
+  "food_puzzle.001": {
+    "source": "js/food-puzzle.js",
+    "original": "Собери: {p0}",
+    "parameters": {
+      "p0": "food.name"
+    }
+  },
+  "food_puzzle.002": {
+    "source": "js/food-puzzle.js",
+    "original": "Перетаскивай кусочки на тарелку\nИли нажми на кусочек, затем на его место",
+    "parameters": {}
+  },
+  "food_puzzle.003": {
+    "source": "js/food-puzzle.js",
+    "original": "К блюдам",
+    "parameters": {}
+  },
+  "food_puzzle.004": {
+    "source": "js/food-puzzle.js",
+    "original": "Выбрать блюдо",
+    "parameters": {}
+  },
+  "food_puzzle.005": {
+    "source": "js/food-puzzle.js",
+    "original": "На тарелке: {p0}/{p1}",
+    "parameters": {
+      "p0": "progress.placed.length",
+      "p1": "food.maxLives"
+    }
+  },
+  "food_puzzle.006": {
+    "source": "js/food-puzzle.js",
+    "original": "{p0}: готово!",
+    "parameters": {
+      "p0": "food.name"
+    }
+  },
+  "food_puzzle.007": {
+    "source": "js/food-puzzle.js",
+    "original": "Теперь блюдо можно выбирать для уровней",
+    "parameters": {}
+  },
+  "food_puzzle.008": {
+    "source": "js/food-puzzle.js",
+    "original": "Перетаскивай слои по порядку в любую часть тарелки\nИли нажми на слой, затем на тарелку",
+    "parameters": {}
+  },
+  "story.greek_salad_memory_01": {
+    "source": "js/food-story-config.js",
+    "original": "Такой салат готовили ребята напротив. За оливками мы однажды полезли в соседский сад. Очень хотелось приготовить всё из свежего.",
+    "parameters": {}
+  },
+  "story.greek_salad_memory_02": {
+    "source": "js/food-story-config.js",
+    "original": "Как-то ночью пошли купаться. Доставали ногами улиток. Возвращались босиком, несли обувь в руках.",
+    "parameters": {}
+  },
+  "story.greek_salad_memory_03": {
+    "source": "js/food-story-config.js",
+    "original": "Ездили в другие города на фестивали. Спали на полу, утром шли смотреть выступления и выступали сами.",
+    "parameters": {}
+  },
+  "story.greek_salad_memory_04": {
+    "source": "js/food-story-config.js",
+    "original": "Возвращались с конференций ночью, а утром шли на учёбу. Спасал только кофе в кафетерии и пирожок 'прощай печень'",
+    "parameters": {}
+  },
+  "story.greek_salad_memory_05": {
+    "source": "js/food-story-config.js",
+    "original": "Давно я никуда так не срывался… Всё дела-дела. Хотя бы на салат время остаётся, готовится за десять минут.",
+    "parameters": {}
+  },
+  "story.bundt_cake_memory_01": {
+    "source": "js/food-story-config.js",
+    "original": "Мы с Гарри часто сидели на этой кухне и разговаривали часами. Вдвоём тут тесновато, но нам как-то хватало места.",
+    "parameters": {}
+  },
+  "story.bundt_cake_memory_02": {
+    "source": "js/food-story-config.js",
+    "original": "Однажды делали вино у Гарри: у него был подвал. Лучшее вино в моей жизни. Я даже этикетку нарисовал 'РусАлко' назвали.",
+    "parameters": {}
+  },
+  "story.bundt_cake_memory_03": {
+    "source": "js/food-story-config.js",
+    "original": "Как-то с Гарри поехали в соседний город в броездку. В ночи сидели на холме под фонарём и слушали Where Is My Mind.",
+    "parameters": {}
+  },
+  "story.bundt_cake_memory_04": {
+    "source": "js/food-story-config.js",
+    "original": "Раньше можно было просто постучать к Гарри: «Пойдём пройдёмся?» Он даже не спрашивал, надолго ли. Просто шёл",
+    "parameters": {}
+  },
+  "story.bundt_cake_memory_05": {
+    "source": "js/food-story-config.js",
+    "original": "К сессиям тоже готовились вместе с Гарри. Делали перерыв на игру… Потом приходилось делать перерыв от игры",
+    "parameters": {}
+  },
+  "story.bundt_cake_memory_06": {
+    "source": "js/food-story-config.js",
+    "original": "Однажды я так наклюкался, что Гарри развязывал мне шнурки. Я пытался помогать, но, кажется, только затягивал узлы.",
+    "parameters": {}
+  },
+  "story.bundt_cake_memory_07": {
+    "source": "js/food-story-config.js",
+    "original": "В последний день учёбы катались на колесе обозрения. Сверху было видно наши корпуса. Странно было думать, что больше туда не надо.",
+    "parameters": {}
+  },
+  "story.bundt_cake_memory_08": {
+    "source": "js/food-story-config.js",
+    "original": "Мы с Гарри однажды всё организовали, чтобы встретиться. А я взял и сломал ногу. Встретились всё равно. Зря мы, что ли, столько договаривались?",
+    "parameters": {}
+  },
+  "story.bundt_cake_memory_09": {
+    "source": "js/food-story-config.js",
+    "original": "Я познакомился с Гарри на первом курсе. Мы оба должны были одеться в костюмы для выступления. Шутка за шуткой и вот уже подружились",
+    "parameters": {}
+  },
+  "story.bundt_cake_memory_10": {
+    "source": "js/food-story-config.js",
+    "original": "Потом Гарри переехал в другой город. Поначалу я всё порывался позвать его куда-нибудь вечером, но он бы уже не смог прийти.",
+    "parameters": {}
+  },
+  "story.bundt_cake_memory_11": {
+    "source": "js/food-story-config.js",
+    "original": "В последний приезд Гарри спросил, где у меня чашки. Я даже удивился: он же всегда знал.",
+    "parameters": {}
+  },
+  "story.bundt_cake_memory_12": {
+    "source": "js/food-story-config.js",
+    "original": "Сколько бы не прошло времени, я знаю, что с Гарри мы сможем общаться так будто этих лет в разлуке не было.",
+    "parameters": {}
+  },
+  "story.pie_memory_01": {
+    "source": "js/food-story-config.js",
+    "original": "Сесилия готовила такой вишнёвый пирог. Мы всё не могли дождаться, пока он остынет. Ели горячим. Вишни падали на пол",
+    "parameters": {}
+  },
+  "story.pie_memory_02": {
+    "source": "js/food-story-config.js",
+    "original": "Однажды с Сесилией выбирали с помощью камень-ножницы-бумага: куда поедем, на чём и сколько остановок. В итоге приехали в крупный ТЦ.",
+    "parameters": {}
+  },
+  "story.pie_memory_03": {
+    "source": "js/food-story-config.js",
+    "original": "Часто созванивались с Сесилией и болтали часами. О сериалах и играх, планах и переживаниях. Иногда даже орали песни.",
+    "parameters": {}
+  },
+  "story.pie_memory_04": {
+    "source": "js/food-story-config.js",
+    "original": "У меня осталось много видео с Сесилией. Мы снимали разные приколы и пародии на сериалы. Опередили своё время",
+    "parameters": {}
+  },
+  "story.pie_memory_05": {
+    "source": "js/food-story-config.js",
+    "original": "Сесилия учила меня кататься на скейте. Что ж, первый урок усвоил. Падаю по всем правилам.",
+    "parameters": {}
+  },
+  "story.pie_memory_06": {
+    "source": "js/food-story-config.js",
+    "original": "Летом Сесилия позвала на праздник в город. Мы обливали друг друга из фонтана  и купались в нём. Ехали обратно изрядно промокшие.",
+    "parameters": {}
+  },
+  "story.pie_memory_07": {
+    "source": "js/food-story-config.js",
+    "original": "Потом стали реже созваниваться. Бывало, хотел что-нибудь рассказать, но думал: уже поздно, завтра напишу Сесилии.",
+    "parameters": {}
+  },
+  "story.pie_memory_08": {
+    "source": "js/food-story-config.js",
+    "original": "Мы даже не ссорились. Просто однажды оказалось, что я уже не знаю, как у Сесилии обычно проходит день.",
+    "parameters": {}
+  },
+  "story.pie_memory_09": {
+    "source": "js/food-story-config.js",
+    "original": "Те видео у меня остались. Одно даже выложил в интернет. Просмотров там немного. Есть ли хоть один от Сесилии.",
+    "parameters": {}
+  },
+  "story.pie_memory_10": {
+    "source": "js/food-story-config.js",
+    "original": "Не знаю, какой пирог Сесилия печёт теперь. Может, давно другой. А этот я всё-таки попробую… Кажется, он уже остыл.",
+    "parameters": {}
+  },
+  "story.dressed_herring_memory_01": {
+    "source": "js/food-story-config.js",
+    "original": "В детстве на праздники собиралась вся родня. Шуба всегда была на столе. Я долго думал, что без неё праздник просто не начнётся.",
+    "parameters": {}
+  },
+  "story.dressed_herring_memory_02": {
+    "source": "js/food-story-config.js",
+    "original": "Доставали праздничный сервиз. По нему я понимал, что сегодня точно кто-то придёт, даже если мне ещё ничего не сказали.",
+    "parameters": {}
+  },
+  "story.dressed_herring_memory_03": {
+    "source": "js/food-story-config.js",
+    "original": "Подарки прятали заранее. Я честно старался не искать. Но иногда случайно заглядывал именно туда, куда не следовало.",
+    "parameters": {}
+  },
+  "story.dressed_herring_memory_04": {
+    "source": "js/food-story-config.js",
+    "original": "Пока взрослые готовили, я таскал сырые пельмени. Почему именно сырые? Меня тогда тоже спрашивали.",
+    "parameters": {}
+  },
+  "story.dressed_herring_memory_05": {
+    "source": "js/food-story-config.js",
+    "original": "Мне казалось само собой разумеющимся: наступит праздник, и все соберутся. Даже в голову не приходило, что можно не суметь приехать.",
+    "parameters": {}
+  },
+  "story.dressed_herring_memory_06": {
+    "source": "js/food-story-config.js",
+    "original": "Теперь сам готовлю и всё время вспоминаю, что ещё нужно сделать. Сколько же они тогда успевали, пока я охотился за подарками.",
+    "parameters": {}
+  },
+  "story.dressed_herring_memory_07": {
+    "source": "js/food-story-config.js",
+    "original": "Сегодня тоже достал хорошую посуду. Всё берегу её для особого случая… День рождения вроде подходит.",
+    "parameters": {}
+  },
+  "story.cake_memory_01": {
+    "source": "js/food-story-config.js",
+    "original": "Ну вот, добрались до торта! Сегодня мой день рождения. С утра то радуюсь, то начинаю подсчитывать, что уже должен был успеть.",
+    "parameters": {}
+  },
+  "story.cake_memory_02": {
+    "source": "js/food-story-config.js",
+    "original": "Хотел устроить праздник как в детстве. Чтобы стол был заставлен вкусностями, которых немножко останется на завтра.",
+    "parameters": {}
+  },
+  "story.cake_memory_03": {
+    "source": "js/food-story-config.js",
+    "original": "Пока готовил, столько всего вспомнил. Даже то, о чём давно не думал. Надеюсь, я тебя не слишком заболтал?",
+    "parameters": {}
+  },
+  "story.cake_memory_04": {
+    "source": "js/food-story-config.js",
+    "original": "Столько хорошего было. Почему-то, когда начинаю подводить итоги, не всё это учитываю. А надо бы.",
+    "parameters": {}
+  },
+  "story.cake_memory_05": {
+    "source": "js/food-story-config.js",
+    "original": "Меня окружают замечательные люди. Шаг за шагом иду к своей цели. Спасибо, что поддерживаете меня!",
+    "parameters": {}
+  },
+  "story.cake_memory_06": {
+    "source": "js/food-story-config.js",
+    "original": "Держи кусочек. Я так ждал этой встречи. Спасибо, что ты пришёл!",
+    "parameters": {}
+  },
+  "food_story.001": {
+    "source": "js/food-story.js",
+    "original": "Далее",
+    "parameters": {}
+  },
+  "food_story.002": {
+    "source": "js/food-story.js",
+    "original": "{p0}: {p1} реплик, {p2} частей",
+    "parameters": {
+      "p0": "id",
+      "p1": "lines.length",
+      "p2": "FOOD_TYPES[id]?.maxLives"
+    }
+  },
+  "food_story.003": {
+    "source": "js/food-story.js",
+    "original": "{p0}: в наградах {p1} уникальных частей",
+    "parameters": {
+      "p0": "id",
+      "p1": "assigned.size"
+    }
+  },
+  "game_ui.001": {
+    "source": "js/game-ui.js",
+    "original": "Уровень {p0}",
+    "parameters": {
+      "p0": "level.id"
+    }
+  },
+  "game_ui.002": {
+    "source": "js/game-ui.js",
+    "original": "УРОВЕНЬ {p0}",
+    "parameters": {
+      "p0": "level.id"
+    }
+  },
+  "game_ui.003": {
+    "source": "js/game-ui.js",
+    "original": "УРОВЕНЬ {p0}",
+    "parameters": {
+      "p0": "levelData.id"
+    }
+  },
+  "gameplay_scene.001": {
+    "source": "js/gameplay-scene.js",
+    "original": "уровень {p0}",
+    "parameters": {
+      "p0": "levelNumber"
+    }
+  },
+  "home_ui.001": {
+    "source": "js/home-ui.js",
+    "original": "Да будет же веселье бесконечно!",
+    "parameters": {}
+  },
+  "intro_popup.001": {
+    "source": "js/intro-popup.js",
+    "original": "Обычный жук",
+    "parameters": {}
+  },
+  "intro_popup.002": {
+    "source": "js/intro-popup.js",
+    "original": "Жук-бомбардир",
+    "parameters": {}
+  },
+  "intro_popup.003": {
+    "source": "js/intro-popup.js",
+    "original": "Толстяк",
+    "parameters": {}
+  },
+  "intro_popup.004": {
+    "source": "js/intro-popup.js",
+    "original": "Жук-лекарь",
+    "parameters": {}
+  },
+  "intro_popup.005": {
+    "source": "js/intro-popup.js",
+    "original": "Жук-замораживатель",
+    "parameters": {}
+  },
+  "intro_popup.006": {
+    "source": "js/intro-popup.js",
+    "original": "Хамелеон",
+    "parameters": {}
+  },
+  "intro_popup.007": {
+    "source": "js/intro-popup.js",
+    "original": "Чистильщик",
+    "parameters": {}
+  },
+  "intro_popup.008": {
+    "source": "js/intro-popup.js",
+    "original": "Красный",
+    "parameters": {}
+  },
+  "intro_popup.009": {
+    "source": "js/intro-popup.js",
+    "original": "Фиолетовый",
+    "parameters": {}
+  },
+  "intro_popup.010": {
+    "source": "js/intro-popup.js",
+    "original": "Зелёный",
+    "parameters": {}
+  },
+  "intro_popup.011": {
+    "source": "js/intro-popup.js",
+    "original": "Жёлтый",
+    "parameters": {}
+  },
+  "intro_popup.012": {
+    "source": "js/intro-popup.js",
+    "original": "{p0} {p1}",
+    "parameters": {
+      "p0": "COLORS[color]",
+      "p1": "type === 'fatColoredBug' ? 'толстяк' : 'жук'"
+    }
+  },
+  "intro_popup.013": {
+    "source": "js/intro-popup.js",
+    "original": "Новый жук",
+    "parameters": {}
+  },
+  "intro_popup.014": {
+    "source": "js/intro-popup.js",
+    "original": "НОВЫЙ ЖУК",
+    "parameters": {}
+  },
+  "intro_popup.015": {
+    "source": "js/intro-popup.js",
+    "original": "Познакомься с новым жуком.",
+    "parameters": {}
+  },
+  "intro_popup.016": {
+    "source": "js/intro-popup.js",
+    "original": "ПОНЯТНО!",
+    "parameters": {}
+  },
+  "preloader.001": {
+    "source": "js/preloader.js",
+    "original": "Не удалось загрузить игру. Проверьте соединение и повторите попытку.",
+    "parameters": {}
+  },
+  "preloader.002": {
+    "source": "js/preloader.js",
+    "original": "Не удалось загрузить скрипт: {p0}. Нажмите «Повторить».",
+    "parameters": {
+      "p0": "event.target.src"
+    }
+  },
+  "preloader.003": {
+    "source": "js/preloader.js",
+    "original": "Не удалось запустить игру: {p0}. Нажмите «Повторить».",
+    "parameters": {
+      "p0": "event.message"
+    }
+  },
+  "preloader.004": {
+    "source": "js/preloader.js",
+    "original": "Убрать жука",
+    "parameters": {}
+  },
+  "progress_ui.001": {
+    "source": "js/progress-ui.js",
+    "original": "ВЫБОР УРОВНЯ",
+    "parameters": {}
+  },
+  "result_popup.001": {
+    "source": "js/result-popup.js",
+    "original": "К блюдам",
+    "parameters": {}
+  },
+  "result_popup.002": {
+    "source": "js/result-popup.js",
+    "original": "Собрать блюдо",
+    "parameters": {}
+  },
+  "result_popup.003": {
+    "source": "js/result-popup.js",
+    "original": "ВЫБОР\nУРОВНЯ",
+    "parameters": {}
+  },
+  "settings_popup.001": {
+    "source": "js/settings-popup.js",
+    "original": "НАСТРОЙКИ",
+    "parameters": {}
+  },
+  "settings_popup.002": {
+    "source": "js/settings-popup.js",
+    "original": "ПАУЗА",
+    "parameters": {}
+  },
+  "settings_popup.003": {
+    "source": "js/settings-popup.js",
+    "original": "ВКЛ.",
+    "parameters": {}
+  },
+  "settings_popup.004": {
+    "source": "js/settings-popup.js",
+    "original": "ВЫКЛ.",
+    "parameters": {}
+  },
+  "settings_popup.005": {
+    "source": "js/settings-popup.js",
+    "original": "ЗВУКИ",
+    "parameters": {}
+  },
+  "settings_popup.006": {
+    "source": "js/settings-popup.js",
+    "original": "МУЗЫКА",
+    "parameters": {}
+  },
+  "settings_popup.007": {
+    "source": "js/settings-popup.js",
+    "original": "ЗАКРЫТЬ",
+    "parameters": {}
+  },
+  "settings_popup.008": {
+    "source": "js/settings-popup.js",
+    "original": "ПРОДОЛЖИТЬ",
+    "parameters": {}
+  },
+  "settings_popup.009": {
+    "source": "js/settings-popup.js",
+    "original": "ЗАНОВО",
+    "parameters": {}
+  },
+  "settings_popup.010": {
+    "source": "js/settings-popup.js",
+    "original": "МЕНЮ",
+    "parameters": {}
+  },
+  "tool_tutorial.001": {
+    "source": "js/tool-tutorial.js",
+    "original": "Нажми на подсвеченную кнопку\nи УДЕРЖИВАЙ!",
+    "parameters": {}
+  },
+  "tool_tutorial.002": {
+    "source": "js/tool-tutorial.js",
+    "original": "Продолжить",
+    "parameters": {}
+  },
+  "win_popup.001": {
+    "source": "js/win-popup.js",
+    "original": "НОВОЕ БЛЮДО ГОТОВО!",
+    "parameters": {}
+  },
+  "win_popup.002": {
+    "source": "js/win-popup.js",
+    "original": "Ура! Вкуснятина!",
+    "parameters": {}
+  },
+  "win_popup.003": {
+    "source": "js/win-popup.js",
+    "original": "Не найден {p0}.png",
+    "parameters": {
+      "p0": "ready?'mascot_loves_pizza':'mascot_show_pizza'"
+    }
+  },
+  "win_popup.004": {
+    "source": "js/win-popup.js",
+    "original": "Нет изображения: {p0}",
+    "parameters": {
+      "p0": "food.name"
+    }
+  },
+  "win_popup.005": {
+    "source": "js/win-popup.js",
+    "original": "Все кусочки найдены!",
+    "parameters": {}
+  },
+  "win_popup.006": {
+    "source": "js/win-popup.js",
+    "original": "Собираем {p0}",
+    "parameters": {
+      "p0": "food.collectingName"
+    }
+  },
+  "win_popup.007": {
+    "source": "js/win-popup.js",
+    "original": "{p0}/{p1} — собери {p2}!",
+    "parameters": {
+      "p0": "collected",
+      "p1": "total",
+      "p2": "food.collectingName"
+    }
+  },
+  "win_popup.008": {
+    "source": "js/win-popup.js",
+    "original": "Найдено {p0}/{p1} кусочков",
+    "parameters": {
+      "p0": "collected",
+      "p1": "total"
+    }
+  },
+  "win_popup.009": {
+    "source": "js/win-popup.js",
+    "original": "Награда уже получена",
+    "parameters": {}
+  },
+  "win_popup.010": {
+    "source": "js/win-popup.js",
+    "original": "Обед спасён!",
+    "parameters": {}
+  },
+  "win_popup.011": {
+    "source": "js/win-popup.js",
+    "original": "К блюдам ›",
+    "parameters": {}
+  },
+  "win_popup.012": {
+    "source": "js/win-popup.js",
+    "original": "ДАЛЕЕ",
+    "parameters": {}
+  },
+  "win_popup.013": {
+    "source": "js/win-popup.js",
+    "original": "СОБРАТЬ БЛЮДО",
+    "parameters": {}
+  },
+  "win_popup.014": {
+    "source": "js/win-popup.js",
+    "original": "СЛЕДУЮЩИЙ УРОВЕНЬ",
+    "parameters": {}
+  },
+  "win_popup.015": {
+    "source": "js/win-popup.js",
+    "original": "СЛЕДУЮЩИЙ\nУРОВЕНЬ",
+    "parameters": {}
+  },
+  "win_popup.016": {
+    "source": "js/win-popup.js",
+    "original": "ВЫБОР УРОВНЯ",
+    "parameters": {}
+  },
+  "win_popup.017": {
+    "source": "js/win-popup.js",
+    "original": "В ГЛАВНОЕ МЕНЮ",
+    "parameters": {}
+  },
+  "game.title": {
+    "source": "index.html",
+    "parameters": {}
+  },
+  "loading.game": {
+    "source": "index.html",
+    "parameters": {}
+  },
+  "loading.resources": {
+    "source": "index.html",
+    "parameters": {}
+  },
+  "loading.status": {
+    "source": "index.html",
+    "parameters": {}
+  },
+  "loading.retry": {
+    "source": "index.html",
+    "parameters": {}
+  },
+  "loading.failure": {
+    "source": "index.html",
+    "parameters": {}
+  },
+  "home.play": {
+    "source": "images/home/09_button_play.png",
+    "parameters": {}
+  },
+  "home.dishes": {
+    "source": "images/home/08_button_dishes.png",
+    "parameters": {}
+  },
+  "home.banner": {
+    "source": "images/home/03_banner.png",
+    "parameters": {}
+  },
+  "settings.language": {
+    "source": "js/settings-popup.js",
+    "parameters": {}
+  },
+  "bug.big": {
+    "source": "js/intro-popup.js",
+    "parameters": {}
+  },
+  "bug.normal": {
+    "source": "js/intro-popup.js",
+    "parameters": {}
+  },
+  "loading.unknown": {
+    "source": "game.js",
+    "parameters": {}
+  },
+  "dish.remaining": {
+    "source": "js/dish-select.js",
+    "parameters": {}
+  },
+  "results_layout.states.lose.title": {
+    "source": "images/ui/results/layout.json",
+    "parameters": {}
+  },
+  "results_layout.states.lose.caption": {
+    "source": "images/ui/results/layout.json",
+    "parameters": {}
+  },
+  "results_layout.states.lose.primary": {
+    "source": "images/ui/results/layout.json",
+    "parameters": {}
+  },
+  "results_layout.states.win.caption": {
+    "source": "images/ui/results/layout.json",
+    "parameters": {}
+  },
+  "results_intro_layout.sample.description": {
+    "source": "images/ui/results/intro-layout.json",
+    "parameters": {}
+  },
+  "dishes_layout.dishes.1.name": {
+    "source": "images/dishes/layout.json",
+    "parameters": {}
+  },
+  "language.ru": {
+    "source": "js/settings-popup.js",
+    "parameters": {}
+  },
+  "language.en": {
+    "source": "js/settings-popup.js",
+    "parameters": {}
+  },
+  "common.ok": {
+    "source": "game.js",
+    "parameters": {}
+  }
+}

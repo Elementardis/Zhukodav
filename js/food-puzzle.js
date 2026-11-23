@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 import { FOOD_TYPES } from './food-config.js';
 import { readFoodProgress, placeFoodPiece } from './food-progress.js';
 import { fitDishIcon } from './dish-select.js';
@@ -13,8 +14,8 @@ export function createFoodPuzzle(textures, foodId, { onClose, onSelect }) {
         const t = new PIXI.Text(text, { fontFamily: HEADING_FONT, fontSize: size, fill: 0x2D1738, align: 'center', wordWrap: true, wordWrapWidth: 980 });
         t.anchor.set(.5); t.position.set(x, y); panel.addChild(t); return t;
     };
-    const title = label(`Собери: ${food.name}`, 530, 58, 42);
-    const hint = label('Перетаскивай кусочки на тарелку\nИли нажми на кусочек, затем на его место', 530, 128, 25);
+    const title = label(t('food_puzzle.001', { p0: (food.name) }), 530, 58, 42);
+    const hint = label(t('food_puzzle.002'), 530, 128, 25);
     const count = label('', 530, 735);
     function button(text, x, callback, coral = false) {
         const b = new PIXI.Container(); b.position.set(x, 800); b.interactive = b.buttonMode = true;
@@ -22,8 +23,8 @@ export function createFoodPuzzle(textures, foodId, { onClose, onSelect }) {
         const t = new PIXI.Text(text, {fontFamily: HEADING_FONT, fontSize: 28, fill: 0x2D1738}); t.anchor.set(.5);t.position.set(220,32);b.addChild(t);
         b.on('pointertap', callback); panel.addChild(b);return b;
     }
-    button('К блюдам', 60, onClose);
-    const choose = button('Выбрать блюдо', 560, () => onSelect(foodId), true);
+    button(t('food_puzzle.003'), 60, onClose);
+    const choose = button(t('food_puzzle.004'), 560, () => onSelect(foodId), true);
     const close = label('×', 1010, 48, 46); close.interactive = close.buttonMode = true; close.on('pointertap', onClose);
     const plate = new PIXI.Container(); plate.position.set(10, 180); plate.scale.set(.83); panel.addChild(plate);
     const plateImage = new PIXI.Sprite(textures.gameplay_plate); plateImage.width = plateImage.height = 640;plate.addChild(plateImage);
@@ -76,7 +77,7 @@ export function createFoodPuzzle(textures, foodId, { onClose, onSelect }) {
     root.on('pointerup',release);root.on('pointerupoutside',release);root.on('pointercancel',()=>{drag=null;ghost.visible=false;});
     function refresh() {
         const progress=readFoodProgress().foods[foodId];
-        count.text=`На тарелке: ${progress.placed.length}/${food.maxLives}`;
+        count.text=t('food_puzzle.005', { p0: (progress.placed.length), p1: (food.maxLives) });
         choose.visible=progress.completed;
         for(const [id,s] of slices)s.alpha=progress.placed.includes(id)?1:.12;
         for(const child of tray.removeChildren())child.destroy({children:true});
@@ -89,8 +90,8 @@ export function createFoodPuzzle(textures, foodId, { onClose, onSelect }) {
             b.on('pointerdown',e=>{selected=p.id;const local=panel.toLocal(e.data.global);drag={pointer:e.data.pointerId,x:local.x,y:local.y,moved:false};ghost.texture=textures[p.texture];ghost.width=ghost.height=180;for(const item of tray.children)item.alpha=item===b?1:.65;});
             tray.addChild(b);
         });
-        if(progress.completed){title.text=`${food.name}: готово!`;hint.text='Теперь блюдо можно выбирать для уровней';if(typeof gsap!=='undefined')gsap.fromTo(plate.scale,{x:.79,y:.79},{x:.83,y:.83,duration:.35});}
-        else if(food.geometry==='layers')hint.text='Перетаскивай слои по порядку в любую часть тарелки\nИли нажми на слой, затем на тарелку';
+        if(progress.completed){title.text=t('food_puzzle.006', { p0: (food.name) });hint.text=t('food_puzzle.007');if(typeof gsap!=='undefined')gsap.fromTo(plate.scale,{x:.79,y:.79},{x:.83,y:.83,duration:.35});}
+        else if(food.geometry==='layers')hint.text=t('food_puzzle.008');
     }
     root.fit=({width,height})=>{shade.clear().beginFill(0x2D1738,.65).drawRect(0,0,width,height).endFill();const scale=Math.min(width/1100,height/940);panel.scale.set(scale);panel.position.set((width-1060*scale)/2,(height-900*scale)/2);};
     const destroy=root.destroy.bind(root);root.destroy=()=>{if(typeof gsap!=='undefined')gsap.killTweensOf(plate.scale);destroy({children:true});};

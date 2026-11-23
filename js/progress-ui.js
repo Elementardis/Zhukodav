@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 export const TOTAL_PROGRESS_LEVELS = 120;
 
 const BUG_PROGRESS_MASK = [
@@ -366,7 +367,7 @@ export function layoutProgressScreen(container, {
             layout.levelSelect.width,
             layout.levelSelect.height
         );
-        drawSecondaryButton(state.levelSelectButton, layout.levelSelect.width, layout.levelSelect.height, 'ВЫБОР УРОВНЯ');
+        drawSecondaryButton(state.levelSelectButton, layout.levelSelect.width, layout.levelSelect.height, t('progress_ui.001'));
     }
 
     updateProgressScreen(container, state.completedLevels);

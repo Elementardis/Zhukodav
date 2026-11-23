@@ -71,7 +71,7 @@
       "id": "trap",
       "icon": "gameplay/tools/insect_trap.png",
       "rect": [
-        4,
+        1638,
         546,
         278,
         528
@@ -95,7 +95,7 @@
       "id": "tape",
       "icon": "gameplay/tools/sticky_tape.png",
       "rect": [
-        1638,
+        4,
         546,
         278,
         528

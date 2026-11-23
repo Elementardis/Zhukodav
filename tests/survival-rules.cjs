@@ -8,7 +8,7 @@ function setup() {
     const state = {
         levelTimeRemainingMs: 10000, levelCountdownTicker: null, levelCountdownLastAt: null,
         levelEnded: false, isPaused: false, introActive: false, orientationPauseActive: false,
-        life: 5, score: 100000, document: { hidden: false }, performance: { now: () => 0 },
+        life: 5, score: 100000, toolTutorial: null, document: { hidden: false }, performance: { now: () => 0 },
         getViewportMode: () => 'desktop', updateUI() {}, results: [],
         app: { ticker: { add: fn => callbacks.add(fn), remove: fn => callbacks.delete(fn) } }
     };
@@ -63,8 +63,8 @@ for (const flag of ['isPaused', 'introActive', 'orientationPauseActive', 'hidden
 }
 assert.equal((source.match(/endGame\(true\)/g) || []).length, 1);
 assert.ok(!source.includes('goalBugCount'));
-const levelsCode = fs.readFileSync('levels.js', 'utf8').replace('export default levels;', 'globalThis.testLevels = levels;');
-const config = vm.createContext({});
+const levelsCode = fs.readFileSync('levels.js', 'utf8').replace(/^import .*;$/gm,'').replace('export default levels;', 'globalThis.testLevels = levels;');
+const config = vm.createContext({ t: key => JSON.parse(fs.readFileSync('locales/ru.json','utf8'))[key] });
 vm.runInContext(levelsCode, config);
 assert.ok(config.testLevels.every(level => Number.isFinite(level.durationSeconds) && level.durationSeconds > 0));
 console.log('Survival rules: countdown, pauses, life priority, restart and level configuration passed.');

@@ -5,13 +5,14 @@ const point = () => ({ x: 0, y: 0, set(x, y = x) { this.x = x; this.y = y; }, co
 class Container {
     constructor() { this.children = []; this.position = point(); this.scale = point(); this.events = {}; }
     addChild(child) { this.children.push(child); }
+    getChildByName(name) { return this.children.find(child => child.name === name); }
     on(event, fn) { this.events[event] = fn; }
 }
 class Sprite extends Container {
     constructor(texture) { super(); this.texture = texture; this.anchor = point(); }
 }
-const context = vm.createContext({ PIXI: { Container, Sprite, Rectangle: class {}, SCALE_MODES: { LINEAR: 1 } } });
-vm.runInContext(fs.readFileSync('js/home-ui.js', 'utf8').replace(/export /g, '') + '\nglobalThis.layout = HOME_LAYOUT;', context);
+const context = vm.createContext({ localizedImagePath: path => path, PIXI: { Container, Sprite, Rectangle: class {}, SCALE_MODES: { LINEAR: 1 } } });
+vm.runInContext(fs.readFileSync('js/home-ui.js', 'utf8').replace(/^import .*;$/gm, '').replace(/export /g, '') + '\nglobalThis.layout = HOME_LAYOUT;', context);
 const layout = JSON.parse(fs.readFileSync('images/home/layout.json'));
 assert.equal(JSON.stringify(context.layout), JSON.stringify(layout));
 const textures = {};

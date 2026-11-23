@@ -1,3 +1,22 @@
+import { t } from './i18n.js';
+import { HEADING_FONT } from './typography.js';
+import { localizedImagePath } from './localized-assets.js';
+
+export function setEndlessGreeting(home, visible) {
+    let bubble = home.getChildByName('endlessGreeting');
+    if (!bubble && visible) {
+        bubble = new PIXI.Container(); bubble.name = 'endlessGreeting'; bubble.zIndex = 100;
+        bubble.addChild(new PIXI.Graphics().lineStyle(4, 0x2D1738).beginFill(0xFFF9EE)
+            .drawRoundedRect(0, 0, 560, 150, 28).endFill());
+        const text = new PIXI.Text(t('home_ui.001'), {
+            fontFamily: HEADING_FONT, fontWeight: 'bold', fontSize: 38, fill: 0x2D1738,
+            align: 'center', wordWrap: true, wordWrapWidth: 510
+        });
+        text.anchor.set(0.5); text.position.set(280, 75); bubble.addChild(text); home.addChild(bubble);
+    }
+    if (bubble) bubble.visible = visible;
+}
+
 // Coordinates from the supplied UI kit; keep PNG transparent margins intact.
 export const HOME_LAYOUT = {
   "canvas": {
@@ -137,7 +156,7 @@ export const HOME_LAYOUT = {
 };
 
 export const HOME_ASSETS = HOME_LAYOUT.layers.map(layer => ({
-    name: `home_${layer.name}`, path: `images/home/${layer.name}.png`
+    name: `home_${layer.name}`, path: localizedImagePath(`images/home/${layer.name}.png`)
 }));
 
 export function createHomeScreen(textures, { onPlay, onSettings, onDishes }) {
@@ -203,6 +222,7 @@ export function layoutHomeScreen(homeContainer, { width, height, x = 0, y = 0, f
         }
         const dish=homeContainer.children.find(c=>c.name==='dishContainer');
         if(dish)dish.position.set(portrait?350:760,portrait?770:388);
+        homeContainer.getChildByName('endlessGreeting')?.position.set(portrait?480:680,portrait?400:390);
     }
     const scale = Math.min(width / logical.width, height / logical.height);
     homeContainer.scale.set(scale);
